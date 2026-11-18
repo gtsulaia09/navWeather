@@ -114,6 +114,11 @@
   font-size: 16px; /* ≥16px: no iOS zoom on focus */
   outline: none;
 }
+/* The global :focus-visible ring (base.css, later in the cascade) drew a hard blue rectangle inside the rounded
+   search card on every tap in Safari, which treats any text-field focus as focus-visible. The caret shows focus. */
+.place-input__field:focus-visible {
+  outline: none;
+}
 .place-input__field::placeholder {
   color: var(--text-3);
 }

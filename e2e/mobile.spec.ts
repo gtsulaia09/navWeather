@@ -194,3 +194,95 @@ test.describe('phone, landscape', () => {
     expect(s.y + s.height).toBeLessThanOrEqual(overflow.bottom + 1);
   });
 });
+
+/**
+ * iPhone geometry, from the iOS Simulator (iPhone 18 Pro, Safari, 2026-11-19): in landscape Safari leaves the page
+ * 874×292 CSS px with the Dynamic Island's safe area at the side (62 px), the home indicator's at the bottom (20 px).
+ * Chrome stands in for WebKit here, with the same viewport and safe areas (DevTools' safe-area override).
+ */
+async function iPhoneSafeAreas(page: Page, insets: { top: number; right: number; bottom: number; left: number }) {
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Emulation.setSafeAreaInsetsOverride' as never, { insets } as never);
+}
+
+/** The floating map buttons: each fully on screen and under nothing else. */
+function floatingButtonProblems(page: Page) {
+  return page.evaluate(() => {
+    const out: string[] = [];
+    for (const b of document.querySelectorAll<HTMLElement>('.voice button')) {
+      const r = b.getBoundingClientRect();
+      const name = b.getAttribute('aria-label');
+      if (getComputedStyle(b).visibility === 'hidden' || getComputedStyle(b.closest('.voice')!).visibility === 'hidden') out.push(`${name}: hidden`);
+      if (r.top < 0 || r.left < 0 || r.bottom > innerHeight || r.right > innerWidth) out.push(`${name}: off screen`);
+      for (const [x, y] of [[r.left + r.width / 2, r.top + 4], [r.left + r.width / 2, r.top + r.height / 2]]) {
+        const at = document.elementFromPoint(x, y);
+        if (at && !b.contains(at)) out.push(`${name}: under ${at.className}`);
+      }
+    }
+    return [...new Set(out)];
+  });
+}
+
+test.describe('iPhone Safari, landscape (notch at the side)', () => {
+  test.use({ viewport: { width: 874, height: 292 }, isMobile: true, hasTouch: true, deviceScaleFactor: 3 });
+
+  test('the side panel is recognised as one: map buttons stay, and none hides under the turn banner while driving', async ({ page }) => {
+    await iPhoneSafeAreas(page, { top: 0, right: 62, bottom: 20, left: 62 });
+    await page.goto('/');
+    await expect(page.getByRole('button', { name: 'Show my location' })).toBeVisible();
+    // Was: panel 70 px from the edge → taken for a bottom sheet "covering" the map → every map button hidden.
+    expect(await floatingButtonProblems(page)).toEqual([]);
+    const insetLeft = await page.evaluate(() => parseInt(getComputedStyle(document.documentElement).getPropertyValue('--inset-left')));
+    expect(insetLeft).toBeGreaterThan(300);
+
+    await page.getByRole('button', { name: 'Try Tbilisi → Batumi' }).click();
+    await expect(page.getByText(/\d{3}\s?km\b/).first()).toBeVisible();
+    expect(await floatingButtonProblems(page)).toEqual([]);
+    await page.getByRole('button', { name: 'Simulate drive' }).scrollIntoViewIfNeeded();
+    await page.getByRole('button', { name: 'Simulate drive' }).tap();
+    await expect(page.getByRole('button', { name: 'Exit simulation' })).toBeVisible();
+    await page.getByRole('button', { name: 'Pause' }).tap();
+    // Was: a column of 4 buttons under a 292 px viewport — Report sat behind the turn banner.
+    expect(await floatingButtonProblems(page)).toEqual([]);
+  });
+});
+
+test.describe('iPhone home-screen app, portrait (status bar and home indicator)', () => {
+  test.use({ viewport: { width: 402, height: 874 }, isMobile: true, hasTouch: true, deviceScaleFactor: 3 });
+
+  test('nothing sits under the status bar or the home indicator', async ({ page }) => {
+    await iPhoneSafeAreas(page, { top: 62, right: 0, bottom: 34, left: 0 });
+    await planExampleRoute(page);
+    const search = (await page.locator('.search').boundingBox())!;
+    expect(search.y).toBeGreaterThanOrEqual(62);
+    const start = (await page.getByRole('button', { name: 'Start', exact: true }).boundingBox())!;
+    expect(start.y + start.height).toBeLessThanOrEqual(874 - 34);
+    // The default sheet covers most of this map, and the floating buttons step aside by design; collapsed, they show.
+    await page.locator('.sheet__handle').tap(); // → expanded
+    await page.locator('.sheet__handle').tap(); // → compact
+    await expect(page.locator('.sheet')).toHaveClass(/sheet--compact/);
+    await expect(page.getByRole('button', { name: 'Show my location' })).toBeVisible();
+    expect(await floatingButtonProblems(page)).toEqual([]);
+  });
+});
+
+test.describe('iPhone Safari, portrait', () => {
+  test.use({ viewport: { width: 402, height: 714 }, isMobile: true, hasTouch: true, deviceScaleFactor: 3 });
+
+  test('a long press selects no app text (it took over sheet drags); fields stay editable; no hard ring in search', async ({ page }) => {
+    await page.goto('/');
+    const search = page.getByRole('combobox', { name: 'Search a place or address' });
+    await search.tap();
+    await expect(search).toBeFocused();
+    // Safari treats any focused text field as :focus-visible; the global ring drew a rectangle inside the card.
+    expect(await search.evaluate((el) => getComputedStyle(el).outlineStyle)).toBe('none');
+    await search.fill('Kutaisi');
+    await expect(search).toHaveValue('Kutaisi');
+    const styles = await page.evaluate(() => {
+      const app = getComputedStyle(document.querySelector('.app')!);
+      const field = getComputedStyle(document.querySelector('.app input')!);
+      return { app: app.userSelect || app.webkitUserSelect, field: field.userSelect || field.webkitUserSelect };
+    });
+    expect(styles).toEqual({ app: 'none', field: 'text' });
+  });
+});

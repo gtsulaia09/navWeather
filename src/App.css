@@ -2,6 +2,16 @@
   position: fixed;
   inset: 0;
   overflow: hidden;
+  /* An app screen, not a document: a long press (on a sheet you meant to drag, a button, the map) must not start
+     iOS text selection with its Copy / Look Up menu, which also took over the sheet drag. Fields stay selectable. */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+.app :is(input, textarea, [contenteditable='true']) {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
 }
 .map-placeholder {
   position: absolute;

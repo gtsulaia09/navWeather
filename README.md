@@ -145,18 +145,23 @@ reaches the computer from it.
 Settings → Advanced → **Show features for web developers**. Connect the iPhone by cable (once; after that it can
 work over the same Wi-Fi), open the page in Safari on the phone, then on the Mac: **Develop → *your iPhone* →
 the page**. Needs a Mac. With Xcode, the iOS Simulator runs real Mobile Safari and shares the Mac's network, so
-`http://localhost:5173` works there directly (`xcrun simctl openurl booted http://localhost:5173`).
+`http://localhost:5173` works there directly (`xcrun simctl openurl booted http://localhost:5173`); Safari's
+**Develop → Simulator** menu inspects it like a phone. In the Simulator, Hardware/I/O → Keyboard → *Toggle Software
+Keyboard* shows the on-screen keyboard (with a Mac keyboard connected it stays hidden, so layouts look as if no
+keyboard were open), and Device → Rotate tests landscape — the iPhone's Dynamic Island then takes 62 px at the side.
 
 ### D. Mobile testing checklist
 
 - [ ] **Sizes:** 320×568, 360×640, 375×667, 390×844, 414×896, 430×932, tablets 768×1024 and 1024×768 — and a desktop
       window. Nothing scrolls sideways; nothing hides under the search bar, banner or sheet.
 - [ ] **Orientation:** turn the phone while planning and while driving; in landscape the sheet docks at the side
-      and scrolls as a whole — **Start** must be reachable.
+      and scrolls as a whole — **Start** must be reachable; the map buttons stay visible in a row at the bottom
+      right, clear of the turn banner (on an iPhone the Dynamic Island takes the side of the screen).
 - [ ] **Safe areas:** iPhone with a notch / Dynamic Island and the home indicator, portrait and landscape: no
       control under them (also as an installed home-screen app).
 - [ ] **Touch:** every button hit easily with a thumb (≥ 44 px); the sheet's grabber drags and taps; a card's ✕
-      closes it; press-and-hold on the map opens a place; pinch and pan the map; no double-tap zoom on buttons.
+      closes it; press-and-hold on the map opens a place; pinch and pan the map; no double-tap zoom on buttons;
+      a long press on the sheet or a button selects no text and opens no Copy / Look Up menu.
 - [ ] **Keyboard:** search and the directions fields keep their suggestions visible above the keyboard; in Share
       and Settings the field being typed in and the dialog's buttons stay above the keyboard; dialogs don't open
       the keyboard by themselves.

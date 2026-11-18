@@ -23,7 +23,10 @@ sideways overflow, a sheet whose content hangs out of it, header controls covere
 card's ✕ tapped near its top edge must close it), the landscape plan panel not scrolling to **Start**, the share
 dialog focusing its text field on a touch screen, the share dialog's chips shrinking after Settings was opened
 (a global `.chip` clash), and a finger slide along the departure chart not showing or picking a time (skipped, with a
-note, on a day whose forecast gives no chart). Run alone: `npx playwright test e2e/mobile.spec.ts`. Emulation is not a device: see
+note, on a day whose forecast gives no chart). iPhone geometry from the iOS Simulator is replayed with DevTools'
+safe-area override: Safari landscape 874×292 with the Dynamic Island's 62 px (map buttons present and clear of the
+turn banner), the home-screen app in portrait (status bar 62 px, home indicator 34 px), and no app-text selection or
+hard focus ring in Safari portrait 402×714. Run alone: `npx playwright test e2e/mobile.spec.ts`. Emulation is not a device: see
 "Mobile devices" below for what was checked on a real browser engine.
 
 **Shared-core boundary** (`src/test/architecture.test.ts`, part of `npm test`): every file of the future mobile core
@@ -121,9 +124,16 @@ automation of this check is DEVELOPMENT_PLAN DP-11.4.
   search suggestions stay above it; the share and settings dialogs shrink to the visible area and keep the field
   being typed in on screen; a dialog opened by touch does not raise the keyboard; a tap on the top edge of a card's
   ✕ closes it; the app loads from the computer's network address (`http://<LAN IP>:5173`).
-- **Not run on:** a physical phone, iOS Safari / WebKit (the iOS Simulator needs Xcode's licence accepted on this
-  machine: `sudo xcodebuild -license`), Samsung Internet, Firefox for Android. iOS keyboard and safe-area behaviour
-  follows the same code paths (visual viewport, `env(safe-area-inset-*)`) but is unverified on WebKit.
+- **iOS Simulator, Safari (iOS 27.2, iPhone 18 Pro, 2026-11-19)** — real WebKit, real taps, the on-screen keyboard,
+  portrait and landscape; page state read through a temporary probe script. Page 402×714 CSS px in portrait,
+  874×292 in landscape (Safari's bars), safe areas 62/62/20 in landscape. Found and fixed B-37…B-41: landscape map
+  buttons hidden (safe area broke side-panel detection), landscape button column under the turn banner, long-press
+  text selection over the app, a hard focus rectangle in search, ResizeObserver loop warnings. Checked fine: search
+  and suggestions with the keyboard, place card, sheet swipe and inner scroll, press-and-hold on the map, route,
+  simulated drive, share dialog above the keyboard (no keyboard on open), pinch on the UI (no page zoom). Seen once,
+  not reproduced: a freeze after "Simulate drive" (B-42, open).
+- **Not run on:** a physical phone, Samsung Internet, Firefox for Android; the home-screen (installed) web app on
+  iOS is covered only by safe-area emulation in `e2e/mobile.spec.ts`.
 
 ## Manual / browser checks performed
 

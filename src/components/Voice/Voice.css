@@ -42,8 +42,20 @@
   box-shadow: var(--shadow-float);
 }
 @media (orientation: landscape) and (max-height: 520px) {
+  /* A landscape phone is short (292 px in Safari on an iPhone, under its tab bar): a column of 4–5 buttons ran up
+     under the turn banner and the search bar. Here they line up along the bottom of the map instead, wrapping
+     only if the map beside the side panel is too narrow; a spoken answer's caption sits above them. */
   .voice {
     bottom: calc(var(--safe-bottom) + 12px);
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    align-items: flex-end;
+    align-content: flex-end;
+    max-width: calc(100vw - var(--inset-left, 0px) - var(--safe-right) - 24px);
+  }
+  .voice__caption {
+    flex-basis: 100%;
   }
 }
 .fab--on {

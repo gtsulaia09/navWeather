@@ -7,6 +7,14 @@ import './BottomSheet.css';
 
 const ORDER: SheetState[] = ['compact', 'default', 'expanded'];
 
+/**
+ * Is the sheet a panel docked at the left (desktop, landscape phone) rather than a bottom sheet (phone, tablet
+ * card)? A narrow box in the left part of the screen — wherever its edge is (safe areas move it on iPhones).
+ */
+export function isSideDocked(r: Pick<DOMRect, 'left' | 'width'>, viewportWidth: number): boolean {
+  return r.width < viewportWidth * 0.6 && r.left < viewportWidth * 0.25;
+}
+
 interface Props {
   state: SheetState;
   onChange(s: SheetState): void;
@@ -36,8 +44,9 @@ export function BottomSheet({ state, onChange, header, body, extra, label, grabb
   const m = useMessages();
 
   useElementSize(ref, (r) => {
-    // Docked at the side (desktop panel, landscape phones): the map loses width, not height.
-    const side = r.left <= 40 && r.width < window.innerWidth * 0.6;
+    // Docked at the side (desktop panel, landscape phones): the map loses width, not height. Not "left ≤ 40 px":
+    // in landscape an iPhone's panel starts after the Dynamic Island's safe area (~70 px from the edge).
+    const side = isSideDocked(r, window.innerWidth);
     setInsets(side ? { bottom: 0, left: Math.round(r.right) } : { bottom: Math.round(window.innerHeight - r.top), left: 0 });
     setSheetCovers(!side && r.top < window.innerHeight * 0.42);
   });
