@@ -120,7 +120,11 @@
   white-space: nowrap;
   cursor: pointer;
 }
-.altlabel:hover,
 .altlabel:focus-visible {
   color: var(--accent);
+}
+@media (hover: hover) {
+  .altlabel:hover {
+    color: var(--accent);
+  }
 }

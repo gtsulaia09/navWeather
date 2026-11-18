@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { Place } from '../types/geo';
+import { deviceStorage } from '../platform/storage';
 
 /**
  * Saved places (Home, Work, favourites) and recent destinations — on this
@@ -53,7 +54,7 @@ function valid(p: unknown): p is Place {
 function load(): Persisted {
   const empty: Persisted = { saved: [], recents: [], rememberRecents: true };
   try {
-    const raw = localStorage.getItem(KEY);
+    const raw = deviceStorage().getItem(KEY);
     if (!raw) return empty;
     const d = JSON.parse(raw) as Partial<Persisted>;
     return {
@@ -68,7 +69,7 @@ function load(): Persisted {
 
 function persist(s: Persisted) {
   try {
-    localStorage.setItem(KEY, JSON.stringify({ saved: s.saved, recents: s.recents, rememberRecents: s.rememberRecents }));
+    deviceStorage().setItem(KEY, JSON.stringify({ saved: s.saved, recents: s.recents, rememberRecents: s.rememberRecents }));
   } catch {
     /* storage blocked: keep working for this session */
   }

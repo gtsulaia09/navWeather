@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import type { SheetState } from '../../state/store';
 import { useLayoutStore } from '../../state/layout';
 import { useElementSize } from '../../hooks/useElementSize';
@@ -24,8 +24,13 @@ interface Props {
  */
 export function BottomSheet({ state, onChange, header, body, extra, label, grabber = true }: Props) {
   const ref = useRef<HTMLElement>(null);
+  const grab = useRef<HTMLDivElement>(null);
   const drag = useRef<{ y: number; id: number; active: boolean } | null>(null);
   const [dy, setDy] = useState(0);
+  // The default detent is ~62 % of the screen, but never shorter than the header: on a small phone (or with large
+  // text) the header — travel modes, title, Start — would otherwise be cut off at the bottom (BottomSheet.css).
+  const [headPx, setHeadPx] = useState(0);
+  useElementSize(grab, (r) => setHeadPx(Math.ceil(r.height)));
   const setInsets = useLayoutStore((s) => s.setInsets);
   const setSheetCovers = useLayoutStore((s) => s.setSheetCovers);
   const m = useMessages();
@@ -79,10 +84,10 @@ export function BottomSheet({ state, onChange, header, body, extra, label, grabb
     <section
       ref={ref}
       className={`sheet sheet--${state}${dy ? ' is-dragging' : ''}`}
-      style={dy ? { transform: `translateY(${dy}px)` } : undefined}
+      style={{ ...(dy ? { transform: `translateY(${dy}px)` } : null), '--sheet-head': `${headPx}px` } as CSSProperties}
       aria-label={label}
     >
-      <div className="sheet__grab" onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}>
+      <div ref={grab} className="sheet__grab" onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}>
         {grabber ? (
           <button
             className="sheet__handle"

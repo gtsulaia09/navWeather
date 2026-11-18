@@ -3,6 +3,7 @@ import { detectLocale, getMessages, isLocaleLoaded, loadLocale, LOCALES, type Lo
 import { defaultUnits, type UnitPrefs } from '../i18n/format';
 import type { AlertOutput, AlertTiming } from '../intelligence/driverAlerts';
 import type { WeatherAlertPrefs } from '../intelligence/weatherAlerts';
+import { deviceStorage } from '../platform/storage';
 
 export interface Settings {
   language: Locale;
@@ -163,7 +164,7 @@ export function parseSettings(raw: string | null, base = defaultSettings()): Set
 
 function load(): Settings {
   try {
-    return parseSettings(localStorage.getItem(KEY));
+    return parseSettings(deviceStorage().getItem(KEY));
   } catch {
     return defaultSettings(); // storage blocked
   }
@@ -171,7 +172,7 @@ function load(): Settings {
 
 function save(s: Settings) {
   try {
-    localStorage.setItem(KEY, JSON.stringify(s));
+    deviceStorage().setItem(KEY, JSON.stringify(s));
   } catch {
     /* private mode / blocked storage: settings just won't persist */
   }

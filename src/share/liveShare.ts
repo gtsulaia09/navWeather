@@ -8,6 +8,7 @@ import { bearingDelta, haversineM } from '../utils/distance';
 import { simplifyLine } from '../utils/simplify';
 import { liveUrl } from './links';
 import { MAX_ROUTE_POINTS, type ShareTrip, type ShareUpdate } from './protocol';
+import { deviceStorage } from '../platform/storage';
 
 /**
  * SHARER side of live location. Creates a share on the relay, then publishes
@@ -65,8 +66,8 @@ function deleteShare(id: string, k: string) {
 
 function save(v: Stored | null) {
   try {
-    if (v) localStorage.setItem(STORAGE_KEY, JSON.stringify(v));
-    else localStorage.removeItem(STORAGE_KEY);
+    if (v) deviceStorage().setItem(STORAGE_KEY, JSON.stringify(v));
+    else deviceStorage().removeItem(STORAGE_KEY);
   } catch {
     /* storage blocked: sharing still works for this page */
   }
@@ -176,7 +177,7 @@ function deactivate() {
  */
 export function resumeLiveShare() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = deviceStorage().getItem(STORAGE_KEY);
     if (!raw) return;
     const s = JSON.parse(raw) as Stored;
     if (typeof s.id !== 'string' || typeof s.key !== 'string' || !(s.expiresAt > Date.now())) {

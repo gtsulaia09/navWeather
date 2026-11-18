@@ -631,8 +631,10 @@
   color: var(--text);
   text-align: left;
 }
-.report__kind:hover:not(:disabled) {
-  background: var(--surface-3);
+@media (hover: hover) {
+  .report__kind:hover:not(:disabled) {
+    background: var(--surface-3);
+  }
 }
 .report__kind:disabled {
   opacity: 0.5;

@@ -17,8 +17,10 @@
   background: transparent;
   transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
 }
-.tmode:hover {
-  background: var(--surface-2);
+@media (hover: hover) {
+  .tmode:hover {
+    background: var(--surface-2);
+  }
 }
 .tmode.is-on {
   color: var(--accent);

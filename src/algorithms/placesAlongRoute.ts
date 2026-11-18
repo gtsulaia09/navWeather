@@ -25,8 +25,8 @@ export function createRouteProjector(timed: TimedRoute) {
   const coarse: LngLat[] = idx.map((i) => coords[i]);
   const coarseCum = idx.map((i) => timed.cumDistM[i]);
 
-  return function project(p: LngLat, window?: { from: number; to: number }): LineProjection {
-    if (window) return projectOntoLine(coords, timed.cumDistM, p, window.from, window.to);
+  return function project(p: LngLat, span?: { from: number; to: number }): LineProjection {
+    if (span) return projectOntoLine(coords, timed.cumDistM, p, span.from, span.to);
     if (stride === 1) return projectOntoLine(coords, timed.cumDistM, p);
     const c = projectOntoLine(coarse, coarseCum, p);
     const from = Math.max(0, idx[Math.max(0, c.index - 1)]);

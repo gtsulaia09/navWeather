@@ -14,7 +14,22 @@ npm run test:geocode  # our geocoder on the Worker (skips the search checks when
 npm run test:route    # our routing engine through the Worker (skips without an engine: npm run engines:up)
 npm run test:weather  # our forecast through the Worker (skips the forecast checks without tiles: npm run data:weather)
 npm run e2e           # the app in Chrome: search → road with weather → simulated drive → live share → driver report
+                      #   + e2e/mobile.spec.ts: phone/tablet layouts (touch, portrait and landscape)
 ```
+
+**Mobile browser test** (`e2e/mobile.spec.ts`, 2026-11 mobile audit): the same Chrome, emulating phones and a tablet
+(viewport, touch, device pixel ratio) at 320×568, 375×667, 390×844, 768×1024 and 844×390 (landscape). It fails on
+sideways overflow, a sheet whose content hangs out of it, header controls covered by the sheet's grab handle (a
+card's ✕ tapped near its top edge must close it), the landscape plan panel not scrolling to **Start**, the share
+dialog focusing its text field on a touch screen, the share dialog's chips shrinking after Settings was opened
+(a global `.chip` clash), and a finger slide along the departure chart not showing or picking a time (skipped, with a
+note, on a day whose forecast gives no chart). Run alone: `npx playwright test e2e/mobile.spec.ts`. Emulation is not a device: see
+"Mobile devices" below for what was checked on a real browser engine.
+
+**Shared-core boundary** (`src/test/architecture.test.ts`, part of `npm test`): every file of the future mobile core
+(`algorithms`, `intelligence`, `navigation`, `types`, `trip`, `utils`, `i18n`, `roads` except its Web Worker
+adapter, `share/protocol.ts`, `reports/protocol.ts`) is checked for imports of React, the map library, zustand or the
+UI folders, and for browser globals (`window`, `document`, `localStorage`, `navigator`, …).
 
 **Browser test** (`e2e/smoke.spec.ts`, Playwright, DP-2.6): drives the installed Google Chrome headless (`channel:
 'chrome'` — nothing to download). `BASE_URL` picks the target: `http://localhost:5173` (`npm run dev`, the default),
@@ -87,6 +102,28 @@ the test fixtures when the network is closed). Each capture is also checked
 for page-level horizontal overflow, controls off screen, tiny touch targets
 and unlabelled buttons. axe-core runs on 10 states in both themes (0 violations after fixes, 2026-10-02);
 automation of this check is DEVELOPMENT_PLAN DP-11.4.
+
+## Mobile devices (2026-11-18)
+
+- **Emulated in desktop Chrome** (scripts in the audit, now `e2e/mobile.spec.ts`): 320×568, 360×640, 360×800,
+  375×667, 375×812, 390×844, 393×852, 414×896, 430×932, 768×1024, 820×1180, 1024×768, landscape 568×320, 640×360,
+  844×390, 932×430, desktop 1280×800, 1440×900, 1920×1080 — explore, suggestions, place card, route, expanded
+  route, settings, simulated drive, share dialog, live viewer (171 states): checked for page overflow, controls
+  off screen or covered by another element, sheets cut off, small touch targets, inputs under 16 px (iOS zoom).
+- **Low-end profile** (production build, Chrome with 6× CPU slowdown and 1.6 Mbit/s / 150 ms network, 360×800):
+  search usable after ~1.9 s, first paint ~1.8 s; a 357 km route with alternatives in 6–8 s (network-bound). Main
+  thread blocked while the route loads: **1.1 s (worst task 630 ms) before → 0.37 s (worst 142 ms) after** the
+  road-comparison grid index (`utils/proximity.ts`; one comparison 43 ms → 0.3–0.6 ms unthrottled, same results);
+  the simulated drive has no long tasks once running; JS heap returns to ~22 MB after exiting the drive (no growth).
+  Measured with `PerformanceObserver` (long tasks, event timing) and a CPU profile, not on a phone.
+- **Real Android Chrome 134** (Android Studio emulator, Pixel-class 411×810 CSS px, DPR 2.625, the system keyboard):
+  the keyboard covers 360 px and Chrome keeps the page height (only the visual viewport shrinks) — measured; the
+  search suggestions stay above it; the share and settings dialogs shrink to the visible area and keep the field
+  being typed in on screen; a dialog opened by touch does not raise the keyboard; a tap on the top edge of a card's
+  ✕ closes it; the app loads from the computer's network address (`http://<LAN IP>:5173`).
+- **Not run on:** a physical phone, iOS Safari / WebKit (the iOS Simulator needs Xcode's licence accepted on this
+  machine: `sudo xcodebuild -license`), Samsung Internet, Firefox for Android. iOS keyboard and safe-area behaviour
+  follows the same code paths (visual viewport, `env(safe-area-inset-*)`) but is unverified on WebKit.
 
 ## Manual / browser checks performed
 

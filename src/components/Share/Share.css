@@ -60,7 +60,8 @@
   font-weight: 600;
   font-size: 14px;
 }
-.chip {
+/* Scoped: Settings has its own .chip (loaded later, it used to restyle these once Settings had been opened). */
+.share__durations .chip {
   position: relative;
   display: inline-flex;
   align-items: center;
@@ -72,17 +73,17 @@
   font-size: 15px;
   cursor: pointer;
 }
-.chip input {
+.share__durations .chip input {
   position: absolute;
   opacity: 0;
   pointer-events: none;
 }
-.chip.is-on {
+.share__durations .chip.is-on {
   border-color: var(--accent);
   background: var(--accent-soft);
   color: var(--accent);
 }
-.chip:has(input:focus-visible) {
+.share__durations .chip:has(input:focus-visible) {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }

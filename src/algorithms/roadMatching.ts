@@ -1,6 +1,7 @@
 import type { LngLat } from '../types/geo';
 import type { TimedRoute } from '../types/route';
 import { bearingDeg, bearingDelta, pointAtDistance } from '../utils/distance';
+import { proximityIndexFor } from '../utils/proximity';
 import { createRouteProjector } from './placesAlongRoute';
 
 /**
@@ -94,8 +95,8 @@ const coincideCache = new WeakMap<TimedRoute, WeakMap<TimedRoute, { bucket: numb
  * `bufferM`) all the way? Then it is not another road, only the same one
  * seen from a place where the two meet — e.g. after they rejoin.
  *
- * Costs tens of milliseconds, and the answer only changes as the car moves
- * on, so it is remembered per pair of roads for each 500 m of progress.
+ * The answer only changes as the car moves on, so it is remembered per pair
+ * of roads for each 500 m of progress.
  */
 export function coincidesAhead(road: TimedRoute, alongM: number, current: TimedRoute, bufferM = 120, share = 0.93): boolean {
   const remaining = road.totalDistM - alongM;
@@ -107,13 +108,14 @@ export function coincidesAhead(road: TimedRoute, alongM: number, current: TimedR
   const hit = byRoad.get(road);
   if (hit && hit.bucket === bucket && hit.params === params) return hit.value;
 
-  const project = projectorFor(current);
+  // Only "within bufferM of the current road?" matters: a grid index answers it without projecting onto the whole road.
+  const index = proximityIndexFor(current.route.geometry, Math.max(bufferM, 100));
   // A road that differs from the current one by under 10 % is not "another road" anyway, so ~8 km spacing is plenty.
   const steps = Math.max(12, Math.min(40, Math.round(remaining / 2000)));
   let near = 0;
   for (let i = 1; i <= steps; i++) {
     const { coordinate } = pointAtDistance(road.route.geometry, road.cumDistM, alongM + (remaining * i) / steps);
-    if (project(coordinate).distanceFromLineM <= bufferM) near++;
+    if (index.within(coordinate, bufferM)) near++;
   }
   const value = near / steps >= share;
   byRoad.set(road, { bucket, params, value });

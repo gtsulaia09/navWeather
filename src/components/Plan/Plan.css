@@ -373,6 +373,8 @@
   gap: 3px;
   height: 72px;
   margin-top: 10px;
+  /* Sideways finger moves scrub the bars; vertical ones still scroll the sheet. */
+  touch-action: pan-y;
 }
 .depart__bar {
   position: relative;
@@ -383,9 +385,15 @@
   align-items: flex-end;
   border-radius: 3px;
 }
-.depart__bar:hover,
-.depart__bar:focus-visible {
+.depart__bar:focus-visible,
+.depart__bar.is-preview {
   background: var(--surface-2);
+}
+/* Hover only where there is a real hover: a tapped bar on a phone would otherwise stay lit. */
+@media (hover: hover) {
+  .depart__bar:hover {
+    background: var(--surface-2);
+  }
 }
 .depart__bar.is-current {
   background: var(--accent-soft);
@@ -421,6 +429,10 @@
   margin-top: 4px;
   font-size: 12px;
   color: var(--text-3);
+}
+.depart__readout {
+  color: var(--text);
+  font-weight: 600;
 }
 .depart__legend {
   display: flex;

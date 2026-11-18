@@ -43,6 +43,19 @@ button:disabled {
   cursor: default;
 }
 
+/* Controls answer the first tap: no double-tap-to-zoom when a button is tapped twice quickly (60×, skip).
+   Pinch-zoom still works. */
+button,
+a[href],
+input,
+select,
+textarea,
+label,
+summary,
+[role='button'] {
+  touch-action: manipulation;
+}
+
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;

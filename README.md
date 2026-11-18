@@ -44,8 +44,131 @@ live sharing and driver reports, on Cloudflare's Free plan. Outside the regions 
 `npm run dev:api` starts only the Worker.
 
 Use Node 22+ (required by the Cloudflare tooling; the tests need 20+).
-Location only works on `https://` or `localhost` — opening the dev server from
-a phone via `http://192.168…` will be refused by the browser.
+Location only works on `https://` or `localhost` — the page opens from a phone via `http://192.168…`, but the
+browser refuses it location (so no navigation); use `npm run dev:phone` (below) for that.
+
+## Run it locally and test on a phone
+
+The project uses **npm** (`package-lock.json`) and **Vite 6**. Ports: the app on **5173** (Vite's default; pass
+`-- --port N` to change it), the Worker on **8787** — the phone never needs 8787: Vite forwards `/api` to it.
+
+### A. On your computer
+
+```bash
+npm install
+```
+
+```bash
+npm run dev
+```
+
+Open <http://localhost:5173>. `npm run dev` starts the app and the Worker together (Ctrl+C stops both); without
+`npm run data:all` having run once, routing and search answer "not available here yet".
+
+```bash
+npm test
+```
+
+```bash
+npm run typecheck
+```
+
+```bash
+npm run build
+```
+
+```bash
+npm run e2e
+```
+
+`npm test` is the unit and scenario suite (Vitest, no network). `npm run e2e` drives your installed Google Chrome
+against the running `npm run dev`: `e2e/smoke.spec.ts` is the whole flow on a desktop window, `e2e/mobile.spec.ts`
+the phone and tablet layouts (320×568 up to 768×1024, portrait and landscape, touch) — run one with
+`npx playwright test e2e/mobile.spec.ts`. `npm run preview:worker` serves the production build as deployed
+(<http://127.0.0.1:8787>).
+
+### B. On a real phone over Wi-Fi
+
+`localhost` on the phone is **the phone itself**, not your computer — so the phone needs your computer's address on
+the local network, and the dev server must listen on that network (`0.0.0.0`), not only on `localhost`.
+
+1. Connect the computer and the phone to **the same Wi-Fi network** (not a guest network: those usually stop
+   devices from seeing each other; switch off any VPN on either side).
+2. Start the dev server on the network. With HTTPS, so the phone allows location, motion and keeping the screen on:
+
+   ```bash
+   npm run dev:phone
+   ```
+
+   It makes a self-signed certificate for this computer's addresses (`scripts/dev-cert.mjs`, kept in `.cert/`,
+   needs `openssl`), starts Vite with `--host` (all interfaces, `0.0.0.0`) and prints the address to open, e.g.
+   `[web] phone (same Wi-Fi): https://192.168.1.23:5173`.
+
+   Plain HTTP also works for looking at layouts — the page loads, but the browser gives it no location:
+
+   ```bash
+   npm run dev -- --host 0.0.0.0
+   ```
+
+3. Find the computer's local IP address if you need it (`dev:phone` prints it):
+   - macOS: `ipconfig getifaddr en0` (Wi-Fi; `en1` on some Macs)
+   - Linux: `hostname -I`
+   - Windows: `ipconfig` → "IPv4 Address" of the Wi-Fi adapter
+4. On the phone, open `https://COMPUTER_LOCAL_IP:5173` (or `http://…` for the plain-HTTP variant). With
+   `dev:phone` the phone warns once that the connection is not private (our own certificate): on iPhone tap
+   **Show Details → visit this website**, on Android **Advanced → Proceed**.
+5. If the phone can't connect:
+   - **Firewall.** macOS asks "Do you want the application node to accept incoming network connections?" the first
+     time — choose **Allow** (or System Settings → Network → Firewall → Options → allow `node`). Windows: allow
+     Node.js on **Private** networks when asked, or add an inbound rule for TCP 5173. Linux with ufw:
+     `sudo ufw allow 5173/tcp`.
+   - **Wrong address.** The computer may have several (Wi-Fi, Ethernet, VPN, Docker); use the one on the same
+     network as the phone (same first three numbers, e.g. `192.168.1.x`).
+   - **Check from the computer first**: `curl -k https://COMPUTER_LOCAL_IP:5173` should print HTML.
+   - **Router "AP/client isolation"** (common on guest and office Wi-Fi) blocks phone ↔ computer; use another
+     network or the USB options below.
+
+Over USB there is a simpler route on Android: Chrome's port forwarding (C below) or
+`adb reverse tcp:5173 tcp:5173` makes `http://localhost:5173` on the phone reach your computer — and `localhost`
+counts as secure, so location works without a certificate.
+
+### C. Debugging the site on the phone
+
+**Android (Chrome):** on the phone, Settings → About phone → tap *Build number* 7 times → Developer options →
+**USB debugging** on; connect by USB and accept the prompt. On the computer open `chrome://inspect#devices` in
+Chrome: the phone's tabs appear; **inspect** gives the full DevTools (console, network, elements, performance with
+the phone's real CPU). *Port forwarding…* there (5173 → `localhost:5173`) lets the phone open
+`http://localhost:5173`. The Android emulator (Android Studio) works the same way, and `http://10.0.2.2:5173`
+reaches the computer from it.
+
+**iOS (Safari):** on the iPhone, Settings → Apps → Safari → Advanced → **Web Inspector** on. On the Mac, Safari →
+Settings → Advanced → **Show features for web developers**. Connect the iPhone by cable (once; after that it can
+work over the same Wi-Fi), open the page in Safari on the phone, then on the Mac: **Develop → *your iPhone* →
+the page**. Needs a Mac. With Xcode, the iOS Simulator runs real Mobile Safari and shares the Mac's network, so
+`http://localhost:5173` works there directly (`xcrun simctl openurl booted http://localhost:5173`).
+
+### D. Mobile testing checklist
+
+- [ ] **Sizes:** 320×568, 360×640, 375×667, 390×844, 414×896, 430×932, tablets 768×1024 and 1024×768 — and a desktop
+      window. Nothing scrolls sideways; nothing hides under the search bar, banner or sheet.
+- [ ] **Orientation:** turn the phone while planning and while driving; in landscape the sheet docks at the side
+      and scrolls as a whole — **Start** must be reachable.
+- [ ] **Safe areas:** iPhone with a notch / Dynamic Island and the home indicator, portrait and landscape: no
+      control under them (also as an installed home-screen app).
+- [ ] **Touch:** every button hit easily with a thumb (≥ 44 px); the sheet's grabber drags and taps; a card's ✕
+      closes it; press-and-hold on the map opens a place; pinch and pan the map; no double-tap zoom on buttons.
+- [ ] **Keyboard:** search and the directions fields keep their suggestions visible above the keyboard; in Share
+      and Settings the field being typed in and the dialog's buttons stay above the keyboard; dialogs don't open
+      the keyboard by themselves.
+- [ ] **Browsers:** iPhone Safari (and as a home-screen app), Android Chrome, Samsung Internet, Firefox; desktop
+      Chrome, Safari, Firefox.
+- [ ] **Slow devices and networks:** DevTools → Performance → CPU 4–6× slowdown and "Slow 4G": the search answers
+      while typing, a route appears without the page freezing, the simulated drive stays smooth.
+- [ ] **Offline / flaky network:** airplane mode during a drive keeps guidance and the loaded forecast (labelled
+      stale).
+- [ ] **Location:** allow, deny, and "approximate" on iOS; GPS following while driving (use `dev:phone` or USB).
+- [ ] **Accessibility:** large text (iOS Dynamic Type / Android font size) doesn't cut buttons off; reduced motion
+      respected; screen reader reads dialogs and the sheet.
 
 ## What it does
 

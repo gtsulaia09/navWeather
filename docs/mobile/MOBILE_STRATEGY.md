@@ -59,6 +59,30 @@ database/
   migrations/     D1 SQL
 ```
 
+### 2a. Platform seams in today's code (2026-11-18)
+
+What the web app reaches through an interface already, and what a native app (React Native or fully native,
+ADR-010) must supply itself. The shared folders are kept platform-free by `src/test/architecture.test.ts`.
+
+| Need | Web today | Seam | Native replacement |
+| --- | --- | --- | --- |
+| Routing, search, weather, places, elevation, air | static files + on-device engines | `services/providers.ts` (`Providers`) | same engines (Hermes), files from app storage / HTTP |
+| Road engine off the UI thread | Web Worker (`roads/client.ts`, `roads/worker.ts`) | `createRoadClient` (inline fallback) | a JS worker thread (e.g. react-native-worklets / a JSI module) or native port |
+| Settings, saved places, live-share key, "continue the drive" | localStorage / sessionStorage | `platform/storage.ts` (`setStorage`) | MMKV (synchronous) or AsyncStorage behind the same interface |
+| Device language | `navigator.language` | `i18n/systemLanguage.ts` (falls back to `Intl`) | works as is in Hermes; or pass the OS locale |
+| GPS while navigating | `navigator.geolocation` (`services/location.ts`) | `locationWatcher` | Core Location / Fused Location + background mode (§3, §4) |
+| Voice prompts, speech recognition | Web Speech API (`voice/providers.ts`) | `tts`, `speechRecognition` providers | AVSpeechSynthesizer / Android TextToSpeech, SFSpeechRecognizer / SpeechRecognizer |
+| Screen kept on while driving | Wake Lock (`hooks/useWakeLock.ts`) | hook (UI layer) | `isIdleTimerDisabled` / `FLAG_KEEP_SCREEN_ON` |
+| gzip data files | `DecompressionStream` (`utils/gzip.ts`) | function | a JS inflater (fflate) or native zlib |
+| Offline shell, cached data | service worker (`public/sw.js`) | — | app bundle + file cache |
+| Map | MapLibre GL JS (`components/Map`) | `MapProvider` (style URL) | MapLibre Native, same style JSON |
+| Sharing a link, copying | Web Share / Clipboard (`share/links.ts`) | UI layer | native share sheet |
+| Keyboard over dialogs, safe areas | visual viewport (`hooks/useVisibleViewport.ts`), `env(safe-area-inset-*)` | UI layer | `KeyboardAvoidingView`, `react-native-safe-area-context` |
+| Push notifications, biometrics, camera | not used | — | APNs / FCM, LocalAuthentication / BiometricPrompt, camera — only if a feature needs them, each with its permission prompt |
+
+Known coupling left for the repository split: a few engine files import **types only** from `services/*`
+(`RawPlace`, `SpeedLimitWay`, `Incident`, `SpeedCamera`, `PlannedRoute`); they move to `types/` with the split.
+
 ## 3. iOS
 
 | Item | Class | Notes |

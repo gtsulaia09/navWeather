@@ -291,7 +291,7 @@ While driving: one banner, voice first, large targets, nothing to read for long
 | --- | --- | --- | --- |
 | REQ-A11Y-001 | WCAG 2.1 AA: axe-core 0 violations in all main states, light/dark | P1 | VERIFIED (manual axe run 2026-10-02; automated in DP-11.4) |
 | REQ-A11Y-002 | Keyboard: focus traps in dialogs, Escape, focus return | P1 | VERIFIED |
-| REQ-A11Y-003 | Touch targets ≥44 px; text never relies on colour alone | P1 | IMPLEMENTED (map markers: DP-11.11) |
+| REQ-A11Y-003 | Touch targets ≥44 px; text never relies on colour alone | P1 | IMPLEMENTED (map markers: DP-11.11; 2026-11-18: 36 px chips and segmented options get 44 px hit areas, departure bars a finger slide, header controls no longer under the sheet handle — B-26, B-33; `e2e/mobile.spec.ts`) |
 
 ## 18. Performance requirements
 
@@ -317,7 +317,7 @@ Model: [COST_AND_SCALE](operations/COST_AND_SCALE.md); free stack: [FREE_STACK_P
 
 | ID | Requirement | Priority | Status |
 | --- | --- | --- | --- |
-| REQ-MOB-001 | Engines free of React/DOM so they can run in a mobile JS runtime or be ported | P0 | IMPLEMENTED |
+| REQ-MOB-001 | Engines free of React/DOM so they can run in a mobile JS runtime or be ported | P0 | VERIFIED (2026-11-18: `src/test/architecture.test.ts` checks every core file; storage behind `platform/storage.ts`, device language via `i18n/systemLanguage.ts` — B-34) |
 | REQ-MOB-002 | Every server feature reachable via `/api/v1` with Bearer-token auth (no cookie-only flows) | P1 | PLANNED (accounts) |
 | REQ-MOB-003 | Decide the mobile stack via a time-boxed spike, only for free channels (PWA, APK / F-Droid); store apps blocked by fees (ADR-015) | P2 | PLANNED |
 | REQ-MOB-004 | Voice layer as platform-neutral instruction IDs + params, rendered by a per-platform TTS adapter | P1 | IMPLEMENTED (web) / PLANNED (mobile) |

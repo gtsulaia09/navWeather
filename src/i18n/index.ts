@@ -1,4 +1,5 @@
 import { en, type Messages } from './en';
+import { systemLanguage } from './systemLanguage';
 
 export type Locale = 'en' | 'ru';
 export const LOCALES: { id: Locale; name: string }[] = [
@@ -28,8 +29,8 @@ export async function loadLocale(locale: Locale): Promise<void> {
   table[locale] = await loaders[locale]();
 }
 
-/** Best supported locale for the browser language. */
-export function detectLocale(lang = typeof navigator !== 'undefined' ? navigator.language : 'en'): Locale {
+/** Best supported locale for the device language. */
+export function detectLocale(lang = systemLanguage()): Locale {
   const base = lang.slice(0, 2).toLowerCase();
   return base === 'ru' ? base : 'en';
 }

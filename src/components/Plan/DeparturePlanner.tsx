@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useRef, useState, type PointerEvent } from 'react';
 import { planDepartures, type DeparturePlan } from '../../algorithms/departurePlanner';
 import { formatDuration } from '../../i18n/format';
 import { getProviders } from '../../services/providers';
@@ -64,7 +64,39 @@ export function DepartureChart() {
   const m = useMessages();
   const { plan, tz } = useDeparturePlan();
   const totalMin = useAppStore((s) => (s.plan ? s.plan.timed.totalTimeS / 60 : 1));
+  const chart = useRef<HTMLDivElement>(null);
+  // Finger scrubbing: the bars are ~10 px wide on a phone, too narrow to hit one by one and with no hover to say
+  // which time each is. Sliding a finger along the chart shows the time under it; lifting it picks that time.
+  const [scrub, setScrub] = useState<{ start: number; at: number } | null>(null);
+  // A touch stays captured by the bar it started on; if the browser still sends a click after a slide, that click
+  // must not undo the slide's choice.
+  const slid = useRef(false);
   if (!plan) return null;
+  const choose = (i: number) => useAppStore.getState().setDeparture({ mode: 'at', utcMs: plan.options[i].departMs });
+  const barAt = (clientX: number) => {
+    const r = chart.current!.getBoundingClientRect();
+    return Math.max(0, Math.min(plan.options.length - 1, Math.floor(((clientX - r.left) / r.width) * plan.options.length)));
+  };
+  const onPointerDown = (e: PointerEvent) => {
+    slid.current = false;
+    if (e.pointerType === 'mouse') return; // mouse users click the bar itself
+    const i = barAt(e.clientX);
+    setScrub({ start: i, at: i });
+  };
+  const onPointerMove = (e: PointerEvent) => {
+    if (scrub) setScrub({ ...scrub, at: barAt(e.clientX) });
+  };
+  const onPointerUp = (e: PointerEvent) => {
+    if (!scrub) return;
+    const i = barAt(e.clientX);
+    setScrub(null);
+    // A tap that stays on its bar is the bar's own click; only a slide to another bar is chosen here.
+    if (i !== scrub.start) {
+      slid.current = true;
+      choose(i);
+    }
+  };
+  const preview = scrub ? plan.options[scrub.at] : null;
   const scores = plan.options.map((o) => o.score);
   const varies = Math.max(...scores) - Math.min(...scores) >= 10;
   const pct = (min: number) => Math.min(100, (min / Math.max(1, totalMin)) * 100);
@@ -78,17 +110,29 @@ export function DepartureChart() {
       ) : (
         <>
           {plan.current === plan.best ? <p className="depart__note">{m.depart.currentBest}</p> : null}
-          <div className="depart__chart" role="group" aria-label={m.depart.title}>
-            {plan.options.map((o) => {
+          <div
+            ref={chart}
+            className="depart__chart"
+            role="group"
+            aria-label={m.depart.title}
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            onPointerUp={onPointerUp}
+            onPointerCancel={() => setScrub(null)}
+          >
+            {plan.options.map((o, i) => {
               const time = formatLocalTime(o.departMs, tz);
               const selected = o === plan.current;
               return (
                 <button
                   key={o.departMs}
-                  className={`depart__bar${selected ? ' is-current' : ''}${o === plan.best ? ' is-best' : ''}`}
+                  className={`depart__bar${selected ? ' is-current' : ''}${o === plan.best ? ' is-best' : ''}${o === preview ? ' is-preview' : ''}`}
                   aria-label={`${m.depart.bar(time, formatDuration(o.wetMinutes * 60, m))}${selected ? ` (${m.depart.selected})` : ''}`}
                   aria-pressed={selected}
-                  onClick={() => useAppStore.getState().setDeparture({ mode: 'at', utcMs: o.departMs })}
+                  onClick={() => {
+                    if (slid.current) slid.current = false;
+                    else choose(i);
+                  }}
                 >
                   <span className="depart__wet" style={{ height: `${Math.max(3, pct(o.wetMinutes))}%` }}>
                     <span className="depart__severe" style={{ height: `${o.wetMinutes ? (o.severeMinutes / o.wetMinutes) * 100 : 0}%` }} />
@@ -98,9 +142,15 @@ export function DepartureChart() {
             })}
           </div>
           <div className="depart__axis tabular" aria-hidden="true">
-            <span>{formatLocalTime(plan.options[0].departMs, tz)}</span>
-            <span>{formatLocalTime(mid.departMs, tz)}</span>
-            <span>{formatLocalTime(last.departMs, tz)}</span>
+            {preview ? (
+              <span className="depart__readout">{m.depart.bar(formatLocalTime(preview.departMs, tz), formatDuration(preview.wetMinutes * 60, m))}</span>
+            ) : (
+              <>
+                <span>{formatLocalTime(plan.options[0].departMs, tz)}</span>
+                <span>{formatLocalTime(mid.departMs, tz)}</span>
+                <span>{formatLocalTime(last.departMs, tz)}</span>
+              </>
+            )}
           </div>
           <p className="depart__legend">
             <span className="depart__key depart__key--wet" aria-hidden="true" /> {m.depart.legendRain}

@@ -1,5 +1,6 @@
 import type { Messages } from './en';
 import { plural } from './plural';
+import { systemLanguage } from './systemLanguage';
 
 export type DistanceUnits = 'metric' | 'imperial';
 export type TemperatureUnit = 'c' | 'f';
@@ -17,7 +18,7 @@ export interface UnitPrefs {
  * miles + °C for the UK; metric elsewhere.
  */
 export function defaultUnits(
-  browserLocale = typeof navigator !== 'undefined' ? navigator.language : 'en',
+  browserLocale = systemLanguage(),
   timeZone = (() => {
     try {
       return Intl.DateTimeFormat().resolvedOptions().timeZone ?? '';

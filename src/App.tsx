@@ -23,6 +23,7 @@ import { useAppTimers } from './hooks/useAppTimers';
 import { useApplyTheme } from './hooks/useEffectiveTheme';
 import { useElementSize } from './hooks/useElementSize';
 import { useNetworkStatus } from './hooks/useNetworkStatus';
+import { useVisibleViewport } from './hooks/useVisibleViewport';
 import { useSimulationLoop } from './hooks/useSimulationLoop';
 import { useWakeLock } from './hooks/useWakeLock';
 import { parseLiveUrl, parsePlaceUrl } from './share/links';
@@ -74,6 +75,7 @@ function MainApp() {
   useApplyTheme();
   useDisplayPointNaming();
   useInsetVars();
+  useVisibleViewport();
   const driving = useAppStore((s) => s.mode !== 'planning');
   const sharing = useLiveShare((s) => s.status === 'active');
   useWakeLock(driving || sharing);
@@ -129,6 +131,7 @@ function LiveApp({ id }: { id: string }) {
   useNetworkStatus();
   useApplyTheme();
   useInsetVars();
+  useVisibleViewport();
   useLocationSync();
   const m = useMessages();
   useEffect(() => {

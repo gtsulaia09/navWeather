@@ -22,9 +22,10 @@
 .sheet--expanded {
   height: calc(100dvh - var(--inset-top, 64px) - 8px);
 }
-/* The default detent leaves the map visible; pull up for everything. */
+/* The default detent leaves the map visible; pull up for everything. Never shorter than its header (--sheet-head,
+   measured in BottomSheet.tsx), so the header's buttons can't be cut off on a small screen. */
 .sheet--default {
-  max-height: min(calc(100dvh - var(--inset-top, 64px) - 8px), 62dvh);
+  max-height: min(calc(100dvh - var(--inset-top, 64px) - 8px), max(62dvh, calc(var(--sheet-head, 0px) + var(--safe-bottom) + 8px)));
 }
 /* Mid-size screens (tablets): a floating card, not edge to edge. */
 @media (min-width: 700px) {
@@ -38,7 +39,7 @@
     max-height: calc(100dvh - var(--inset-top, 64px) - 32px);
   }
   .sheet--default {
-    max-height: min(calc(100dvh - var(--inset-top, 64px) - 32px), 62dvh);
+    max-height: min(calc(100dvh - var(--inset-top, 64px) - 32px), max(62dvh, calc(var(--sheet-head, 0px) + 8px)));
   }
   .sheet--expanded {
     height: calc(100dvh - var(--inset-top, 64px) - 32px);
@@ -66,7 +67,7 @@
   .sheet,
   .sheet--expanded {
     top: calc(var(--safe-top) + 8px);
-    bottom: 8px;
+    bottom: calc(var(--safe-bottom) + 8px);
     left: calc(var(--safe-left) + 8px);
     right: auto;
     width: min(380px, 46vw);
@@ -78,6 +79,7 @@
   }
   .sheet--compact {
     bottom: auto;
+    max-height: calc(100dvh - var(--safe-top) - var(--safe-bottom) - 16px);
   }
 }
 .sheet__grab {
@@ -93,6 +95,12 @@
   cursor: grab;
   position: relative;
   z-index: 1;
+}
+/* The handle is a full-width 44 px target that reaches 18 px into the header; controls there (a card's ✕, the
+   drive sheet's pause/exit) must still win the tap. Zero specificity: a control's own position rule still applies. */
+:where(.sheet__header) :where(button, a[href], input, select, textarea, [role='button'], [role='tab'], [role='radio']) {
+  position: relative;
+  z-index: 2;
 }
 .sheet__spacer {
   height: 14px;
@@ -120,4 +128,20 @@
 }
 .sheet__extra {
   padding: 20px 16px 4px;
+}
+
+/* Landscape phones are short: a header (travel modes, title, Start) can be taller than the panel. The panel then
+   scrolls as one piece — a vertical swipe scrolls it instead of resizing it; the handle still cycles by tap. */
+@media (orientation: landscape) and (max-height: 520px) {
+  .sheet {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  .sheet__grab {
+    touch-action: pan-y;
+  }
+  .sheet__scroll {
+    flex: none;
+    overflow: visible;
+  }
 }

@@ -1,8 +1,7 @@
 import type { LngLat } from '../types/geo';
 import type { Route } from '../types/route';
 import { bearingDeg, cumulativeDistances, destinationPoint, pointAtDistance } from '../utils/distance';
-import { buildTimedRoute } from './routeTiming';
-import { createRouteProjector } from './placesAlongRoute';
+import { proximityIndexFor } from '../utils/proximity';
 
 export interface DistinctRouteOptions {
   /** Most roads to keep, the best one included. */
@@ -24,27 +23,31 @@ const DEFAULTS = { maxSharedFraction: 0.93, minUniqueM: 1000, maxSlowerRatio: 1.
  * Samples the route at even distances, so long and short stretches weigh by length.
  */
 export function sharedFraction(route: Route, reference: Route, bufferM = DEFAULTS.bufferM): number {
-  const timed = buildTimedRoute(route);
-  if (timed.totalDistM <= 0) return 1;
-  const project = createRouteProjector(buildTimedRoute(reference));
-  const steps = Math.max(20, Math.min(400, Math.round(timed.totalDistM / 150)));
   const geometry = route.geometry;
-  let near = 0;
+  if (geometry.length < 2) return 1;
+  const cumDistM = cumulativeDistances(geometry);
+  const totalDistM = cumDistM[cumDistM.length - 1];
+  if (totalDistM <= 0) return 1;
+  // Only "within bufferM of the reference?" matters, so a grid index answers it exactly without projecting each
+  // sample onto the whole reference road (that took ~0.6 s per comparison on a slow phone, on the main thread).
+  const near = proximityIndexFor(reference.geometry, Math.max(bufferM, 100));
+  const steps = Math.max(20, Math.min(400, Math.round(totalDistM / 150)));
+  let hits = 0;
   let total = 0;
   let seg = 0;
   for (let i = 0; i <= steps; i++) {
-    const d = (timed.totalDistM * i) / steps;
-    while (seg < geometry.length - 2 && timed.cumDistM[seg + 1] < d) seg++;
-    const span = timed.cumDistM[seg + 1] - timed.cumDistM[seg];
-    const t = span > 0 ? Math.min(1, Math.max(0, (d - timed.cumDistM[seg]) / span)) : 0;
+    const d = (totalDistM * i) / steps;
+    while (seg < geometry.length - 2 && cumDistM[seg + 1] < d) seg++;
+    const span = cumDistM[seg + 1] - cumDistM[seg];
+    const t = span > 0 ? Math.min(1, Math.max(0, (d - cumDistM[seg]) / span)) : 0;
     const point: [number, number] = [
       geometry[seg][0] + (geometry[seg + 1][0] - geometry[seg][0]) * t,
       geometry[seg][1] + (geometry[seg + 1][1] - geometry[seg][1]) * t,
     ];
     total++;
-    if (project(point).distanceFromLineM <= bufferM) near++;
+    if (near.within(point, bufferM)) hits++;
   }
-  return near / total;
+  return hits / total;
 }
 
 /**

@@ -1,5 +1,6 @@
 import type { Place } from '../types/geo';
 import { NAVIGABLE_MODES, type TravelMode } from '../types/travel';
+import { sessionStorageStore } from '../platform/storage';
 
 /**
  * RESUME AFTER AN ACCIDENTAL RELOAD — while navigating, the destination and
@@ -33,7 +34,7 @@ function cleanPlace(p: unknown): Place | null {
 
 export function saveDriveSession(destination: Place, waypoints: Place[], now = Date.now(), mode: TravelMode = 'drive'): void {
   try {
-    sessionStorage.setItem(KEY, JSON.stringify({ destination, waypoints, savedAt: now, mode }));
+    sessionStorageStore().setItem(KEY, JSON.stringify({ destination, waypoints, savedAt: now, mode }));
   } catch {
     /* storage blocked: nothing to resume, which is fine */
   }
@@ -41,7 +42,7 @@ export function saveDriveSession(destination: Place, waypoints: Place[], now = D
 
 export function clearDriveSession(): void {
   try {
-    sessionStorage.removeItem(KEY);
+    sessionStorageStore().removeItem(KEY);
   } catch {
     /* ignore */
   }
@@ -49,13 +50,13 @@ export function clearDriveSession(): void {
 
 export function readDriveSession(now = Date.now()): DriveSession | null {
   try {
-    const raw = sessionStorage.getItem(KEY);
+    const raw = sessionStorageStore().getItem(KEY);
     if (!raw) return null;
     const o = JSON.parse(raw) as Record<string, unknown>;
     const destination = cleanPlace(o.destination);
     const savedAt = typeof o.savedAt === 'number' ? o.savedAt : 0;
     if (!destination || now - savedAt > MAX_AGE_MS || savedAt > now + 60_000) {
-      sessionStorage.removeItem(KEY);
+      sessionStorageStore().removeItem(KEY);
       return null;
     }
     const waypoints = Array.isArray(o.waypoints) ? o.waypoints.map(cleanPlace).filter((p): p is Place => p !== null).slice(0, 10) : [];
