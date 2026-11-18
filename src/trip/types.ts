@@ -262,6 +262,10 @@ export type TripAdvice =
       tz: string;
     }
   | { kind: 'enter-range' }
+  /** A range is known but not the tank/battery size: stops after the first fill can't be planned (B-20). */
+  | { kind: 'enter-tank' }
+  /** The plan drives `hours` at night (00:00–06:00 local); leaving at `suggestMs` (local morning) is worth considering (B-04). */
+  | { kind: 'night-driving'; hours: number; suggestMs: number; tz: string }
   | { kind: 'no-places'; category: PlaceCategory; stopId: string };
 
 /** 'border' entries are added by the client from the borders lookup. */
@@ -309,7 +313,10 @@ export interface TripPlan {
   };
   dataStatus: {
     places: 'ok' | 'partial' | 'unavailable' | 'skipped';
-    weather: 'ok' | 'missing';
+    /** 'partial': the forecasts end before the trip does (`weatherUntilMs`); later risks are unknown, not absent. */
+    weather: 'ok' | 'partial' | 'missing';
+    /** Planned time from which no forecast covers the trip (UTC ms), when 'partial'. */
+    weatherUntilMs?: number;
   };
   /** Echo of the replanning state, when the plan was made from the car's position. */
   progress?: TripProgressState;

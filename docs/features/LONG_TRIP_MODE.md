@@ -1,5 +1,9 @@
 # Long Trip Mode — feature specification (source of truth)
 
+> **Update 2026-10-04 (ADR-015/016):** stop places and borders will no longer come from public Overpass through the
+> Worker (B-22): places → our Places API on D1/R2 (DP-6.5), borders → Natural Earth on the client (DP-4.5). On Workers
+> Paid the planner's CPU limit (B-23) no longer applies.
+
 Status: **IMPLEMENTED (core)** · Requirements: REQ-TRIP-001…015 in
 [PROJECT_REQUIREMENTS](../PROJECT_REQUIREMENTS.md) · Decision:
 [ADR-013](../architecture/decisions/ADR-013-trip-planner.md) · Last updated 2026-10-02.
@@ -45,8 +49,12 @@ Thresholds live **only** in `src/trip/config.ts` (`TRIP_THRESHOLDS`):
 Long Trip Mode switches on (`longTripMode`, with `reasons`) when any of:
 distance ≥ `LONG_TRIP_DISTANCE_KM` (800) · driving ≥ `LONG_TRIP_TIME_MINUTES`
 (600) · the schedule needs an overnight · ≥ `LONG_TRIP_MIN_REST_STOPS` (3)
-breaks/meals. The user can override per trip (on/off); the override is
-non-blocking. Classification also reports estimated total time (stops
+breaks/meals — **and** the trip is at least `AUTO_ON_FROM_CATEGORY` (EXTENDED).
+A shorter trip with reasons (e.g. Tbilisi → Batumi leaving at 18:30, which
+arrives after the balanced pace's 22:00) keeps standard navigation and its
+ETAs; the reasons are kept and the mode is offered ("Plan stops for this
+trip"). Whenever the mode is on, the stops are planned (B-24). The user can
+override per trip (on/off); the override is non-blocking. Classification also reports estimated total time (stops
 included), recommended breaks, time-zone changes and border crossings
 (`requiresBorderCrossing`: null until the borders lookup answers).
 
@@ -83,11 +91,19 @@ local wall clock read in that stop's own time zone:
    to 20 min after the daily target, scored by size (accommodation and
    services likely) and by driving moved to the next day; a candidate that
    would add a whole extra night is penalised; the plain target is always an
-   option. Nights are fixed one at a time (each moves the following days).
+   option. The window before the target is at most a quarter of that day's
+   driving (an 18:45 departure must not sleep an hour out, B-04). Nights are
+   fixed one at a time (each moves the following days).
    User-chosen nights (`overnightsM`) are kept as they are. The other good
    towns are returned as `alternatives`.
 5. Segments, days, timeline, summary, weather risks and advice are derived
    from the final schedule.
+6. **Night driving** (00:00–06:00 local, `STOP_DEFAULTS.nightDriving`): a
+   plan that drives at least an hour then gets the advice `night-driving`
+   (hours, and the pace's next morning start to consider). Only before the
+   trip; the plan itself is never changed (B-04). Open (DP-1.4): a night
+   departure still gets its first "overnight" in the morning, when the daily
+   driving runs out.
 
 Pace presets (`PACE_PRESETS`) are **preferences, not medical or legal
 rules**:
@@ -118,7 +134,13 @@ built in**; Settings says so. Adding them needs verified rules per country.
 - Only from data the user declared: remaining range (Settings) and tank or
   battery size + consumption per 100 km (→ full-tank range). Nothing is
   estimated. Without a range: advice "Add your range (and tank size) in
-  Settings to plan fuel stops".
+  Settings to plan fuel stops". With a range but no tank size, only the
+  first fill is planned and the advice `enter-tank` says so (B-20).
+- While driving, the range is used up: a replan sends the range left at the
+  car (`rangeLeftAt`: from the last planned fill passed — a full tank, known
+  only with the tank size — else from the range the plan started with), and
+  a re-route carries it over; a replan never falls back to the range the trip
+  started with (B-01).
 - Stations within 2 km of the route; preferred brand (+), 24/7 at night (+),
   closed at arrival (removed); trucks prefer `hgv`/HGV diesel stations; EV:
   charging stations within 4 km, ≥ 50 kW preferred, power shown.
@@ -135,8 +157,16 @@ built in**; Settings says so. Adding them needs verified rules per country.
 ## 8. Weather logic
 - The client sends hourly **hazard codes** per route sample (from its own
   forecasts: rain, heavy rain, snow, storm, fog, strong wind, freezing with
-  precipitation; same thresholds as the alert engine). The Worker never calls
-  a weather API.
+  precipitation; same thresholds as the alert engine), as far as its forecasts
+  reach (≤ 400 h). The Worker never calls a weather API.
+- The forecasts are loaded for the whole trip, stops included, from the first
+  load (the instant classification's total time); if the plan moves points
+  further out, they are loaded once more (B-06). Every new forecast load while
+  planning asks for a new plan, and so do settlements found after the first
+  plan (B-07, B-05).
+- Forecasts that end before the trip does: `dataStatus.weather = 'partial'`
+  with `weatherUntilMs`; the dashboard says the weather after that time is
+  not known yet — missing data is never "no risk" (B-21).
 - Risks are evaluated at **stop-aware** planned times and grouped into
   stretches (`WeatherRisk`).
 - **Stop earlier:** a high-severity risk driven in the last 3 h before an
@@ -149,11 +179,13 @@ built in**; Settings says so. Adding them needs verified rules per country.
   trigger a replan, which recomputes all of it.
 
 ## 9. Borders
-`POST /api/v1/trips/borders`: ≤ 20 points along the route (≥ 25 km apart) →
-the OSM country of each (one Overpass `is_in` query, edge-cached for a week)
-→ crossings where the country changes (points at sea skipped). Shown in the
-dashboard and as timeline entries ("Georgia → Turkey · around 380 km").
-Approximate position; no border wait times (no source).
+On the device (DP-4.5): Natural Earth admin-0 boundaries (public domain,
+`pipelines/borders/build.mjs` → `src/trip/data/countries-v1.json`, loaded on
+first use, ≈0.2 MB gzip) — a point every 5 km along the route, each change
+placed by bisection; points at sea skipped. No request leaves the device, and
+it works offline. `POST /api/v1/trips/borders` (≤ 20 points) answers from the
+same data for other clients. Shown in the dashboard and as timeline entries
+("Georgia → Turkey · around 380 km"). No border wait times (no source).
 
 ## 10. Notifications (anti-spam)
 - Planned stops become route events (`TRIP_STOP`): overnight and fuel/charge
@@ -162,7 +194,9 @@ Approximate position; no border wait times (no source).
   **replace** the generic 2-hour break and range-based fuel reminders.
 - Weather alerts are unchanged (deduplicated, escalation-only repeats).
 - Replanning while driving: at most every 10 min, only when ≥ 20 min off the
-  plan; the user is told only when the arrival moves by ≥ 15 min.
+  plan; the user is told only when the arrival moves by ≥ 15 min. Time spent
+  at a planned stop (within 2 km of it) up to its planned departure is not a
+  delay; staying longer is (B-03).
   (`REPLAN` in config.)
 - Before departure, the dashboard is the "long trip ahead" message — no
   separate pop-up.
@@ -269,7 +303,7 @@ Overpass; Georgia/Turkey countries via `is_in`.
 Truck routing restrictions (needs Valhalla, ADR-004) · verified
 jurisdiction rest rules for commercial drivers · EV charging time from car
 model and charger power, weather impact on range · fuel prices (if a
-reliable open source appears) · booking partner for real availability (a
-commercial decision, ADR-005/011 impact) · saved trips (device-only, opt-in)
+reliable open source appears) · real hotel availability (no free open source exists;
+the project stays non-commercial, ADR-015) · saved trips (device-only, opt-in)
 · multi-night stays · voice: "where do we sleep tonight?" · CarPlay/Android
 Auto trip overview · fleet mode (same engine server-side).

@@ -119,6 +119,10 @@ interface TripTracker {
   maxTemp: number | null;
   reroutes: number;
   simulated: boolean;
+  /** The range entered in Settings when this drive started (or when it was last changed), km. */
+  rangeKm: number | null;
+  /** Range used before the current route's start (earlier routes of this drive), minus where the range was last entered (m). */
+  rangeBaseM: number;
 }
 
 /** "Trip complete" — shown on arrival, never stored. */
@@ -293,6 +297,8 @@ let planTasks: AbortController | null = null;
 let tracker: ReturnType<typeof createProgressTracker> | null = null;
 let lastDeriveAt = 0;
 let lastDeriveSimMs = 0;
+/** Timestamp of the GPS fix the last derive used (real drives). */
+let lastDeriveFixMs = 0;
 let lastRecalcAt = 0;
 let rerouteCheckedAt = 0;
 let rerouteQuietUntil = 0;
@@ -342,7 +348,23 @@ function startTrip(plannedDurationS: number, startedAt: number, simulated: boole
     maxTemp: null,
     reroutes: 0,
     simulated,
+    rangeKm: settingsSnapshot().fuelRangeKm,
+    rangeBaseM: 0,
   };
+}
+
+/**
+ * Distance driven since the range was entered (km): the route being driven plus the routes before a re-route.
+ * Entering a new range (e.g. after refuelling) starts counting again from there. Memory only.
+ */
+function rangeUsedKm(progressAlongM: number): number {
+  if (!trip) return progressAlongM / 1000;
+  const declared = settingsSnapshot().fuelRangeKm;
+  if (declared !== trip.rangeKm) {
+    trip.rangeKm = declared;
+    trip.rangeBaseM = -progressAlongM;
+  }
+  return Math.max(0, trip.rangeBaseM + progressAlongM) / 1000;
 }
 
 /** Distance driven and the weather actually encountered at the vehicle. */
@@ -419,6 +441,15 @@ export function setTripStopsProvider(fn: () => TripStop[] | undefined): void {
   tripStopsProvider = fn;
 }
 
+/**
+ * When a Long Trip on screen ends, planned stops included (UTC ms) — known before its plan from the instant
+ * classification — so the first forecast request already covers the whole trip (B-06). state/trip.ts registers it.
+ */
+let tripEndProvider: () => number | undefined = () => undefined;
+export function setTripEndProvider(fn: () => number | undefined): void {
+  tripEndProvider = fn;
+}
+
 function departureMsOf(s: Pick<AppState, 'departure' | 'clockMs'>): number {
   return s.departure.mode === 'now' ? s.clockMs : s.departure.utcMs;
 }
@@ -447,6 +478,7 @@ function derive(s: AppState): Derived {
   const settings = settingsSnapshot();
   lastDeriveAt = performance.now();
   lastDeriveSimMs = s.sim.nowMs;
+  lastDeriveFixMs = s.mode === 'navigating' && s.progress ? s.progress.nowMs : 0;
   return deriveRouteWeather({
     plan: s.plan,
     options: s.mode === 'planning' ? s.routeOptions : [],
@@ -464,6 +496,7 @@ function derive(s: AppState): Derived {
     speedLimits: s.speedLimits,
     // Fuel, charging and driving breaks are for drivers.
     fuelRangeKm: s.travelMode === 'drive' ? settings.fuelRangeKm : null,
+    rangeUsedKm: navigating ? rangeUsedKm(s.progress!.distanceAlongM) : 0,
     vehicle: settings.vehicle,
     incidents: s.incidents,
     breakReminders: settings.breakReminders && s.travelMode === 'drive',
@@ -785,6 +818,7 @@ export const useAppStore = create<AppState>()(
       const longest = Math.max(plan.timed.totalTimeS, ...s.routeOptions.map((o) => o.timed.totalTimeS));
       const latestArrival = Math.max(
         s.derived.arrivalMs ?? 0,
+        tripEndProvider() ?? 0,
         departureMsOf(s) + longest * 1000,
         ...s.routeOptions.map((o) => o.timed.route.transit?.arriveMs ?? 0),
         s.mode === 'simulating' ? s.sim.nowMs + plan.timed.totalTimeS * 1000 : 0,
@@ -796,7 +830,14 @@ export const useAppStore = create<AppState>()(
           signal: ctrl.signal,
         });
         if (!isCurrent()) return;
-        const forecasts = new Map(get().forecasts);
+        // Keep only the forecasts this trip's roads need (every known road: switching to one works offline),
+        // so a long session doesn't pile up every route it ever planned (B-11); this load's answers replace older ones.
+        const now = get();
+        const needed = new Set(
+          [...(now.plan?.samples ?? []), ...now.routeOptions.flatMap((o) => o.samples)].map((x) => providers.weather.keyFor(x.coordinate[1], x.coordinate[0])),
+        );
+        const forecasts = new Map<string, LocationForecast>();
+        for (const [k, f] of get().forecasts) if (needed.has(k)) forecasts.set(k, f);
         for (const [k, f] of lookup.forecasts) forecasts.set(k, f);
         const prevPoints = get().derived.points;
         const hasData = lookup.forecasts.size > 0;
@@ -1407,7 +1448,8 @@ function watchLatePlaces(plan: PlannedRoute, signal: AbortSignal) {
  */
 function loadIncidents(timed: PlannedRoute['timed'], signal: AbortSignal) {
   const provider = getProviders().incidents;
-  if (provider.name === 'none' || incidentsLoading) return;
+  // A simulated drive asks the relay for nothing (DP-1.10): it can't confirm or pass a real report.
+  if (provider.name === 'none' || incidentsLoading || useAppStore.getState().mode === 'simulating') return;
   if (provider.name === 'reports' && !useSettings.getState().driverReports) return;
   incidentsLoading = true;
   incidentsLoadedAt = Date.now();
@@ -1623,7 +1665,7 @@ function onProgress(vehicle: VehicleState, progress: RouteProgress, speedMps: nu
 
   // 3e. Driver reports: fresh ones every few minutes; "still there?" just after
   //     passing someone else's report (real drives only — a simulation saw nothing).
-  if (s.online && Date.now() - incidentsLoadedAt > INCIDENT_REFRESH_MS) s.refreshIncidents();
+  if (live && s.online && Date.now() - incidentsLoadedAt > INCIDENT_REFRESH_MS) s.refreshIncidents();
   if (live && settings.driverReports && !s.reportPrompt && s.incidents.length) {
     const passed = s.incidents.find((inc) => {
       if (!inc.reportId || askedReports.has(inc.reportId)) return false;
@@ -1636,8 +1678,12 @@ function onProgress(vehicle: VehicleState, progress: RouteProgress, speedMps: nu
     }
   }
 
-  // 4. Weather + route events: throttled (≤1/s real time, or every 30 s of simulated time).
-  const due = performance.now() - lastDeriveAt > 1000 || progress.nowMs - lastDeriveSimMs >= 30_000;
+  // 4. Weather + route events: throttled — a real drive by its GPS fixes' own clock (≤1/s; before, the simulated
+  //    clock made every fix due, B-10), a simulation ≤1/s real time or every 30 s of simulated time.
+  const due =
+    s.mode === 'simulating'
+      ? performance.now() - lastDeriveAt > 1000 || progress.nowMs - lastDeriveSimMs >= 30_000
+      : progress.nowMs - lastDeriveFixMs >= 1000;
   if (!due) return;
   store.setState({ derived: derive(store.getState()) });
   const st = store.getState();
@@ -1874,6 +1920,8 @@ async function adoptRoute(plan: PlannedRoute, coordinate: LngLat, headingDeg: nu
   spokenManeuvers.clear();
   spokenCameras.clear();
   spokenHazards.clear();
+  // The range used on the old route still counts on the new one (B-02, B-01).
+  if (trip && cur.progress) trip.rangeBaseM += cur.progress.distanceAlongM;
   // A simulated drive restarts on the new route (its clock keeps running).
   const simulating = cur.mode === 'simulating';
   const now = simulating ? cur.sim.nowMs : Date.now();
@@ -1993,6 +2041,7 @@ export function __resetStoreRuntime() {
   hazardsFor = null;
   lastDeriveAt = 0;
   lastDeriveSimMs = 0;
+  lastDeriveFixMs = 0;
   lastRecalcAt = 0;
   rerouteCheckedAt = 0;
   rerouteQuietUntil = 0;

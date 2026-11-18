@@ -467,7 +467,7 @@ export const en = {
     findAlongRoute: 'Find along route',
     clear: 'Clear',
     attribution:
-      'Weather: Open-Meteo (CC BY 4.0) · Routing: OSRM on FOSSGIS servers · Search: Nominatim, Photon · Public transport: Transitous · Map data © OpenStreetMap contributors. No account, no stored location history.',
+      'Weather: ECMWF IFS (CC BY 4.0) and NOAA GFS forecasts from the Open-Meteo open-data archive (CC BY 4.0), processed by navWeather; where ours is missing, Open-Meteo · Routing: Valhalla on OpenStreetMap data; outside our region OSRM (cars: project-osrm.org; walking, cycling: FOSSGIS servers) · Search: our index of OpenStreetMap data; elsewhere Photon · Public transport: Transitous · Map data © OpenStreetMap contributors. No account, no stored location history.',
     fixMap: 'Report a map error',
   },
 
@@ -610,6 +610,7 @@ export const en = {
     offline: 'Offline — the trip plan will be made when you are back online.',
     retry: 'Try again',
     stale: 'This plan may be out of date.',
+    weatherPartial: (until: string) => `The forecast reaches only until ${until}: the weather after that is not known yet and not counted in the risks.`,
     tiles: {
       driving: 'Driving',
       overnights: 'Overnight',
@@ -680,6 +681,9 @@ export const en = {
     stopEarlierAction: (area: string, eta: string) =>
       `Staying in ${area} (arrive ${eta}) means driving that stretch in the morning, when the forecast is better.`,
     enterRange: 'Add your range (and tank size) in Settings to plan fuel stops.',
+    nightDriving: (hours: string, leave: string) =>
+      `This plan drives about ${hours} at night (00:00–06:00), when tiredness is most dangerous. Consider leaving at ${leave} instead.`,
+    enterTank: 'Only the first refuel or charge can be planned: add your tank or battery size and consumption in Settings for the rest.',
     nextStop: 'Next planned stop',
     settings: {
       section: 'Long trips',
@@ -900,7 +904,7 @@ export const en = {
     light: 'Light',
     heavy: 'Heavy',
     partial: 'Part of the area unavailable',
-    forecastNote: 'Approximate: forecast at 49 points (Open-Meteo), not radar.',
+    forecastNote: 'Approximate: forecast at 49 points (ECMWF and GFS models), not radar.',
   },
   hazard: {
     curve: 'Sharp curve',

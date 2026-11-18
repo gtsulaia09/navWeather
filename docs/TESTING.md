@@ -6,10 +6,24 @@
 npm test              # unit + store-level scenarios (deterministic fake providers, no network)
 npm run typecheck     # app + worker
 npm run test:live     # opt-in smoke test against the real public APIs (Tbilisi → Batumi)
-npm run dev:api       # local relay, then in another terminal:
+npm run dev           # app + local relay (or `npm run dev:api` for the relay only), then in another terminal:
 npm run test:share    # end-to-end checks of the live-sharing relay
 npm run test:reports  # end-to-end checks of the driver-reports relay
+npm run test:trips    # Long Trip planner, places and borders on the Worker
+npm run test:geocode  # our geocoder on the Worker (skips the search checks when the index isn't loaded)
+npm run test:route    # our routing engine through the Worker (skips without an engine: npm run engines:up)
+npm run test:weather  # our forecast through the Worker (skips the forecast checks without tiles: npm run data:weather)
+npm run e2e           # the app in Chrome: search → road with weather → simulated drive → live share → driver report
 ```
+
+**Browser test** (`e2e/smoke.spec.ts`, Playwright, DP-2.6): drives the installed Google Chrome headless (`channel:
+'chrome'` — nothing to download). `BASE_URL` picks the target: `http://localhost:5173` (`npm run dev`, the default),
+`http://127.0.0.1:8787` (`npm run build` + `npm run dev:api` — what CI uses), or the preview Worker (never
+production: the test shares and reports). `E2E_STRICT=1` — with our data, forecast and router running — also fails
+on any request to the public services with usage limits (OSRM, FOSSGIS, Photon, Nominatim, Overpass, the Open-Meteo
+forecast API). The basemap is skipped (`E2E_MAP=1` keeps it): in headless Chrome every map frame waits on a GPU
+process without a display and the page stalls for a minute. The CI job `e2e` builds Georgia's data, a Caucasus
+forecast and Valhalla on the runner and runs it strictly.
 
 ## What is covered
 
@@ -71,8 +85,8 @@ dialog, arrival) is captured at 320, 375, 390, 430, 768, 1024, 1280, 1440 and
 Chrome driving the dev build (emulated GPS; provider responses replayed from
 the test fixtures when the network is closed). Each capture is also checked
 for page-level horizontal overflow, controls off screen, tiny touch targets
-and unlabelled buttons. axe-core runs on 10 states in both themes. Findings
-and fixes: `docs/PLAN.md` §3 and §7.
+and unlabelled buttons. axe-core runs on 10 states in both themes (0 violations after fixes, 2026-10-02);
+automation of this check is DEVELOPMENT_PLAN DP-11.4.
 
 ## Manual / browser checks performed
 
@@ -83,7 +97,7 @@ and fixes: `docs/PLAN.md` §3 and §7.
 - Production build served by Cloudflare's runtime (`wrangler dev`): headers,
   SPA fallback, service worker offline reload.
 
-Live check 2026-10-03 ([MASTER_AUDIT](AUDIT/MASTER_AUDIT.md) §1): dev build against the real public providers —
+Live check 2026-10-03 (code audit; defects in [AUDIT/DEFECTS.md](AUDIT/DEFECTS.md)): dev build against the real public providers —
 Tbilisi → Batumi (OSRM `alternatives=3` + via probes answered; one alternative road), Tbilisi → Istanbul and
 Tbilisi → Berlin Long Trip plans through the local Worker, and a 60× simulated drive that spoke a heavy-rain
 alert ~35 min ahead. Both public Overpass instances failed one request each during that run.

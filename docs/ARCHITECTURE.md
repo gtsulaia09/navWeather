@@ -1,8 +1,9 @@
 # Architecture
 
-navWeather is a single-page React app plus a small Cloudflare Worker for live
-location sharing. Everything else runs in the browser against free public
-services. The product idea — weather **where you will be, when you will be
+navWeather is a single-page React app plus a Cloudflare Worker (live location sharing, driver reports,
+approximate location, the Long Trip planner). Everything else currently runs in the browser against free public
+services; the target moves them onto our own engines on Cloudflare ([TARGET_ARCHITECTURE](architecture/TARGET_ARCHITECTURE.md),
+[DEVELOPMENT_PLAN](DEVELOPMENT_PLAN.md)). This document describes the code as it is. The product idea — weather **where you will be, when you will be
 there** — lives in plain TypeScript modules that have no React or DOM
 dependencies, so they are unit-tested directly and can move to a native shell
 later.
@@ -61,7 +62,7 @@ GPS fix (LocationWatcher) or simulation step
        └─ off route → re-plan from the car → everything below is rebuilt
   ─▶ guidance + maneuver voice (priority 1; weather is held while a turn is seconds away)
   ─▶ speed limit / speeding (hysteresis)
-  ─▶ throttled derive (≤1/s real time, every 30 s simulated)
+  ─▶ throttled derive (real drive: ≤1/s by the fixes' own clock; simulation: ≤1/s real time or every 30 s simulated)
   ─▶ DriverAlertEngine: time-to-event windows by severity, confidence gating,
      cooldown, grouping, recurrence suppression, hourly cap, escalation
   ─▶ voice queue + one visual banner
@@ -101,11 +102,11 @@ that names implementations, chosen by `VITE_*` variables.
 
 | Interface | Default | Notes |
 | --- | --- | --- |
-| `RoutingProvider` per travel mode | car: OSRM demo; walk/bike: OSM community OSRM instances (`routing.openstreetmap.de/routed-foot|bike`); flight: `FlightEstimateProvider`; transit: `TransitousProvider` (MOTIS `plan` at `api.transitous.org`) | `providersForMode(base, mode)` gives the mode's router (a flight has no places/elevation/road data; transit no POIs or speed limits); `travelMode` lives in the app store |
+| `RoutingProvider` per travel mode | car, walk, bike: our Valhalla (`ValhallaProvider` → `/api/v1/route`, OSRM-format answer read by the OSRM normaliser); the public OSRM servers (car: demo, walk/bike: `routing.openstreetmap.de`) only when our engine isn't running or a point is outside its region; flight: `FlightEstimateProvider`; transit: `TransitousProvider` (MOTIS `plan` at `api.transitous.org`) | `providersForMode(base, mode)` gives the mode's router (a flight has no places/elevation/road data; transit no POIs or speed limits); `travelMode` lives in the app store |
 | `RoutingProvider` | OSRM demo server | declares capabilities; `avoid` is empty because the demo server rejects `exclude`; asks for `alternatives=3` (plain `true` returns at most one), retrying with `true` if an older server answers 400 |
-| `WeatherProvider` (+ `WeatherService`) | Open-Meteo | batching, cache, stale fallback, model-run checks |
-| `GeocodingProvider` / `AutocompleteProvider` | Nominatim (1 req/s) / Photon | Nominatim forbids autocomplete |
-| `PlacesProvider`, `PoiProvider`, `SpeedLimitProvider` | Overpass | one shared sequential queue with endpoint fallback |
+| `WeatherProvider` (+ `WeatherService`) | our forecast, worldwide: `ApiWeatherProvider` → `/api/v1/weather/forecast` (Open-Meteo's query and JSON, read by the same normaliser); weather tiles in R2 built from ECMWF IFS + NOAA GFS by `pipelines/weather/` | batching, cache, stale fallback, model-run checks (`/api/v1/weather/meta`); route samples send their heights (temperature for the point, not the 25-km grid cell); the public Open-Meteo API only where ours is missing (`VITE_WEATHER_FALLBACK`) |
+| `GeocodingProvider` / `AutocompleteProvider` | our geocoder: `ApiGeocodingProvider` (`/api/v1/geocode`, D1 FTS5) and `TileReverseGeocoder` (nearest settlement from our tiles) | Photon only when our index has nothing (a town abroad) — `VITE_GEOCODING_FALLBACK`; Nominatim selectable |
+| `PlacesProvider`, `PoiProvider`, `SpeedLimitProvider` | our places tiles (`services/places/tiles.ts`, `TileProviders.ts`): static JSON per layer and z9/z11 tile, built from OSM by `pipelines/osm/` | inside the region the tiles cover no third-party request; outside it Overpass (one shared sequential queue) until that region is built (`VITE_PLACES_FALLBACK`) |
 | `ElevationProvider` | Open-Meteo | pass detection |
 | `TrafficProvider` | none | hook for live traffic (sets segment durations) |
 | `IncidentProvider` | driver reports (`/api/reports`) | normalized incidents (`verified` flag) → route events; reports are never verified; `report()`/`vote()` when the source accepts them |
@@ -127,14 +128,6 @@ that names implementations, chosen by `VITE_*` variables.
 `derive()` is a pure function of the app state and returns everything the UI
 shows; components read narrow selectors.
 
-## Location
-
-`services/location.ts` owns one reference-counted `watchPosition`. Reasons
-(`locate`, `navigate`, `share`) acquire and release it; navigation and sharing
-ask for GPS precision, "show my location" is happy with Wi-Fi, and a precise
-watch that times out falls back to coarse. Errors are classified
-(`insecure`, `denied`, `unavailable`, `timeout`, `unsupported`) and each has
-its own message, including iOS-specific instructions.
 
 ## Live location sharing
 
@@ -173,7 +166,7 @@ passing a report ──POST /api/reports/:id/vote {still|gone}──┘
 - Client (`ReportsIncidentProvider`, store): reports become unverified route
   events ("Accident · reported"), a "still there?" card appears 30–400 m after
   passing someone else's report on a real drive; nothing is sent from a
-  simulation. The Report button and prompt disappear when turned off in Settings.
+  simulation, and a simulated drive doesn't ask for the list either (DP-1.10). The Report button and prompt disappear when turned off in Settings.
 
 ## Voice
 
@@ -194,9 +187,12 @@ VoiceQueue (priorities, interruptions, expiry)
 
 ## Location
 
-- One watcher (`services/location.ts`) for the map, navigation and sharing;
-  a one-shot `locateOnce` for trips: a quick network fix, then GPS if that
-  times out **or can't work out a position**.
+- One reference-counted `watchPosition` (`services/location.ts`) for the map, navigation and sharing: reasons
+  (`locate`, `navigate`, `share`) acquire and release it; navigation and sharing ask for GPS precision, "show my
+  location" is happy with Wi-Fi, and a precise watch that times out falls back to coarse. Errors are classified
+  (`insecure`, `denied`, `unavailable`, `timeout`, `unsupported`), each with its own message (incl. iOS instructions).
+- A one-shot `locateOnce` for trips:
+  a quick network fix, then GPS if that times out **or can't work out a position**.
 - `tripStart` (a trip from "Your location"): the device position, else the
   connection's rough area from `GET /api/whereami` (the Worker reads
   Cloudflare's `request.cf`; nothing stored, no third party). The field then
@@ -217,8 +213,8 @@ working in memory and are labelled stale.
 
 One Cloudflare Worker with static assets (`wrangler.toml`): `/api/*` runs the
 Worker, everything else is served from `dist/` with `public/_headers` (CSP,
-Permissions-Policy) and SPA fallback. All of it fits the Workers Free plan.
-The static app alone also works on Cloudflare Pages — without live sharing.
+Permissions-Policy) and SPA fallback. Today it runs on Workers Free; hosting stays on Cloudflare Workers (not Pages)
+and moves to Workers Paid when the engines arrive in Containers (ADR-016).
 
 ## Travel modes
 
@@ -252,7 +248,7 @@ forecasts loaded ─▶ POST /api/v1/trips/plan (route resampled + driving times
                     ◀─ TripPlan (stops, nights, days, timeline, weather risks, advice)
   ─▶ setTripStopsProvider → derive(): every ETA after a stop += its duration (forecasts at the real times)
   ─▶ routeIntelligence: planned stops as TRIP_STOP events (replace generic break/fuel reminders)
-  ─▶ first night's hotels: POST /api/v1/trips/places (Overpass, edge-cached) · borders: POST /trips/borders
+  ─▶ first night's hotels: POST /api/v1/trips/places (Overpass, edge-cached) · borders: on the device (Natural Earth, trip/countries.ts)
 driving: ≥20 min off plan (10 min cooldown) ─▶ replan with progress (along, driven today, since break)
 ```
 

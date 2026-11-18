@@ -24,11 +24,38 @@ and driver reports.
 
 ```bash
 npm install
-npm run dev          # app on http://localhost:5173
-npm run dev:api      # (optional, second terminal) live-sharing + reports relay on :8787
+npm run dev          # everything on localhost: app on http://localhost:5173 + the Worker on :8787
+                     # (live sharing, driver reports, Long Trip planner; local Durable Objects, no account)
 npm test             # unit + end-to-end scenarios, no network
 npm run build        # type-check + production build
+npm run preview:worker   # the production build served by the Worker, as on Cloudflare: http://127.0.0.1:8787
 ```
+
+`npm run dev:web` starts only the app (sharing, reports and Long Trip plans then say the server is missing);
+`npm run dev:api` starts only the Worker.
+
+Our own data (instead of public services with limits): once, and again to refresh —
+
+```bash
+npm run seed:local   # downloads Georgia's OpenStreetMap extract (~100 MB, Geofabrik, MD5-checked), builds the
+                     # places tiles (places, speed limits, cameras, level crossings) into public/data/places and
+                     # loads the search index (188 000 places, streets, addresses) into the local D1 database
+```
+
+Our routing engine (Valhalla) runs in Docker — [Colima](https://github.com/abiosoft/colima) (free) or Docker Desktop:
+
+```bash
+npm run engines:up   # starts Valhalla and builds Georgia's road graph on first run (~1 min); then restart npm run dev
+```
+
+Our forecast, for the whole world (ECMWF IFS and NOAA GFS open data, twice a day — run it again for a fresh one):
+
+```bash
+npm run data:weather # reads the newest model runs from the Open-Meteo open-data archive (~270 MB, land and coasts
+                     # only) into the local R2 bucket of `npm run dev` (~30 min); `-- --bbox 39,40,47,44` for one area
+```
+
+Without them the app still works and asks the public Overpass, Photon, OSRM and Open-Meteo servers instead.
 
 Use Node 22+ (required by the Cloudflare tooling; the tests need 20+).
 Location only works on `https://` or `localhost` — opening the dev server from
@@ -131,11 +158,19 @@ English and Russian; metric/imperial; appearance **like the device** (a dark pho
 a dark map in the car too), light, dark, or "day and night" (the sun at the car while
 driving); a street-level camera while driving; installable PWA.
 
-## What it costs: nothing
+## What it costs
 
-Every part runs on free services or free tiers, with no API keys and no card:
+**For users: nothing, forever** — no ads, subscriptions or paid features (non-commercial project).
+**For the owner: only hosting, on Cloudflare** — and every third-party API, data source and program must stay free
+forever, at any scale, in development too ([ADR-015](docs/architecture/decisions/ADR-015-free-software-own-hosting.md),
+[ADR-016](docs/architecture/decisions/ADR-016-all-on-cloudflare-workers.md)).
 
-| Part | Service | Free terms to keep in mind |
+**Today's code** still calls the public free services below. They have usage limits or forbid production use, so
+they are being replaced by the same free, open-source engines running on our own Cloudflare hosting (Valhalla,
+MOTIS and LibreWXR in Containers; places, geocoder, map tiles and weather cells in D1/R2) — see the
+[development plan](docs/DEVELOPMENT_PLAN.md) and the [catalogue of free replacements](docs/FREE_STACK_PLAN.md):
+
+| Part | Service today | Its limits (why it is replaced) |
 | --- | --- | --- |
 | App + live sharing + driver reports | Cloudflare Workers **Free plan** (static assets, 2 SQLite Durable Objects, rate limits) | 100 000 Worker requests/day (static files don't count); plenty for personal use |
 | Map tiles | OpenFreeMap | free, no key |
@@ -146,12 +181,8 @@ Every part runs on free services or free tiers, with no API keys and no card:
 | Places, speed limits, cameras | Overpass (OpenStreetMap) | fair use, often slow |
 | Device voices, speech recognition | built into the browser | free |
 
-**It stays that way:** the app is free for everyone and non-commercial — no ads,
-no subscriptions, no paid features — and it runs on free tiers only, at $0 a
-month ([ADR-014](docs/architecture/decisions/ADR-014-zero-cost.md)). Free
-services have limits, so the app uses free fallbacks (another router, another
-tile source, another weather service) and says so when a free limit is reached.
-The path to production: [docs/PRODUCTION_READINESS_PLAN.md](docs/PRODUCTION_READINESS_PLAN.md).
+Hosting is Cloudflare **Workers** (not Pages); development and the test Worker cost nothing (Workers Free) until
+the first engine runs in Cloudflare Containers (Workers Paid). Everything also runs on `localhost`.
 
 ## Honest limits
 
@@ -187,31 +218,40 @@ online voices (the sentence is sent to Google to be spoken). The approximate
 start is worked out by the app's own Worker from the connection and is not
 stored.
 
-## Deploy (Cloudflare, Free plan)
+## Deploy (Cloudflare Workers)
 
 ```bash
-npm run build
 npx wrangler login
-npx wrangler deploy      # app + live-sharing and reports relay (Worker + Durable Objects)
+npm run deploy:preview      # Worker navweather-preview: its own Durable Objects, D1, R2 (test data)
+npm run seed:preview        # our search index into its D1
+npm run data:weather -- --env preview   # our forecast into its R2 (or let .github/workflows/weather.yml do it)
+npm run deploy:production   # Worker navweather (real users); seed:production, --env production likewise
 ```
 
-`public/_headers` sets the CSP. The static app alone also runs on Cloudflare
-Pages (`dist/`), just without live sharing and driver reports (shown as
-unavailable).
+Or from GitHub: the **Deploy** workflow (secrets `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`) builds the data,
+deploys and, for preview, runs the Worker smoke tests; the **Weather** workflow refreshes the forecast every hour
+when new model runs appear. `public/_headers` sets the CSP. Hosting is one Cloudflare **Worker** project per
+environment (not Pages) — see [ADR-016](docs/architecture/decisions/ADR-016-all-on-cloudflare-workers.md);
+`npm run check:envs` keeps the environments of `wrangler.toml` in step.
+
+## Licence
+
+Code: [MIT](LICENSE). Map data © OpenStreetMap contributors (ODbL); other data and services keep their own
+licences — see the [licensing matrix](docs/legal/LICENSING_MATRIX.md).
 
 ## Docs
 
 Start with **[Project requirements](docs/PROJECT_REQUIREMENTS.md)** (single
 source of truth) and [AGENTS.md](AGENTS.md) (how to work on the project).
 
-- **[Production readiness plan](docs/PRODUCTION_READINESS_PLAN.md)** — the exact, zero-cost path to production (stages, tasks, gates)
-- [Master audit 2026-10-03](docs/AUDIT/MASTER_AUDIT.md) — status of every requirement, confirmed defects, cost, roadmap ([gap analysis](docs/AUDIT/FEATURE_GAP_ANALYSIS.md), [implementation roadmap](docs/AUDIT/IMPLEMENTATION_ROADMAP.md))
-- [Platform audit 2026-10-02](docs/AUDIT/2026-10-02-platform-audit.md) — findings, fixes, sources
-- [Architecture decisions](docs/architecture/decisions/README.md) · [Target architecture](docs/architecture/TARGET_ARCHITECTURE.md) · [Roadmap & MVP](docs/ROADMAP.md)
+- **[Development plan](docs/DEVELOPMENT_PLAN.md)** (in Russian) — the single plan from start to finish: stages, tasks with localhost and Cloudflare Workers checks, release gates, risks, owner decisions ([ADR-015](docs/architecture/decisions/ADR-015-free-software-own-hosting.md), [ADR-016](docs/architecture/decisions/ADR-016-all-on-cloudflare-workers.md))
+- **[Free stack catalogue](docs/FREE_STACK_PLAN.md)** (in Russian) — free self-hosted replacements for every service, the Google Maps features we lack and their free sources, where each part runs on Cloudflare
+- [Full audit 2026-10-04](docs/AUDIT/2026-10-04-full-audit.md) (in Russian) — branches, localhost status, what was fixed, open findings, Cloudflare Pages vs Workers
+- [Defect register](docs/AUDIT/DEFECTS.md) (in Russian) — confirmed defects B-xx and the tasks that fix them
+- [Documentation audit and cleanup 2026-10-04](docs/AUDIT/2026-10-04-docs-audit.md) (in Russian) — what was removed, what remains
+- [Architecture decisions](docs/architecture/decisions/README.md) · [Target architecture](docs/architecture/TARGET_ARCHITECTURE.md)
 - [API v1](docs/api/API_V1.md) · [Data model](docs/database/DATA_MODEL.md) · [Security](docs/security/SECURITY.md) · [Privacy](docs/legal/PRIVACY.md) · [Licensing matrix](docs/legal/LICENSING_MATRIX.md)
 - [Weather engine](docs/architecture/WEATHER_ENGINE.md) · [Maps, routing, GIS](docs/architecture/MAPS_ROUTING_GEO.md) · [Mobile strategy](docs/mobile/MOBILE_STRATEGY.md) · [Cost & scale](docs/operations/COST_AND_SCALE.md) · [Delivery](docs/operations/DELIVERY.md)
 - [Architecture](docs/ARCHITECTURE.md) — engines, data flow, providers, state, relay
 - [Environment](docs/ENVIRONMENT.md) — every variable and binding
 - [Testing](docs/TESTING.md) — what is covered, dev tools, what isn't tested
-- [Product plan](docs/PLAN.md) — competitor study, what goes on the map, design audit, roadmap, iteration logs (in Russian)
-- [Audit & backlog](docs/AUDIT.md) — findings, status, remaining gaps

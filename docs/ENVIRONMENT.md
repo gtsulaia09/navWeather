@@ -1,5 +1,10 @@
 # Environment
 
+> **Update 2026-10-04 (ADR-015/016):** the provider defaults below are the current code and **violate** the
+> "always free" rule (public services with usage limits, [FREE_STACK_PLAN §1.1](FREE_STACK_PLAN.md)); they are removed
+> in stage 6 (DP-6.1). Local development becomes one `npm run dev` (Vite + Cloudflare Vite plugin with local Durable
+> Objects/D1/R2, Docker for the engines) with `.env.development` / `.env.preview` / `.env.production` (DP-2.1…DP-2.3).
+
 Everything is optional. With no `.env` the app uses free public services and
 needs no API keys. Copy `.env.example` to `.env` to override values.
 
@@ -11,13 +16,17 @@ Worker route instead (see `worker/`).
 
 | Variable | Default | Values |
 | --- | --- | --- |
-| `VITE_ROUTING_PROVIDER` | `osrm` | `osrm` |
-| `VITE_WEATHER_PROVIDER` | `open-meteo` | `open-meteo` |
-| `VITE_GEOCODING_PROVIDER` | `nominatim` | `nominatim`, `photon` |
-| `VITE_AUTOCOMPLETE_PROVIDER` | `photon` | `photon` |
-| `VITE_PLACES_PROVIDER` | `overpass` | `overpass`, `none` |
-| `VITE_POI_PROVIDER` | `overpass` | `overpass`, `none` |
-| `VITE_SPEED_LIMIT_PROVIDER` | `overpass` | `overpass`, `none` |
+| `VITE_ROUTING_PROVIDER` | `valhalla` | `valhalla` (our engine via `/api/v1/route`), `osrm` (public servers) |
+| `VITE_ROUTING_FALLBACK` | `osrm` | when our engine isn't running or a point is outside its region: `osrm` (public servers) or `none` |
+| `VITE_WEATHER_PROVIDER` | `api` | `api` (our forecast, worldwide, `/api/v1/weather`; `npm run data:weather`), `open-meteo` (public API) |
+| `VITE_WEATHER_FALLBACK` | `open-meteo` | where our forecast isn't there (not built here, older than 36 h, far out at sea): `open-meteo` (public API) or `none` |
+| `VITE_GEOCODING_PROVIDER` | `api` | `api` (our geocoder + settlement tiles), `nominatim`, `photon` |
+| `VITE_AUTOCOMPLETE_PROVIDER` | `api` | `api`, `photon` |
+| `VITE_GEOCODING_FALLBACK` | `photon` | when our index has nothing (a town abroad) or isn't loaded: `photon` or `none` |
+| `VITE_PLACES_PROVIDER` | `tiles` | `tiles` (our places tiles, `npm run data:osm`), `overpass`, `none` |
+| `VITE_POI_PROVIDER` | `tiles` | `tiles`, `overpass`, `none` |
+| `VITE_SPEED_LIMIT_PROVIDER` | `tiles` | `tiles`, `overpass`, `none` |
+| `VITE_PLACES_FALLBACK` | `overpass` | outside the region our tiles cover: `overpass` (until that region is built) or `none` |
 | `VITE_ELEVATION_PROVIDER` | `open-meteo` | `open-meteo`, `none` |
 | `VITE_MAP_PROVIDER` | `openfreemap` | `openfreemap` |
 | `VITE_TRAFFIC_PROVIDER` | `none` | `none` (interface ready) |
@@ -25,20 +34,31 @@ Worker route instead (see `worker/`).
 | `VITE_AIR_QUALITY_PROVIDER` | `open-meteo` | `open-meteo`, `none` |
 | `VITE_SPEECH_PROVIDER` | `browser` | `browser` |
 
+## Modes
+
+`npm run dev` reads `.env.development`, `npm run build:preview` reads `.env.preview`, `npm run build` reads
+`.env.production` (Vite modes; all committed, public values only). `.env` and `.env.<mode>.local` (git-ignored)
+override them on one machine.
+
 ## Endpoints
 
 | Variable | Default |
 | --- | --- |
+| `VITE_API_ORIGIN` | empty — our API on the page's own origin (the Worker serves both). An absolute origin (`https://…`) for a client served elsewhere, e.g. a native shell; every path below and the live-share WebSocket then use it (add it to `connect-src` in `public/_headers`) |
+| `VITE_ROUTE_URL` | `/api/v1/route` — our routing API (same origin) |
 | `VITE_OSRM_BASE_URL` | `https://router.project-osrm.org` |
 | `VITE_OSRM_MIN_INTERVAL_MS` | `1000` — least time between requests to one OSRM server (the public servers allow 1 request/s); `0` for a self-hosted router |
 | `VITE_OSRM_FOOT_URL` / `VITE_OSRM_BIKE_URL` | `https://routing.openstreetmap.de/routed-foot` / `…/routed-bike` (walking and cycling; the demo server above only does cars) |
 | `VITE_TRANSIT_URL` | `https://api.transitous.org` (public transport, MOTIS `plan` API; set empty to switch public transport off) |
-| `VITE_OPEN_METEO_BASE_URL` | `https://api.open-meteo.com` |
+| `VITE_WEATHER_URL` | `/api/v1/weather` — our forecast (same origin) |
+| `VITE_OPEN_METEO_BASE_URL` | `https://api.open-meteo.com` (weather fallback; elevation until DP-4.7) |
 | `VITE_OPEN_METEO_AIR_URL` | `https://air-quality-api.open-meteo.com` |
 | `VITE_NOMINATIM_BASE_URL` | `https://nominatim.openstreetmap.org` |
 | `VITE_PHOTON_BASE_URL` | `https://photon.komoot.io` |
 | `VITE_REPORTS_URL` | `/api/v1/reports` (same origin — no CSP change needed; the unversioned `/api/reports` still works) |
 | `VITE_WHEREAMI_URL` | `/api/v1/whereami` (approximate area of the connection, when the device can't give a position; same origin) |
+| `VITE_GEOCODE_URL` | `/api/v1/geocode` — our geocoder (same origin) |
+| `VITE_PLACES_TILES_URL` | `/data/places/v1` — our places tiles (static assets, same origin) |
 | `VITE_OVERPASS_URLS` | `https://overpass-api.de/api/interpreter,https://overpass.kumi.systems/api/interpreter` |
 | `VITE_MAP_STYLE_LIGHT` / `VITE_MAP_STYLE_DARK` | OpenFreeMap Positron / Dark |
 
@@ -84,16 +104,28 @@ Configured in `wrangler.toml`; no secrets are required.
 | `REPORT_LIMITER` | rate limit for sending reports and votes (10 per minute per IP) |
 | `REPORT_LIST_LIMITER` | rate limit for reading reports (120 per minute per IP) |
 
-Local development: `npm run dev:api` starts the Worker on port 8787, and the
-Vite dev server proxies `/api` to it (`vite.config.ts`). Without it, the app
-works normally, "Share live location" explains that the server is missing,
-and driver reports show as "unavailable" in the Data panel.
+Local development: `npm run dev` starts both the Vite dev server (:5173) and the
+Worker (`wrangler dev`, :8787, local Durable Objects and rate limits — no Cloudflare
+account) and the dev server proxies `/api` to it (`scripts/dev.mjs`, `vite.config.ts`).
+`npm run dev:web` starts only the app: it then works normally, "Share live location"
+explains that the server is missing, and driver reports show as "unavailable" in the
+Data panel. `npm run preview:worker` serves the production build through the Worker
+on :8787, as Cloudflare would (headers, SPA fallback, service worker).
 
 ## Worker variables and bindings (Long Trip Mode)
 
 | Name | Kind | Default | Purpose |
 | --- | --- | --- | --- |
 | `TRIP_LIMITER` | rate-limit binding (`wrangler.toml`) | 20 requests / 60 s per IP | `/api/v1/trips/*` |
+| `GEO` | D1 database `navweather-geo` (local), `navweather-geo-preview`, `navweather-geo-production` | — | our geocoder index; locally `npm run seed:local` loads it (no account); on Cloudflare the first deploy creates it, then `npm run seed:preview` / `seed:production` (or the Deploy workflow) |
+| `GEOCODE_LIMITER` | rate-limit binding | 120 requests / 60 s per IP | `/api/v1/geocode` |
+| `VALHALLA_URL` | var (`.dev.vars` locally, written by `npm run engines:up`) | unset → 503 | where our Valhalla answers; in the cloud the container (DP-5.2) |
+| `ROUTE_LIMITER` | rate-limit binding | 60 requests / 60 s per IP | `/api/v1/route`, `/route/matrix` |
+| `WEATHER` | R2 bucket `navweather-weather` | — | our weather tiles (`/api/v1/weather/*`); locally `npm run data:weather` fills the local bucket (no account; ~270 MB downloaded from the Open-Meteo open-data archive, ~0.8 GB of tiles, ~15–40 min; `-- --bbox w,s,e,n` for a quick area); on Cloudflare the first deploy creates the environment's bucket (`navweather-weather-preview` / `-production`) and the Weather workflow fills it (`npm run data:weather -- --env …`) |
+| `WEATHER_LIMITER` | rate-limit binding | 120 requests / 60 s per IP | `/api/v1/weather/forecast`, `/weather/meta` |
+| `WHEREAMI_LIMITER` | rate-limit binding | 20 requests / 60 s per IP | `/api/v1/whereami` |
+| `SHARE_LIMITER` | rate-limit binding | 240 requests / 60 s per IP | `/api/v1/share/:id` (updates, viewers' polling, WebSocket opens; the object also refuses updates < 1 s apart) |
+| `ASSETS` (read by the Worker) | static assets | — | our places tiles for Long Trip stops (`/data/places/v1`) |
 | `OVERPASS_URLS` | `[vars]` | `https://overpass-api.de/api/interpreter,https://overpass.kumi.systems/api/interpreter` | Overpass endpoints for trip stop places and borders (server-side) |
 | `TRIP_USER_AGENT` | `[vars]` | `navWeather/0.1 (trip planner; Cloudflare Worker)` | identifies the app to Overpass — **add a contact before production** |
 

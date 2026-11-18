@@ -1,5 +1,10 @@
 # Privacy architecture and compliance checklist
 
+> **Update 2026-10-04 (ADR-015/016):** after stage 6 of [DEVELOPMENT_PLAN](../DEVELOPMENT_PLAN.md) coordinates and
+> search text go only to our own Worker and engines on Cloudflare (no OSRM, Open-Meteo, Photon, Nominatim, Overpass or
+> Transitous). The inventory below describes the current code; it is updated in DP-6.9, traffic probes in DP-10.1, the
+> published policy in DP-12.3. Cloudflare becomes the processor for all of it (DPA).
+
 > **Not legal advice.** This is an engineering checklist. Items marked
 > **LEGAL REVIEW** need a qualified lawyer for each launch country before
 > public release.
@@ -9,10 +14,12 @@
 | Data | Collected? | Where it goes | Retention | Basis (to confirm) |
 | --- | --- | --- | --- | --- |
 | Precise position (GPS) | on device, when the user locates, navigates or shares | stays on device, except: live share (Worker DO, latest only), a report's position, and coordinates inside provider requests | share: until stop/expiry; report: ≤12 h (×3 if confirmed) | user request (contract) / consent prompt by the OS |
-| Route start/end/geometry | on device | sent to the router (OSRM/FOSSGIS/Transitous) and, as sample points, to Open-Meteo; places along it to Overpass | not stored by us; providers' own policies apply | user request |
-| Searched text | on device | Photon (autocomplete), Nominatim (submit) | not stored by us | user request |
+| Route start/end/geometry | on device | sent to our routing API (Valhalla) — the public OSRM/FOSSGIS servers only for trips outside its region — or to Transitous, and, as sample points with their heights, to our Worker for the forecast (`/api/v1/weather`) — the public Open-Meteo API only for points our forecast doesn't cover (not built, too old, far out at sea); places along it come from our static tiles (only tile numbers reach our server) — Overpass only outside the region they cover | not stored by us; providers' own policies apply | user request |
+| Weather at a point (map centre, a place, a shared trip) | on device | our Worker (`/api/v1/weather/forecast`); Open-Meteo only as the fallback above | not stored or logged by us; a grid cell's forecast (not who asked) sits in the edge cache until the next build | user request |
+| Searched text | on device | our Worker (`/api/v1/geocode`, with a position rounded to ~10 km when known); Photon only when our index finds nothing | not stored or logged by us | user request |
 | Long-trip plan request (Long Trip Mode) | when a long trip is planned or replanned | our Worker: the planned route (resampled), departure, vehicle type and declared range, preferences, settlements and hazard codes along it; when replanning, the car's distance along that route; processed and discarded (not stored, not logged) | none | user request |
-| Trip stop places / borders | when a stop is opened / after a plan | our Worker → Overpass (OSMF/others): the stop position and road ±30 km / ≤20 points along the route; cached by area, never by user | Overpass operators' policies; our edge cache 1–7 days, keyed by area only | user request |
+| Trip stop places | when a stop is opened | our Worker → Overpass (OSMF/others): the stop position and road ±30 km; cached by area, never by user | Overpass operators' policies; our edge cache 1 day, keyed by area only | user request |
+| Border crossings | after a Long Trip plan | nowhere: worked out on the device from Natural Earth data (since 2026-10-04) | — | — |
 | Approximate location from IP | only when the device gives none | computed by our Worker from Cloudflare metadata | not stored | legitimate interest — **LEGAL REVIEW** |
 | IP address | every request (transport) | Cloudflare; reports DO keeps only a daily-salted hash | hash rotates daily, rows expire with reports | legitimate interest (abuse prevention) |
 | Voice | only during push-to-talk | browser vendor's speech service (Chrome) | vendor policy | consent (user presses the mic; disclosed in Settings) |

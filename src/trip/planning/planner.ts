@@ -19,9 +19,9 @@ import type {
   TripSegment,
   TripStop,
 } from '../types';
-import { nearestPlace, stopEarlierAdvice, weatherRisks } from '../weather/risks';
+import { forecastEndsAt, nearestPlace, stopEarlierAdvice, weatherRisks } from '../weather/risks';
 import { overnightCandidates } from './overnight';
-import { buildSchedule, wallAtAlong, type Schedule, type ScheduledStop } from './schedule';
+import { buildSchedule, nextLocalHour, nightDrivingS, wallAtAlong, type Schedule, type ScheduledStop } from './schedule';
 
 /**
  * TRIP PLANNER — route + vehicle + departure + preferences (+ the client's
@@ -74,7 +74,8 @@ export async function createTripPlan(req: TripPlanRequest, deps: PlannerDeps): P
     vehicle: req.vehicle,
     drivenTodayS: progress?.drivenTodayS ?? 0,
     sinceRestS: progress?.sinceRestS ?? 0,
-    rangeLeftKm: progress?.rangeKm ?? req.vehicle.rangeKm,
+    // Replanning: the range left at the car, never the range the trip started with (B-01); unknown stays unknown.
+    rangeLeftKm: progress ? progress.rangeKm : req.vehicle.rangeKm,
   };
 
   // ---- Places: one lookup per stop area, cached for this plan, within a budget ----
@@ -119,7 +120,7 @@ export async function createTripPlan(req: TripPlanRequest, deps: PlannerDeps): P
     const free = schedule.stops.find((s) => s.kinds.includes('overnight') && !forced.some((f) => Math.abs(f - s.alongM) < 1));
     if (!free) break;
     const after = forced.at(-1) ?? base.startAlongM;
-    const candidates = overnightCandidates(profile, free, req.places, after);
+    const candidates = overnightCandidates(profile, free, req.places, after, 3, forced.length ? 0 : base.drivenTodayS);
     // A town an hour earlier is worth it only if it doesn't add a whole extra night to the trip.
     const nights = (sched: Schedule) => sched.stops.filter((s) => s.kinds.includes('overnight')).length;
     const baseline = nights(schedule);
@@ -182,11 +183,28 @@ export async function createTripPlan(req: TripPlanRequest, deps: PlannerDeps): P
   });
 
   const risks = samples.length ? weatherRisks(profile, schedule, samples, req.places) : [];
+  const weatherEndsMs = samples.length ? forecastEndsAt(profile, schedule, samples) : null;
   const advice: TripAdvice[] = samples.length
     ? stopEarlierAdvice({ profile, schedule, risks, samples, places: req.places, pace, tzAt })
     : [];
   const classification = classifyFromSchedule(profile, schedule, { timeZoneChanges: countTimeZoneChanges(samples.map((s) => s.tz)) });
   if (req.vehicle.rangeKm === undefined && progress?.rangeKm === undefined && atLeast(classification.category, 'EXTENDED')) advice.push({ kind: 'enter-range' });
+  // Driving through the night (B-04): flagged with a morning start to consider — never applied silently. Only before
+  // the trip starts; a replan from the car is about the road ahead, not when to leave.
+  if (!progress) {
+    const nightS = nightDrivingS(schedule, profile, tzAt);
+    if (nightS >= STOP_DEFAULTS.nightDrivingAdviceS) {
+      const tz = tzAt(base.startAlongM);
+      advice.push({ kind: 'night-driving', hours: Math.round(nightS / 1800) / 2, suggestMs: nextLocalHour(req.departAtMs, tz, pace.morningStartHour), tz });
+    }
+  }
+  // A range without the tank size: after a fill the range is unknown, so later fills can't be planned (B-20). A full
+  // tank reaches at least as far as the range entered, so say so only when the road after the fill is longer.
+  if (req.vehicle.rangeKm !== undefined && req.vehicle.fullRangeKm === undefined) {
+    const lastFill = schedule.stops.filter((s) => s.kinds.includes('fuel') || s.kinds.includes('charge')).at(-1);
+    const fromM = lastFill ? lastFill.alongM : progress && progress.rangeKm === undefined ? base.startAlongM : null;
+    if (fromM !== null && profile.totalDistM - fromM > req.vehicle.rangeKm * 1000 * 0.9) advice.push({ kind: 'enter-tank' });
+  }
   for (const s of stops) {
     for (const p of s.places) {
       if (p.status === 'none-found' && (p.category === 'hotel' || p.category === 'fuel' || p.category === 'charging')) {
@@ -254,7 +272,11 @@ export async function createTripPlan(req: TripPlanRequest, deps: PlannerDeps): P
       weatherRisks: risks.length,
       borderCrossings: null,
     },
-    dataStatus: { places: placesStatus, weather: samples.length ? 'ok' : 'missing' },
+    dataStatus: {
+      places: placesStatus,
+      weather: !samples.length ? 'missing' : weatherEndsMs !== null ? 'partial' : 'ok',
+      ...(weatherEndsMs !== null ? { weatherUntilMs: weatherEndsMs } : {}),
+    },
     ...(progress ? { progress } : {}),
   };
 }

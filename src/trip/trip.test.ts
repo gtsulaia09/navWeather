@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { zonedParts } from '../utils/timezone';
-import { categoryOf, classifyTrip } from './classification/classify';
+import { categoryOf, classifyFromSchedule, classifyTrip } from './classification/classify';
 import { PACE_PRESETS, STOP_DEFAULTS, TRIP_THRESHOLDS } from './config';
 import { createTripPlan } from './planning/planner';
 import { buildSchedule } from './planning/schedule';
@@ -11,7 +11,7 @@ import { openStatus } from './stops/openingHours';
 import { overpassQueryFor, parseOverpass } from './stops/places';
 import { fakePlaces, profileOf, rawPlace, routeRequest, tbilisi, town, TZ, weatherEvery } from './test/fixtures';
 import { hazardCode } from './weather/hazards';
-import { borderSamplePoints, bordersQuery, crossingsFrom, parseBorders, sanitizeBordersRequest } from './borders';
+import { crossingsFrom, sanitizeBordersRequest } from './borders';
 
 const NOW = tbilisi(5, 7);
 const localHour = (ms: number) => {
@@ -50,6 +50,17 @@ describe('trip classification', () => {
     expect(c.requiresOvernight).toBe(false);
     expect(c.longTripMode).toBe(false);
     expect(c.recommendedRestStops).toBeGreaterThanOrEqual(1);
+  });
+
+  it('a shorter trip whose stops would help is offered Long Trip Mode, not switched into it (B-24)', () => {
+    const late = classify(390, 80, tbilisi(5, 18, 27)); // MEDIUM, ~4 h 53 min from 18:27: arrival 23:19, past 22:00
+    expect(late.category).toBe('MEDIUM');
+    expect(late.reasons).toContain('overnight');
+    expect(late.longTripMode).toBe(false);
+    // The category it switches itself on from is configuration, like every other threshold.
+    const req = routeRequest(390, 80, { departAtMs: tbilisi(5, 18, 27) });
+    const schedule = buildSchedule({ profile: profileOf(req), startAlongM: 0, startMs: req.departAtMs, tzAt, pace: PACE_PRESETS.balanced, vehicle: req.vehicle });
+    expect(classifyFromSchedule(profileOf(req), schedule, {}, { ...TRIP_THRESHOLDS, AUTO_ON_FROM_CATEGORY: 'SHORT' }).longTripMode).toBe(true);
   });
 
   it('800 km switches Long Trip Mode on by distance; 720 km at 10.5 h by time', () => {
@@ -301,6 +312,43 @@ describe('trip planner', () => {
     expect(plan.timeline.some((e) => e.kind === 'weather' && e.hazard === 'snow')).toBe(true);
   });
 
+  it('leaving in the evening: the night is not moved to a big town an hour after setting off (B-04)', async () => {
+    // 18:45 at 80 km/h: dinner, then the 22:00 latest arrival around km 200. A city 1 h out must not win.
+    const req = routeRequest(1580, 80, {
+      departAtMs: tbilisi(5, 18, 45),
+      places: [town('Big City', 85, 'city', 50_000), town('Small Town', 190), town('Other Town', 215)],
+    });
+    const plan = await createTripPlan(req, { nowMs: NOW });
+    const night = plan.recommendedStops.find((s) => s.kinds.includes('overnight'))!;
+    expect(night.alongM).toBeGreaterThan(150_000);
+    expect(night.placeName).not.toBe('Big City');
+    // A full day still looks up to 1.5 h before its target for a better town.
+    const day = await createTripPlan(routeRequest(1580, 80, { departAtMs: tbilisi(5, 8), places: [town('Early City', 650, 'city', 80_000)] }), { nowMs: NOW });
+    expect(day.recommendedStops.find((s) => s.kinds.includes('overnight'))!.placeName).toBe('Early City');
+  });
+
+  it('driving through the night is flagged with a morning start to consider — the plan is not changed (B-04)', async () => {
+    const night = await createTripPlan(routeRequest(1580, 80, { departAtMs: tbilisi(5, 0, 30) }), { nowMs: NOW });
+    const advice = night.advice.find((a) => a.kind === 'night-driving');
+    expect(advice).toMatchObject({ kind: 'night-driving', suggestMs: tbilisi(5, 8) });
+    expect((advice as { hours: number }).hours).toBeGreaterThanOrEqual(5);
+    expect(night.departAtMs).toBe(tbilisi(5, 0, 30)); // a suggestion only
+    const day = await createTripPlan(routeRequest(1580, 80, { departAtMs: tbilisi(5, 8) }), { nowMs: NOW });
+    expect(day.advice.some((a) => a.kind === 'night-driving')).toBe(false);
+  });
+
+  it('forecasts that end before the trip does: later risks are unknown, not absent (B-21)', async () => {
+    const req = routeRequest(1580, 80);
+    const t0 = req.departAtMs - 3_600_000;
+    const short = await createTripPlan({ ...req, weather: weatherEvery(1580, 40, t0, () => 0, 24) }, { nowMs: NOW });
+    expect(short.dataStatus.weather).toBe('partial');
+    expect(short.dataStatus.weatherUntilMs).toBeGreaterThan(req.departAtMs);
+    expect(short.dataStatus.weatherUntilMs).toBeLessThan(short.arriveAtMs);
+    const full = await createTripPlan({ ...req, weather: weatherEvery(1580, 40, t0, () => 0, 120) }, { nowMs: NOW });
+    expect(full.dataStatus).toMatchObject({ weather: 'ok' });
+    expect(full.dataStatus.weatherUntilMs).toBeUndefined();
+  });
+
   it('without forecasts the plan says the weather is missing instead of inventing it', async () => {
     const plan = await createTripPlan(routeRequest(900, 90), { nowMs: NOW });
     expect(plan.dataStatus.weather).toBe('missing');
@@ -329,6 +377,75 @@ describe('replanning', () => {
     const afterStop = replanned.recommendedStops.find((s) => s.id === after.stopId)!;
     expect(afterStop.alongM < beforeStop.alongM - 50_000 || after.arriveMs > before.arriveMs + 60 * 60_000).toBe(true);
     expect(replanned.arriveAtMs).toBeGreaterThanOrEqual(plan.arriveAtMs);
+  });
+
+  it('a replan sends the range left at the car: the next fuel stop is never past the tank (B-01)', async () => {
+    const req = routeRequest(1580, 80, { vehicle: { kind: 'car', powertrain: 'fuel', rangeKm: 500 } });
+    const profile = profileOf(req);
+    const plan = await createTripPlan(req, { nowMs: NOW });
+    const fuel = plan.recommendedStops.find((s) => s.kinds.includes('fuel'))!;
+    expect(fuel.alongM).toBeGreaterThan(300_000);
+    expect(fuel.alongM).toBeLessThanOrEqual(375_000);
+    // 300 km driven, 30 min late: 200 km left in the tank.
+    const at = 300_000;
+    const state = progressStateFor(plan, at, plannedTimeAt(plan, at) + 30 * 60_000, (m) => timeAtAlong(profile, m), { declaredKm: 500 });
+    expect(state.rangeKm).toBeCloseTo(200, 0);
+    const replanned = await createTripPlan({ ...req, progress: state }, { nowMs: NOW });
+    const next = replanned.recommendedStops.find((s) => s.kinds.includes('fuel'))!;
+    expect(next.alongM).toBeLessThanOrEqual(450_000); // was 660 km: past an empty tank
+    // A second replan counts from the first one's range, not from the declared range again.
+    const at2 = 350_000;
+    const state2 = progressStateFor(replanned, at2, plannedTimeAt(replanned, at2), (m) => timeAtAlong(profile, m), { declaredKm: 500 });
+    expect(state2.rangeKm).toBeCloseTo(150, 0);
+  });
+
+  it('after a planned fuel stop the car has the full range again, if the tank size is known (B-01)', async () => {
+    const req = routeRequest(1580, 80, { vehicle: { kind: 'car', powertrain: 'fuel', rangeKm: 300, fullRangeKm: 600 } });
+    const profile = profileOf(req);
+    const plan = await createTripPlan(req, { nowMs: NOW });
+    const fuel = plan.recommendedStops.find((s) => s.kinds.includes('fuel'))!;
+    const at = fuel.alongM + 100_000;
+    const known = progressStateFor(plan, at, plannedTimeAt(plan, at), (m) => timeAtAlong(profile, m), { declaredKm: 300, fullKm: 600 });
+    expect(known.rangeKm).toBeCloseTo(500, 0);
+    // Without the tank size the range after a fill is unknown: nothing is guessed.
+    const unknown = progressStateFor(plan, at, plannedTimeAt(plan, at), (m) => timeAtAlong(profile, m), { declaredKm: 300 });
+    expect(unknown.rangeKm).toBeUndefined();
+  });
+
+  it('a range without the tank size: the first fill is planned and the driver is told the rest cannot be (B-20)', async () => {
+    const plan = await createTripPlan(routeRequest(1580, 80, { vehicle: { kind: 'car', powertrain: 'fuel', rangeKm: 400 } }), { nowMs: NOW });
+    expect(plan.recommendedStops.filter((s) => s.kinds.includes('fuel'))).toHaveLength(1);
+    expect(plan.advice).toContainEqual({ kind: 'enter-tank' });
+    // With the tank size every fill is planned and nothing more is asked.
+    const full = await createTripPlan(routeRequest(1580, 80, { vehicle: { kind: 'car', powertrain: 'fuel', rangeKm: 400, fullRangeKm: 600 } }), { nowMs: NOW });
+    expect(full.recommendedStops.filter((s) => s.kinds.includes('fuel')).length).toBeGreaterThan(1);
+    expect(full.advice).not.toContainEqual({ kind: 'enter-tank' });
+    // A trip the first fill (at least as far as the range entered) covers needs no tank size.
+    const short = await createTripPlan(routeRequest(600, 80, { vehicle: { kind: 'car', powertrain: 'fuel', rangeKm: 400 } }), { nowMs: NOW });
+    expect(short.recommendedStops.filter((s) => s.kinds.includes('fuel'))).toHaveLength(1);
+    expect(short.advice).not.toContainEqual({ kind: 'enter-tank' });
+    // Replanning after a fill without the tank size: no stop is guessed from the range at the start.
+    const req = routeRequest(1580, 80, { vehicle: { kind: 'car', powertrain: 'fuel', rangeKm: 400 } });
+    const fill = plan.recommendedStops.find((s) => s.kinds.includes('fuel'))!;
+    const state = progressStateFor(plan, fill.alongM + 50_000, plannedTimeAt(plan, fill.alongM + 50_000), (m) => timeAtAlong(profileOf(req), m), { declaredKm: 400 });
+    const replanned = await createTripPlan({ ...req, progress: state }, { nowMs: NOW });
+    expect(replanned.recommendedStops.some((s) => s.kinds.includes('fuel'))).toBe(false);
+    expect(replanned.advice).toContainEqual({ kind: 'enter-tank' });
+  });
+
+  it('time at a planned stop, up to its planned departure, is not a delay (B-03)', async () => {
+    const plan = await createTripPlan(routeRequest(1580, 80), { nowMs: NOW });
+    const stop = plan.recommendedStops.find((s) => !s.kinds.includes('overnight') && s.dwellMinutes >= 40)!;
+    expect(stop).toBeDefined();
+    // 25 minutes into the stop, parked at it or a little before it on the road: on time.
+    expect(delaySeconds(plan, stop.alongM, stop.arriveMs + 25 * 60_000)).toBe(0);
+    expect(delaySeconds(plan, stop.alongM - 300, stop.arriveMs + 25 * 60_000)).toBe(0);
+    // Staying 20 minutes longer than planned is a 20-minute delay; arriving early is ahead of the plan.
+    expect(delaySeconds(plan, stop.alongM, stop.departMs + 20 * 60_000)).toBeCloseTo(1200, 0);
+    expect(delaySeconds(plan, stop.alongM, stop.arriveMs - 10 * 60_000)).toBeCloseTo(-600, 0);
+    // Elsewhere on the road a late car is still late.
+    const mid = (plan.segments[0].fromM + plan.segments[0].toM) / 2;
+    expect(delaySeconds(plan, mid, plannedTimeAt(plan, mid) + 30 * 60_000)).toBeCloseTo(1800, 0);
   });
 
   it('dwellBetween adds only stops strictly between two positions', async () => {
@@ -365,33 +482,8 @@ describe('request validation', () => {
 });
 
 describe('border crossings', () => {
-  it('samples ≥25 km apart (≤20 points), ends included', () => {
-    const { points, alongM } = borderSamplePoints(1_600_000, (d) => [d / 100_000, 41]);
-    expect(points.length).toBeLessThanOrEqual(20);
-    expect(alongM[0]).toBe(0);
-    expect(alongM.at(-1)).toBe(1_600_000);
-    expect(borderSamplePoints(30_000, () => [0, 0]).alongM).toEqual([0, 25_000, 30_000]);
-  });
-
-  it('one query with a marker per point; points at sea stay aligned and are skipped', () => {
-    const q = bordersQuery([[44.8271, 41.7151], [35, 43]]);
-    expect(q).toContain('make p ref="0";out;is_in(41.71510,44.82710)');
-    expect(q).toContain('make p ref="1";out;is_in(43.00000,35.00000)');
-    const countries = parseBorders(
-      {
-        elements: [
-          { type: 'p', tags: { ref: '0' } },
-          { type: 'area', tags: { 'ISO3166-1': 'GE', name: 'საქართველო', 'name:en': 'Georgia', 'name:ru': 'Грузия' } },
-          { type: 'p', tags: { ref: '1' } }, // at sea: no country
-          { type: 'p', tags: { ref: '2' } },
-          { type: 'area', tags: { 'ISO3166-1': 'TR', name: 'Türkiye', 'name:en': 'Turkey' } },
-        ],
-      },
-      3,
-      'ru',
-    );
-    // No Russian name for Turkey in this answer: the English one is more readable than the local script.
-    expect(countries).toEqual([{ code: 'GE', name: 'Грузия' }, null, { code: 'TR', name: 'Turkey' }]);
+  it('country changes between points; points at sea are skipped', () => {
+    const countries = [{ code: 'GE', name: 'Грузия' }, null, { code: 'TR', name: 'Turkey' }];
     expect(crossingsFrom(countries, [0, 100_000, 300_000])).toEqual([{ alongM: 150_000, from: { code: 'GE', name: 'Грузия' }, to: { code: 'TR', name: 'Turkey' } }]);
     expect(crossingsFrom([null, null], [0, 1])).toEqual([]);
   });

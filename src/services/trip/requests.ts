@@ -17,7 +17,8 @@ import type {
   VehicleProfile,
 } from '../../trip/types';
 import { fetchJson } from '../http';
-import { borderSamplePoints, type BordersRequest, type BordersResponse } from '../../trip/borders';
+import type { BordersResponse } from '../../trip/borders';
+import { countriesAlong, decodeCountries, type CountriesFile, type CountryIndex } from '../../trip/countries';
 
 /**
  * Client side of the long-trip planner (ADR-013): turn the app's route,
@@ -36,12 +37,18 @@ export function profileFromTimed(timed: TimedRoute): RouteProfile {
   };
 }
 
-/** Hourly hazard codes for each sample, from forecasts already loaded (≤ `hours` from the hour before departure). */
+/** Most hours of hazard codes per sample the planner accepts (`src/trip/protocol.ts`). */
+const MAX_WEATHER_HOURS = 400;
+
+/**
+ * Hourly hazard codes for each sample, from forecasts already loaded: from the hour before departure as far as the
+ * forecasts reach (they were loaded for the whole trip, stops included) — never a fixed 4 days (B-21).
+ */
 export function weatherSamples(
   samples: RouteSample[],
   forecastFor: (s: RouteSample) => LocationForecast | undefined,
   departAtMs: number,
-  hours = 96,
+  hours = MAX_WEATHER_HOURS,
 ): TripWeatherSample[] {
   const t0 = Math.floor(departAtMs / 3_600_000) * 3_600_000 - 3_600_000;
   const out: TripWeatherSample[] = [];
@@ -162,14 +169,18 @@ export async function fetchStopPlaces(
 }
 
 /** Countries along the route and where they change (a few dozen points, never the user's position). */
-export function fetchBorders(timed: TimedRoute, locale: string, signal?: AbortSignal): Promise<BordersResponse> {
-  const { points, alongM } = borderSamplePoints(timed.totalDistM, (d) => positionAtDistance(timed, d).coordinate);
-  const req: BordersRequest = { version: 1, points, alongM, locale };
-  return fetchJson<BordersResponse>(apiPaths.tripsBorders, {
-    provider: 'Trip planner',
-    signal,
-    // A background lookup (nothing waits on it); the public Overpass can be slow.
-    timeoutMs: 40_000,
-    init: { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(req) },
+let countryIndex: Promise<CountryIndex> | null = null;
+
+/**
+ * Countries along the route and where they change, worked out on the device from Natural Earth boundaries
+ * (DP-4.5): no request leaves the device and it works offline. The data (≈0.2 MB gzip) loads on first use.
+ */
+export async function findBorders(timed: TimedRoute, locale: string): Promise<BordersResponse> {
+  countryIndex ??= import('../../trip/data/countries-v1.json').then((m) => decodeCountries((m.default ?? m) as CountriesFile));
+  const index = await countryIndex.catch((e) => {
+    countryIndex = null; // a failed chunk load may succeed later
+    throw e;
   });
+  const { countries, crossings } = countriesAlong(index, (d) => positionAtDistance(timed, d).coordinate, timed.totalDistM, locale);
+  return { countries, crossings };
 }

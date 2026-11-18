@@ -5,7 +5,7 @@ are aliases of v1 for clients from before versioning (ADR-009). Types are
 shared code: `src/api/v1.ts`, `src/share/protocol.ts`, `src/reports/protocol.ts`.
 
 Status column: **IMPLEMENTED** (live in `worker/index.ts`) or **PLANNED**
-(designed here; build with the phase named in [ROADMAP](../ROADMAP.md)).
+(designed here; built by the task named in [DEVELOPMENT_PLAN](../DEVELOPMENT_PLAN.md)).
 
 ## Conventions
 
@@ -33,7 +33,7 @@ Status column: **IMPLEMENTED** (live in `worker/index.ts`) or **PLANNED**
 ### `GET /whereami`
 Approximate area of the connection (Cloudflare `request.cf`), used when the
 device can't give a position. `200 { lat, lon, city, country }` or
-`404 { error: "unknown" }`. Nothing stored. No CORS headers.
+`404 { error: "unknown" }`. Nothing stored. No CORS headers. 429 (`WHEREAMI_LIMITER`, 20/min per IP).
 
 ### Live location sharing
 
@@ -44,6 +44,8 @@ device can't give a position. `200 { lat, lon, city, country }` or
 | `GET /share/:id/ws` | capability id | WebSocket upgrade | stream of `{type:"snapshot"}` / `{type:"ended"}`; 426 without upgrade; 429 too many viewers |
 | `PUT /share/:id` | `Authorization: Bearer <key>` | `ShareUpdate` ≤48 KB (position, optional trip/route ≤500 points) | `200 { ok, needsRoute, expiresAt }` (`stale: true` for out-of-order); 403, 404, 413, 429 (`too-fast`, <1 s apart) |
 | `DELETE /share/:id` | Bearer key | — | `200 { ok: true }` — everything deleted, viewers told |
+
+Every `/share/:id` request (updates, polling, WebSocket opens) also counts against `SHARE_LIMITER` — 240/min per IP → `429 { error: "too-many-requests" }`.
 
 ### Driver reports
 
@@ -56,6 +58,50 @@ device can't give a position. `200 { lat, lon, city, country }` or
 `PublicReport = { id, kind, lat, lon, createdAt, expiresAt, confirms, denies }`.
 Reports are **unverified** by definition; clients must label them "reported".
 
+### `GET /geocode` (DP-4.4)
+`?q=<text ≤100>&lang=en|ru&near=lon,lat&limit=1–10` → `200 { places: Place[] }` with `Place = { id, name, label,
+coordinate: [lon, lat], kind }` (`kind`: a settlement type, `street`, `address` or `poi`). Our FTS5 index in D1 (binding
+`GEO`, the region's OpenStreetMap places, streets and addresses; `pipelines/osm/geocode.mjs`). Fewer than 2 letters →
+`{ places: [] }`. `503 unavailable` when the index isn't loaded; 405 for non-GET; 429 (`GEOCODE_LIMITER`, 120/min per
+IP). The search text is neither stored nor logged. Reverse naming is done on the device from the settlement tiles.
+
+### `POST /route` (DP-5.2, ADR-004)
+Body (`src/api/route.ts`): `{ mode: "drive"|"walk"|"bike", points: [{ lon, lat, via?: true }] (2–20; `via` = a silent point
+the road passes through), alternatives?: 0–2 (two points only), avoid?: ["tolls"|"highways"|"ferries"], bearingDeg?,
+language?: "en"|"ru" }` → `200` **OSRM v5 route JSON** (`{ code: "Ok", routes: [{ distance, duration, geometry: GeoJSON
+LineString, legs: [{ steps: [{ maneuver, name, ref, geometry, intersections (lanes) … }] }] }] }` — Valhalla's
+`format: "osrm"`). Errors: `400 bad-request`, `404 no-route`, `422 outside-region` (a point beyond the engine's region:
+clients may use another router), `422 too-far`, `429` (`ROUTE_LIMITER`, 60/min per IP), `502 engine-error`,
+`503 unavailable` (no engine here). Nothing stored or logged.
+
+### `POST /route/matrix`
+`{ mode, sources: [lon,lat][], destinations: [lon,lat][] }` (≤50 each) → `{ durations: (s|null)[][], distances:
+(m|null)[][] }`.
+
+### `GET /weather/forecast` (DP-4.6, DP-6.6)
+Our forecast for up to 100 points **anywhere on Earth**, in Open-Meteo's query and JSON shape (one reader in the app
+serves both): `?latitude=a,b&longitude=c,d&hourly=<list>&timezone=auto&timeformat=unixtime&wind_speed_unit=kmh|ms
+&past_hours=0–2208&forecast_hours=1–384&elevation=<m|nan,…>`. Hourly variables: `temperature_2m`, `apparent_temperature`,
+`precipitation_probability` (always `null`: one model run gives no probability), `precipitation`, `rain`, `showers` (0),
+`snowfall` (cm), `weather_code` (WMO, derived — `src/api/weather.ts`), `cloud_cover`, `wind_speed_10m`,
+`wind_gusts_10m`, `wind_direction_10m`, `visibility`, `relative_humidity_2m`. Per location: `{ latitude, longitude`
+(the 0.25° grid cell)`, elevation` (the height the forecast is for: `elevation` asked, else the cell's)`, timezone,
+utc_offset_seconds, generationtime_ms, hourly_units, hourly: { time: unix s[], <variable>: (number|null)[] } }`; one
+location → an object, several → an array. A point with no data (open sea far from any coast) →
+`{ latitude, longitude, timezone, utc_offset_seconds, missing: true }`. Times are whole UTC hours from `past_hours`
+before the current hour, never beyond the model's last step (15 days). A given `elevation` corrects temperature by
+6.5 °C/km from the cell's height. Errors: `400 { error: "bad-request", reason }` (unsupported option, >100 points),
+405, 429 (`WEATHER_LIMITER`, 120/min per IP), `503 unavailable` (no tiles here) / `503 { reason: "stale" }` (newest
+run older than 36 h — clients use their fallback). Data: weather tiles in R2 (binding `WEATHER`) built by
+`npm run data:weather` from ECMWF IFS 0.25° (CC BY 4.0) and NOAA GFS 0.25° visibility (public domain) via the Open-Meteo
+open-data archive (CC BY 4.0); format in `src/api/weather.ts`. Coordinates are neither stored nor logged; a point's
+record is kept in the edge cache until the next build.
+
+### `GET /weather/meta`
+`200 { run, reference_time, last_run_availability_time, until, models: { ecmwf_ifs025: [ISO…], ncep_gfs025: [ISO] },
+source, fresh }` (unix s) — the app compares `last_run_availability_time` with its forecasts' to refresh when a new
+build arrives; `503 unavailable` without tiles.
+
 ### Long-trip planner ([LONG_TRIP_MODE](../features/LONG_TRIP_MODE.md), ADR-013)
 
 Stateless: requests are validated (`src/trip/protocol.ts`, `src/trip/borders.ts`),
@@ -65,53 +111,73 @@ answered and discarded. Rate limit `TRIP_LIMITER`: 20/min per IP, shared by the 
 | --- | --- | --- |
 | `POST /trips/plan` | `TripPlanRequest` ≤400 KB: `route` {id, polyline (precision 5, a point every `stepM` ≥ 500 m), `stepM`, `timesS` (cumulative driving s), `distanceM`, origin, destination, tz?}, `departAtMs` (−2 d … +16 d), `vehicle` {kind, powertrain, rangeKm?, fullRangeKm?}, `preferences` {pace, hotelMinStars, hotelMaxDetourKm, food, fuelBrand}, `places`? (≤200 settlements), `weather`? (≤200 samples of hourly hazard codes), `progress`? (replanning), `overnightsM`? (user-chosen nights), `locale` | `200 TripPlan` (no place lookups — fast); 400 `bad-request` / `bad-route`; 413; 415; 429; 503 |
 | `POST /trips/places` | `StopPlacesRequest` ≤40 KB: `stop` {lat, lon, kinds, arriveMs, tz}, `route` (polyline ±30 km), `vehicle`, `preferences`, `locale` | `200 { places: StopPlaces[] }` — per category `ok` / `none-found` / `unavailable` (Overpass failed); edge-cached by area for 24 h |
-| `POST /trips/borders` | `{ version: 1, points: [lon,lat][] (2–20), alongM: number[], locale }` | `200 { countries: ({code,name}|null)[], crossings: {alongM, from, to}[] }`; 503 when Overpass is unavailable; edge-cached for 7 days |
+| `POST /trips/borders` | `{ version: 1, points: [lon,lat][] (2–20), alongM: number[], locale }` | `200 { countries: ({code,name}|null)[], crossings: {alongM, from, to}[] }` — from Natural Earth boundaries bundled with the Worker (no third party); the web client finds borders on the device and doesn't call it |
 
 Types: `src/trip/types.ts`. Positions sent are the planned route (needed to
 plan it); the car's position is sent only as `progress.alongM` (a distance
 along that route) when replanning.
 
+## Static data (implemented)
+
+Served as static assets on the app's origin (free on Cloudflare; `public/` on localhost), immutable per build:
+
+| Path | Content |
+| --- | --- |
+| `/data/places/v1/index.json` | `{ v: 1, region, source, license: "ODbL-1.0", dataDate, coverage: { z, tiles: ["x/y"] }, layers: { <layer>: { z, tiles: ["x/y"] } } }` — which tiles exist |
+| `/data/places/v1/<layer>/<z>/<x>/<y>.json` | `{ v: 1, e: [[id, lon, lat, tags]] }`; layer `maxspeed`: `[[id, maxspeed, [[lon, lat]…], highway]]`. Layers: `settlement` (z9), `fuel`, `ev_charging`, `restaurant`, `cafe`, `hotel`, `parking`, `atm`, `pharmacy`, `supermarket`, `rest_area`, `car_wash`, `car_repair`, `attraction`, `toilets`, `hospital`, `speed_camera`, `level_crossing`, `maxspeed` (z11) |
+
+Built by `npm run data:osm` from an OpenStreetMap extract (ODbL — a derivative database: attribution in the app, the
+same licence for anyone reusing the files). Ids: `n<osm node id>`, `w<osm way id>`.
+
 ## Planned
 
-### `POST /reports/query` — PLANNED (P1, REQ-CF-009)
-Replaces up to 24 bbox requests per refresh. Body: `{ "corridor": <encoded
-polyline, precision 5, ≤500 points>, "widthM": 300 }` → same response as the
-bbox list. Server-side: decode, bbox prefilter, distance-to-line filter.
+All planned endpoints are served by the same Worker on Cloudflare (ADR-016); engines behind them run in Containers,
+data in D1/R2. Each contract is finalised here when its DEVELOPMENT_PLAN task starts. No endpoint proxies a
+third-party service with usage limits (ADR-015).
 
-### `POST /weather/points` — PLANNED (Growth, ADR-005)
-Body: `{ points: [{lat, lon}] ≤100 (≤4 decimals), untilMs }` → `{ forecasts:
-LocationForecast[] keyed by grid cell, modelRun, stale: string[] }`. Edge
-cache key = grid cell (0.02°) + model run; no user identifiers. Rate limit
-per client; the Worker holds the provider key.
+### `POST /reports/query` — PLANNED (DP-7.2, REQ-CF-009)
+Replaces up to 24 bbox requests per refresh. Body: `{ "corridor": <encoded polyline, precision 5, ≤500 points>,
+"widthM": 300 }` → same response as the bbox list. Server-side: decode, bbox prefilter, distance-to-line filter.
 
-### `POST /route` — PLANNED (public beta, ADR-004)
-Body: `{ mode: drive|walk|bike, points: [[lon,lat]…] ≤5, alternatives?:
-bool, avoid?: [tolls|highways|ferries], bearingDeg? }` → `{ routes: Route[] }`
-(normalised, same type as `src/types/route.ts`). Proxies the self-hosted
-router; identical requests cached briefly; never logged with coordinates.
+### Later: `POST /route/optimize`, `POST /route/isochrone` (DP-9.4, DP-9.5); truck/motorcycle profiles (DP-9.2)
+
+
+### `/places/*` — PLANNED (DP-4.3)
+`GET /places/tile/:z/:x/:y?cat=` (cacheable), `POST /places/corridor` (polyline + width + categories; also speed
+limits, cameras, level crossings), `GET /places/:id` → normalised places with source and licence per record.
+
+### `GET /air/*`, `GET /elevation` — PLANNED (DP-4.6 air quality from CAMS, DP-4.7 Copernicus DEM)
+The same way as `/weather/forecast`: open data files → our tiles in R2 → an Open-Meteo-compatible answer.
+
+### `POST /transit` — PLANNED (DP-5.3)
+MOTIS `plan` request shape (`fromPlace`, `toPlace`, `time`, `arriveBy`) → itineraries, as consumed by `MotisProvider`.
+
+### `GET /radar/*` — PLANNED (DP-5.4)
+Tile endpoints of LibreWXR (precipitation; "model estimate" where no radar exists).
 
 ### `POST /telemetry` — PLANNED (REQ-OBS-003/004)
-Body: `{ appVersion, events: [{ kind: "provider-error"|"client-error",
-provider?, code, count }] }` — counts only, no coordinates, no ids → Workers
-Analytics Engine.
+Body: `{ appVersion, events: [{ kind: "engine-error"|"client-error", component?, code, count }] }` — counts only, no
+coordinates, no ids → Workers Analytics Engine.
 
-### Accounts — PLANNED (Phase 3, ADR-008)
+### Push — PLANNED (DP-7.5)
+`POST /push/subscribe` · `DELETE /push/subscribe` (Web Push subscription, VAPID); opt-in only.
+
+### Accounts — PLANNED (DP-7.6, ADR-008)
 | Method & path | Purpose |
 | --- | --- |
 | `POST /auth/passkey/register/options` · `POST /auth/passkey/register` | create account / add passkey (WebAuthn) |
 | `POST /auth/passkey/login/options` · `POST /auth/passkey/login` | sign in |
-| `POST /auth/email/start` (Turnstile token) · `POST /auth/email/verify` | magic link / code fallback |
 | `POST /auth/refresh` | mobile: rotate refresh token → new access token |
 | `POST /auth/logout` | revoke current session |
 | `GET /account` | profile, sign-in methods, sessions |
-| `DELETE /account` | delete account and all associated data now (Apple 5.1.1(v), Google Play) |
+| `DELETE /account` | delete account and all associated data now |
 | `GET /settings` · `PUT /settings` | synced preferences (JSON document with version) |
-| `GET /places` · `POST /places` · `PATCH /places/:id` · `DELETE /places/:id` | synced saved places (Home/Work/favourites) with `updatedAt` for merge |
-| `POST /devices` · `DELETE /devices/:id` | FUTURE: push registration (mobile) |
+| `GET /saved-places` · `POST /saved-places` · `PATCH /saved-places/:id` · `DELETE /saved-places/:id` | synced saved places with `updatedAt` for merge |
+| `GET /lists/:id` · `POST /lists` · … | shared lists of places (DP-9.10) |
 
-Auth: web — `HttpOnly; Secure; SameSite=Lax` session cookie; mobile —
-`Authorization: Bearer <access token>` (15 min) + refresh token rotation.
-Unauthenticated → 401 `{ error: "unauthenticated" }`.
+No e-mail or SMS sign-in (no paid sending service). Auth: web — `HttpOnly; Secure; SameSite=Lax` session cookie;
+mobile — `Authorization: Bearer <access token>` (15 min) + refresh token rotation. Unauthenticated → 401
+`{ error: "unauthenticated" }`.
 
 ### Not planned (by design)
 `POST /routes` storing routes, `GET /routes/:id/weather`, location history,

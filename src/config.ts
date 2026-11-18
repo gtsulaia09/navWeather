@@ -1,3 +1,5 @@
+import { setApiOrigin } from './api/v1';
+
 /**
  * Single source of configuration. Every tunable reads from Vite env vars
  * (see .env.example) with a sensible default, so the app runs with no .env.
@@ -28,37 +30,75 @@ function list(key: string, fallback: string[]): string[] {
     .filter(Boolean);
 }
 
+/** Our API: '' = this page's origin (the Worker serves both); an absolute origin otherwise (DP-2.3). */
+const apiOriginValue = str('VITE_API_ORIGIN', '').replace(/\/+$/, '');
+setApiOrigin(apiOriginValue);
+const api = (path: string) => `${apiOriginValue}/api/v1${path}`;
+
 export const config = {
   providers: {
-    routing: str('VITE_ROUTING_PROVIDER', 'osrm'),
-    weather: str('VITE_WEATHER_PROVIDER', 'open-meteo'),
-    geocoding: str('VITE_GEOCODING_PROVIDER', 'nominatim'),
-    autocomplete: str('VITE_AUTOCOMPLETE_PROVIDER', 'photon'),
-    places: str('VITE_PLACES_PROVIDER', 'overpass'),
-    elevation: str('VITE_ELEVATION_PROVIDER', 'open-meteo'),
+    /** Roads: our Valhalla behind the Worker (DP-6.2); `osrm` = the public servers only. */
+    routing: str('VITE_ROUTING_PROVIDER', 'valhalla'),
+    /** When our engine isn't running or a point is outside its region: `osrm` (public servers) or `none`. */
+    routingFallback: str('VITE_ROUTING_FALLBACK', 'osrm'),
+    /** Forecasts: ours, worldwide (`/api/v1/weather`, DP-6.6); `open-meteo` = the public API only. */
+    weather: str('VITE_WEATHER_PROVIDER', 'api'),
+    /** Where our forecast isn't there (not built, too old, far out at sea): `open-meteo` (public API) or `none`. */
+    weatherFallback: str('VITE_WEATHER_FALLBACK', 'open-meteo'),
+    /** Search, suggestions and reverse naming: our geocoder (`/api/v1/geocode` + settlement tiles, DP-6.4). */
+    geocoding: str('VITE_GEOCODING_PROVIDER', 'api'),
+    autocomplete: str('VITE_AUTOCOMPLETE_PROVIDER', 'api'),
+    /** When our index has nothing (a town abroad) or isn't loaded: `photon` (until more regions) or `none`. */
+    geocodingFallback: str('VITE_GEOCODING_FALLBACK', 'photon'),
+    /** Settlements, places and road data: our tiles (DP-6.5); `overpass` (public servers) only to compare. */
+    places: str('VITE_PLACES_PROVIDER', 'tiles'),
+    /** Outside the region our tiles cover: `overpass` (until that region is built) or `none`. */
+    placesFallback: str('VITE_PLACES_FALLBACK', 'overpass'),
+    /** Ground heights: our DEM (`/api/v1/elevation`, DP-6.6); `open-meteo` = the public API only. */
+    elevation: str('VITE_ELEVATION_PROVIDER', 'api'),
+    /** Where our DEM tiles don't reach (or the Worker can't answer): `open-meteo` (public API) or `none`. */
+    elevationFallback: str('VITE_ELEVATION_FALLBACK', 'open-meteo'),
     map: str('VITE_MAP_PROVIDER', 'openfreemap'),
-    poi: str('VITE_POI_PROVIDER', 'overpass'),
-    speedLimits: str('VITE_SPEED_LIMIT_PROVIDER', 'overpass'),
+    poi: str('VITE_POI_PROVIDER', 'tiles'),
+    speedLimits: str('VITE_SPEED_LIMIT_PROVIDER', 'tiles'),
     traffic: str('VITE_TRAFFIC_PROVIDER', 'none'),
     incidents: str('VITE_INCIDENT_PROVIDER', 'reports'),
-    airQuality: str('VITE_AIR_QUALITY_PROVIDER', 'open-meteo'),
+    /** Air quality: ours, worldwide (`/api/v1/air`, CAMS tiles, DP-4.6); `open-meteo` = the public API only. */
+    airQuality: str('VITE_AIR_QUALITY_PROVIDER', 'api'),
+    /** When our tiles can't answer (not built here, too old): `open-meteo` (public API) or `none`. */
+    airQualityFallback: str('VITE_AIR_QUALITY_FALLBACK', 'open-meteo'),
     speech: str('VITE_SPEECH_PROVIDER', 'browser'),
   },
   endpoints: {
+    /** Our routing API (the Worker's `/api/v1/route`, same origin). */
+    route: str('VITE_ROUTE_URL', api('/route')),
     osrm: str('VITE_OSRM_BASE_URL', 'https://router.project-osrm.org'),
     /** OpenStreetMap community routing instances for walking and cycling (the demo server above only does cars). */
     osrmFoot: str('VITE_OSRM_FOOT_URL', 'https://routing.openstreetmap.de/routed-foot'),
     osrmBike: str('VITE_OSRM_BIKE_URL', 'https://routing.openstreetmap.de/routed-bike'),
-    /** Public transport: Transitous (MOTIS) over operators' open timetables. Empty turns public transport off. */
-    transit: env.VITE_TRANSIT_URL === '' ? '' : str('VITE_TRANSIT_URL', 'https://api.transitous.org'),
+    /** Public transport: our MOTIS behind the Worker (DP-6.7). Empty turns public transport off. */
+    transit: env.VITE_TRANSIT_URL === '' ? '' : str('VITE_TRANSIT_URL', api('/transit')),
+    /** Where our timetables don't reach (or our engine isn't running): Transitous (MOTIS, open source and
+     * non-commercial use only). Empty = no fallback. */
+    transitFallback: env.VITE_TRANSIT_FALLBACK_URL === '' ? '' : str('VITE_TRANSIT_FALLBACK_URL', 'https://api.transitous.org'),
+    /** Our forecast (the Worker's `/api/v1/weather`, same origin). */
+    weather: str('VITE_WEATHER_URL', api('/weather')),
+    /** Our ground heights (the Worker's `/api/v1/elevation`, same origin). */
+    elevation: str('VITE_ELEVATION_URL', api('/elevation')),
+    /** Our air quality (the Worker's `/api/v1/air`, same origin). */
+    air: str('VITE_AIR_URL', api('/air')),
     openMeteo: str('VITE_OPEN_METEO_BASE_URL', 'https://api.open-meteo.com'),
     openMeteoAir: str('VITE_OPEN_METEO_AIR_URL', 'https://air-quality-api.open-meteo.com'),
     nominatim: str('VITE_NOMINATIM_BASE_URL', 'https://nominatim.openstreetmap.org'),
     photon: str('VITE_PHOTON_BASE_URL', 'https://photon.komoot.io'),
     /** Driver reports relay (same origin as the app: the Worker in worker/). */
-    reports: str('VITE_REPORTS_URL', '/api/v1/reports'),
+    reports: str('VITE_REPORTS_URL', api('/reports')),
     /** Rough area of the connection, when the device can't give a position (same Worker). */
-    whereami: str('VITE_WHEREAMI_URL', '/api/v1/whereami'),
+    whereami: str('VITE_WHEREAMI_URL', api('/whereami')),
+    /** Our geocoder (the Worker's `/api/v1/geocode`, same origin). */
+    geocode: str('VITE_GEOCODE_URL', api('/geocode')),
+    /** Our places tiles (static assets built by `npm run data:osm`). */
+    placesTiles: str('VITE_PLACES_TILES_URL', '/data/places/v1'),
     overpass: list('VITE_OVERPASS_URLS', [
       'https://overpass-api.de/api/interpreter',
       'https://overpass.kumi.systems/api/interpreter',

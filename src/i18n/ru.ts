@@ -460,7 +460,7 @@ export const ru: Messages = {
     findAlongRoute: 'Найти по маршруту',
     clear: 'Очистить',
     attribution:
-      'Погода: Open-Meteo (CC BY 4.0) · Маршруты: OSRM на серверах FOSSGIS · Поиск: Nominatim, Photon · Общественный транспорт: Transitous · Данные карты © участники OpenStreetMap. Без аккаунта, история поездок не хранится.',
+      'Погода: прогнозы ECMWF IFS (CC BY 4.0) и NOAA GFS из открытого архива Open-Meteo (CC BY 4.0), обработанные navWeather; где нашего прогноза нет — Open-Meteo · Маршруты: Valhalla на данных OpenStreetMap; вне нашего региона OSRM (авто: project-osrm.org; пешком, велосипед: серверы FOSSGIS) · Поиск: наш индекс данных OpenStreetMap; в остальных местах Photon · Общественный транспорт: Transitous · Данные карты © участники OpenStreetMap. Без аккаунта, история поездок не хранится.',
     fixMap: 'Сообщить об ошибке на карте',
   },
 
@@ -604,6 +604,7 @@ export const ru: Messages = {
     offline: 'Нет сети — план поездки будет составлен, когда сеть появится.',
     retry: 'Повторить',
     stale: 'План мог устареть.',
+    weatherPartial: (until: string) => `Прогноз есть только до ${until}: погода после этого пока неизвестна и в рисках не учтена.`,
     tiles: {
       driving: 'За рулём',
       overnights: 'Ночёвки',
@@ -674,6 +675,9 @@ export const ru: Messages = {
     stopEarlierAction: (area: string, eta: string) =>
       `Если заночевать в ${area} (прибытие ${eta}), этот участок вы проедете утром, когда прогноз лучше.`,
     enterRange: 'Укажите запас хода (и объём бака) в настройках, чтобы планировать заправки.',
+    nightDriving: (hours: string, leave: string) =>
+      `По этому плану около ${hours} за рулём ночью (00:00–06:00), когда усталость опаснее всего. Подумайте о выезде в ${leave}.`,
+    enterTank: 'Спланирована только первая заправка или зарядка: укажите в настройках объём бака или батареи и расход, чтобы планировать следующие.',
     nextStop: 'Следующая остановка',
     settings: {
       section: 'Дальние поездки',
@@ -894,7 +898,7 @@ export const ru: Messages = {
     light: 'Слабые',
     heavy: 'Сильные',
     partial: 'Часть области недоступна',
-    forecastNote: 'Приблизительно: прогноз в 49 точках (Open-Meteo), не радар.',
+    forecastNote: 'Приблизительно: прогноз в 49 точках (модели ECMWF и GFS), не радар.',
   },
   hazard: {
     curve: 'Крутой поворот',

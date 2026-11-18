@@ -1,5 +1,10 @@
 # Maps, routing, navigation, voice and GIS
 
+> **Update 2026-10-04 (ADR-015/016):** the providers in §1 are the current code. The target replaces them with our own
+> engines on Cloudflare: Valhalla in Containers (car, walk, bike, truck, motorcycle), a D1 FTS5 geocoder (Photon if
+> needed), a Places API on D1/R2, own PMTiles in R2 (OpenFreeMap as fallback), own weather cells in R2, MOTIS in
+> Containers. See [FREE_STACK_PLAN §4, §6a](../FREE_STACK_PLAN.md).
+
 ## 1. Six separate systems
 
 | System | What it is | Current provider | Interface | Licence / terms (see matrix) | Failure mode |
@@ -7,13 +12,13 @@
 | **Map data** | the world's roads, places, POIs | OpenStreetMap | — | ODbL, attribution | stale edits (weekly builds) |
 | **Map rendering** | drawing vector tiles in WebGL | MapLibre GL JS | `RouteMap.tsx` | BSD-3-Clause | WebGL unavailable → error card; app still usable |
 | **Tiles / styles** | pre-cut vector tiles + style JSON | OpenFreeMap (OpenMapTiles schema) | `MapProvider` | free, commercial OK, no SLA | blank map |
-| **Geocoding** | text ↔ place | Nominatim (typed search, 1 req/s), Photon (autocomplete, reverse) | `GeocodingProvider`, `AutocompleteProvider` | fair use, no autocomplete on Nominatim | search fails, coordinates still work |
-| **Routing** | road graph search, ETA, steps | OSRM public (car), FOSSGIS OSRM (walk/bike), Transitous (transit), estimate (flight) | `RoutingProvider` per mode | non-commercial, ≤1 req/s | no new route; loaded route continues |
+| **Geocoding** | text ↔ place | our index (D1 FTS5 over OSM, `/api/v1/geocode`) and settlement tiles for names; Photon only when our index has nothing | `GeocodingProvider`, `AutocompleteProvider` | ODbL (our data); fair use (Photon fallback) | search fails, coordinates still work |
+| **Routing** | road graph search, ETA, steps | our Valhalla (car, walk, bike; Docker locally, Containers in the cloud); public OSRM/FOSSGIS only outside its region or without it; Transitous (transit), estimate (flight) | `RoutingProvider` per mode | MIT (Valhalla) / non-commercial, ≤1 req/s (fallbacks) | no new route; loaded route continues |
 | **Traffic** | live speeds/incidents | none (driver reports for incidents) | `TrafficProvider`, `IncidentProvider` | — | "not available" |
 | **Weather** | forecasts along the route | Open-Meteo | `WeatherProvider` | CC BY 4.0, non-commercial free | stale label, last forecast kept |
 
 Keeping them separate means each can be replaced without touching the others
-(e.g. Valhalla for routing, PMTiles for tiles, MET Norway for weather).
+(e.g. Valhalla for routing, own PMTiles for tiles, our weather pipeline for forecasts).
 
 ## 2. Routing engine
 Decision and comparison: [ADR-004](decisions/ADR-004-routing-engine.md).
@@ -69,7 +74,7 @@ push-to-talk and the Settings screen says so.
   and MapLibre expect. APIs that use lat,lon order (Nominatim, MOTIS
   `fromPlace=lat,lon`, Open-Meteo params) are converted at the provider edge.
 - **Precision:** 5–6 decimals for routing; ≤4 for weather requests (enough for
-  0.02° cells; MET Norway requires ≤4); 5 for reports.
+  0.02° cells); 5 for reports.
 - **Projection:** Web Mercator only for rendering; all distances are
   great-circle (haversine) in metres; route progress for line gradients uses
   Mercator length to match MapLibre's `line-progress`.
@@ -86,9 +91,8 @@ push-to-talk and the Settings screen says so.
   in one country; road refs and Georgian script transliterated for en/ru.
 
 ## 6. Geocoding quality notes
-- Same-named places: "Tavisupleba Square" resolves to Kobuleti before Tbilisi's
-  Freedom Square (Photon ranking; Tbilisi's square is named "Freedom Square" in
-  English OSM). Mitigation: show the town in suggestions (done), bias by
-  location (done), and name the destination town in error messages (planned).
+- Same-named places: with Photon, "Tavisupleba Square" resolved to Kobuleti before Tbilisi's Freedom Square. Our
+  index (2026-10-04) ranks a street or place by its town's size and by closeness: "Freedom Square" → Tbilisi first;
+  suggestions show the town; naming the destination town in error messages is still planned.
 - Nominatim policy: no autocomplete, cache results, ≤1 req/s, identify the app
   (browser Referer satisfies this), heavy users run their own instance.

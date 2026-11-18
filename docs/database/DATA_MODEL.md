@@ -1,10 +1,31 @@
 # Data model
 
+> **Update 2026-10-04 ([ADR-016](../architecture/decisions/ADR-016-all-on-cloudflare-workers.md)):** D1 is planned not only
+> for accounts but also for regional places and the FTS5 geocoder index (one database per region/country, ≤10 GB
+> each — REQ-CF-015, DP-4.2/DP-4.4); places tiles, weather cells and map tiles live in R2.
+
+## Files in R2 (in use)
+
+| Bucket / prefix | Content | Written by | Read by |
+| --- | --- | --- | --- |
+| `navweather-weather` `weather/latest.json` | index of the current build (`WeatherIndex`, `src/api/weather.ts`): run, model runs, steps (unix s), per-variable interval/presence, scales, tiles present | `pipelines/weather/build.mjs` (last, so a build appears whole) | Worker, cached 60 s per isolate |
+| `weather/runs/<run>/t/<ty>/<tx>.bin` | one 5° × 5° tile of the 0.25° grid (land and coasts, 1 030 tiles): 400 points × [height, 11 variables × ~85 steps] int16 (−32768 = no value); each point's ~1.9 KB record sits at a fixed offset (range reads); ~0.75 MB per tile, ~0.8 GB per build | the pipeline (`.github/workflows/weather.yml` looks every hour and builds when a new model run appears; the two newest builds are kept) | `/api/v1/weather/forecast` (+ edge cache per point) |
+
+No personal data: model fields per grid cell. Locally the same bucket lives in `.wrangler/state` (`npm run data:weather`).
+
 Decision: [ADR-007](../architecture/decisions/ADR-007-data-storage.md).
 **Status: D1 is not in use.** The schema below is PROPOSED for Phase 3
 (optional accounts); the SQL lives in
 [`database/migrations/0001_accounts.sql`](../../database/migrations/0001_accounts.sql)
 and is **not applied** (no D1 binding in `wrangler.toml`).
+
+## 0. Open data we build
+
+| Data | Where | Built by |
+| --- | --- | --- |
+| Country borders (Natural Earth, public domain) | `src/trip/data/countries-v1.json` (in the app and the Worker bundle) | `npm run data:borders` |
+| Places, cameras, crossings, speed limits per layer and tile (OSM, ODbL) | static assets `/data/places/v1/…` (not in git) | `npm run seed:local` (download + `data:osm`) |
+| Geocoder index (OSM, ODbL): `geo` (id, kind, rank, lat, lon, name, name_en, name_ru, ctx_en, ctx_ru) + FTS5 `geo_fts(names, ctx)` (unicode61, prefixes 2–4) + `geo_meta` | D1 `navweather-geo` (binding `GEO`) | `npm run data:osm` → `data/build/ge/geocode.sql` → `npm run db:geo:local` |
 
 ## 1. What lives where today
 
@@ -42,7 +63,7 @@ erDiagram
 
 **Rejected tables** (not justified now): `routes`, `route_points`,
 `saved_routes` (no server-side trips; REQ-PRIV-001), `weather_cache`,
-`weather_forecasts` (Cache API/KV, ADR-005), `weather_alerts` (computed on
+`weather_forecasts` (weather cells are files in R2, ADR-007), `weather_alerts` (computed on
 device), `notifications`, `devices` (until mobile push), `subscriptions` (until
 monetisation), `api_keys` (until a public API), `reports` (Durable Objects).
 

@@ -8,6 +8,7 @@ export interface TripThresholds {
   EXTENDED_TRIP_TIME_MINUTES: number;
   LONG_TRIP_MIN_REST_STOPS: number;
   PLAN_FROM_CATEGORY: TripCategory;
+  AUTO_ON_FROM_CATEGORY: TripCategory;
 }
 
 /**
@@ -28,6 +29,12 @@ export const TRIP_THRESHOLDS: TripThresholds = {
   LONG_TRIP_MIN_REST_STOPS: 3,
   /** Ask the planner for EXTENDED trips too (stops without an overnight). */
   PLAN_FROM_CATEGORY: 'EXTENDED',
+  /**
+   * Long Trip Mode switches itself on only from this category. A shorter trip (e.g. Tbilisi → Batumi in the
+   * evening, past the pace's latest arrival) is offered the mode instead: switching on by itself would move
+   * every ETA of a 5-hour drive to the next morning (B-24).
+   */
+  AUTO_ON_FROM_CATEGORY: 'EXTENDED',
 };
 
 /**
@@ -73,11 +80,17 @@ export const STOP_DEFAULTS = {
   mergeWindowS: 25 * 60,
   /** Finish the trip today if no more than this much driving is left past the daily limit (s). */
   finishToleranceS: 75 * 60,
-  /** Look this much driving before the daily target for a better overnight area (s). */
+  /** Look this much driving before the daily target for a better overnight area (s)… */
   overnightSearchBeforeS: 90 * 60,
+  /** …but never more than this share of that day's driving: a short evening drive isn't cut to an hour (B-04). */
+  overnightSearchBeforeShare: 0.25,
   overnightSearchAfterS: 20 * 60,
   /** Most overnight stays planned (longer trips: the rest is planned on the way). */
   maxOvernights: 6,
+  /** Local hours counted as night driving [start, end) — flagged, with a morning start to consider (B-04). */
+  nightDriving: [0, 6] as [number, number],
+  /** Flag a plan that drives at least this long at night (s). */
+  nightDrivingAdviceS: 3600,
 } as const;
 
 /** Search radii around a stop (km) per place category. */

@@ -28,6 +28,7 @@ let h: Harness;
 let stop: () => void;
 let requests: TripPlanRequest[];
 let planFails: boolean;
+let bordersCalls: number;
 
 /** The Tbilisi → Batumi fixture road, `factor` times slower (×3 ≈ 14.7 h: a long trip). */
 function slowCarRouter(factor: number): RoutingProvider {
@@ -61,12 +62,12 @@ const hotels: RawPlace[] = [
   { id: 'n/1', category: 'hotel', type: 'hotel', lat: 42.27, lon: 42.7, tags: { tourism: 'hotel', name: 'Kutaisi Hotel', stars: '3' } },
 ];
 
-async function plan(factor = 1) {
+async function plan(factor = 1, departAtMs = BASE) {
   if (factor !== 1) h.providers.routing = slowCarRouter(factor);
   const s = useAppStore.getState();
   s.setOriginText('Tbilisi');
   s.setDestinationText('Batumi');
-  useAppStore.setState({ departure: { mode: 'at', utcMs: BASE } });
+  useAppStore.setState({ departure: { mode: 'at', utcMs: departAtMs } });
   await useAppStore.getState().calculateRoute();
 }
 
@@ -81,6 +82,7 @@ beforeEach(() => {
   h = installFakeProviders(BASE);
   requests = [];
   planFails = false;
+  bordersCalls = 0;
   vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
     const body = JSON.parse(String(init?.body ?? '{}'));
     if (url === '/api/v1/trips/plan') {
@@ -91,10 +93,8 @@ beforeEach(() => {
       return Response.json(await createTripPlan(req, { places: null, nowMs: Date.now() }));
     }
     if (url === '/api/v1/trips/borders') {
-      // Georgia for the first half of the points, then Turkey.
-      const n = body.points.length;
-      const countries = body.points.map((_: unknown, i: number) => (i < n / 2 ? { code: 'GE', name: 'Georgia' } : { code: 'TR', name: 'Turkey' }));
-      return Response.json({ countries, crossings: [{ alongM: body.alongM[Math.floor(n / 2)], from: countries[0], to: countries[n - 1] }] });
+      bordersCalls++; // the app finds borders on the device now (DP-4.5)
+      return Response.json({ error: 'unexpected' }, { status: 500 });
     }
     if (url === '/api/v1/trips/places') {
       const req = sanitizeStopPlacesRequest(body, Date.now());
@@ -122,6 +122,23 @@ describe('Long Trip Mode in the app', () => {
     expect(t.classification!.longTripMode).toBe(false);
     expect(longTripActive()).toBe(false);
     expect(requests).toHaveLength(0);
+  });
+
+  it('an evening departure past the latest arrival: offered, not switched on — and planned when the user asks (B-24)', async () => {
+    await plan(1, Date.UTC(2026, 9, 5, 14, 27)); // 18:27 in Tbilisi: arrival 23:19, after the balanced pace's 22:00
+    await vi.waitFor(() => expect(useTripStore.getState().classification?.reasons).toContain('overnight'));
+    const c = useTripStore.getState().classification!;
+    expect(c.category).toBe('MEDIUM');
+    // A 5-hour drive never moves to the next morning by itself…
+    expect(c.longTripMode).toBe(false);
+    expect(longTripActive()).toBe(false);
+    expect(useAppStore.getState().derived.arrivalMs).toBe(Date.UTC(2026, 9, 5, 14, 27) + useAppStore.getState().plan!.timed.totalTimeS * 1000);
+    expect(requests).toHaveLength(0);
+    // …but the user can turn it on, and then the stops are planned (never left "Planning stops…").
+    useTripStore.getState().setOverride('on');
+    await vi.waitFor(() => expect(useTripStore.getState().status).toBe('ready'));
+    expect(requests).toHaveLength(1);
+    expect(useTripStore.getState().plan!.recommendedStops.some((st) => st.kinds.includes('overnight'))).toBe(true);
   });
 
   it('the user can switch it on for a shorter trip: stops are planned and every ETA after them moves', async () => {
@@ -156,12 +173,47 @@ describe('Long Trip Mode in the app', () => {
     const events = useAppStore.getState().derived.intelligence.events;
     expect(events.some((e) => e.type === 'TRIP_STOP')).toBe(true);
     expect(events.some((e) => e.type === 'REST_BREAK')).toBe(false);
-    // The first night's hotels were fetched for the dashboard, and the borders along the route.
+    // The first night's hotels were fetched for the dashboard; the borders were found on the device
+    // (Natural Earth, no request): Tbilisi → Batumi stays in Georgia.
     const night = t.plan!.recommendedStops.find((s) => s.kinds.includes('overnight'))!;
     await vi.waitFor(() => expect(useTripStore.getState().stopPlaces[night.id]?.status).toBe('ready'));
     await vi.waitFor(() => expect(useTripStore.getState().borders.status).toBe('ready'));
-    expect(useTripStore.getState().borders.crossings).toHaveLength(1);
-    expect(useTripStore.getState().classification!.requiresBorderCrossing).toBe(true);
+    expect(useTripStore.getState().borders.crossings).toEqual([]);
+    expect(useTripStore.getState().classification!.requiresBorderCrossing).toBe(false);
+    expect(bordersCalls).toBe(0);
+  });
+
+  it('a multi-day trip: forecasts for the whole trip, stops included, from the first load; codes past 4 days (B-06, B-21)', async () => {
+    await plan(5); // ~24.5 h of driving: three days with the nights
+    await vi.waitFor(() => expect(useTripStore.getState().status).toBe('ready'));
+    const t = useTripStore.getState();
+    expect(t.plan!.arriveAtMs - BASE).toBeGreaterThan(48 * 3_600_000);
+    // The first request already asked far enough (not the 48-hour default), and every point has its forecast.
+    const first = h.weather.requests[0];
+    expect(Date.now() + first.forecastHours * 3_600_000).toBeGreaterThanOrEqual(t.plan!.arriveAtMs);
+    expect(useAppStore.getState().derived.points.every((p) => p.weather !== null)).toBe(true);
+    // The planner got hazard codes for the whole trip, not only the first 96 hours' worth of samples.
+    const hours = Math.max(...requests.at(-1)!.weather!.map((w) => w.h.length));
+    expect(BASE - 3_600_000 + hours * 3_600_000).toBeGreaterThanOrEqual(t.plan!.arriveAtMs);
+    expect(t.plan!.dataStatus.weather).toBe('ok');
+  });
+
+  it('new forecasts while planning re-plan the risks; settlements found later re-plan the nights (B-07, B-05)', async () => {
+    await plan(3);
+    await vi.waitFor(() => expect(useTripStore.getState().status).toBe('ready'));
+    const n = requests.length;
+    expect(useTripStore.getState().plan!.weatherRisks.some((r) => r.kind === 'storm')).toBe(false);
+    // A new model run puts thunderstorms everywhere.
+    h.weather.hourFn = () => ({ temperature: 18, code: 95, precipitationProbability: 90, precipitation: 6 });
+    await useAppStore.getState().loadWeather({ force: true, reason: 'model-update' });
+    await vi.waitFor(() => expect(requests.length).toBe(n + 1));
+    await vi.waitFor(() => expect(useTripStore.getState().plan!.weatherRisks.some((r) => r.kind === 'storm')).toBe(true));
+    // A town arrives after the plan was made: the plan is asked for again with it.
+    const app = useAppStore.getState();
+    const extra = { ...app.plan!.places[0], id: 'late-town', name: 'Late Town', distanceAlongM: app.plan!.timed.totalDistM / 2 };
+    useAppStore.setState({ plan: { ...app.plan!, places: [...app.plan!.places, extra] } });
+    await vi.waitFor(() => expect(requests.length).toBe(n + 2));
+    expect(requests.at(-1)!.places!.some((p) => p.name === 'Late Town')).toBe(true);
   });
 
   it('the plan screen: banner, totals, overnight stay with hotels labelled "not checked", day-by-day timeline', async () => {
@@ -176,7 +228,7 @@ describe('Long Trip Mode in the app', () => {
     expect(await screen.findByText(/availability, prices and ratings are not checked/)).toBeInTheDocument();
     expect(screen.getAllByText('Overnight stay').length).toBeGreaterThan(0);
     expect(screen.getByText('Day 1', { exact: false })).toBeInTheDocument();
-    await vi.waitFor(() => expect(screen.getAllByText(/Georgia → Turkey/).length).toBeGreaterThan(0));
+    await vi.waitFor(() => expect(useTripStore.getState().borders.status).toBe('ready'));
     expect(screen.queryByText('When to leave')).toBeNull(); // no 12-hour comparison for a multi-day trip
   });
 
@@ -197,6 +249,7 @@ describe('Long Trip Mode in the app', () => {
   });
 
   it('replans from the car when a real drive falls well behind the plan', async () => {
+    useSettings.getState().update({ fuelRangeKm: 300 });
     await plan(3);
     await vi.waitFor(() => expect(useTripStore.getState().status).toBe('ready'));
     const timed = useAppStore.getState().plan!.timed;
@@ -209,6 +262,8 @@ describe('Long Trip Mode in the app', () => {
     const replan = requests[1];
     expect(replan.progress!.alongM).toBe(along);
     expect(replan.progress!.drivenTodayS).toBeGreaterThan(0);
+    // The range used on the way is subtracted, not reset to what the trip started with (B-01).
+    expect(replan.progress!.rangeKm).toBeCloseTo(240, 0);
     await vi.waitFor(() => expect(useTripStore.getState().plan!.progress?.alongM).toBe(along));
   });
 
