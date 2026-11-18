@@ -40,7 +40,7 @@ Facts (developers.cloudflare.com, 2026-11-18):
 | Map background | OpenFreeMap (class C) | $0 |
 | **Routing** (car, walk, bike), alternatives, via points, stops, avoid tolls/motorways/ferries, turn restrictions, turn-by-turn steps | **on the device** (`src/roads`, a Web Worker) over **static road files**: one main-roads file per region + street tiles (`public/data/roads/`), built from OSM by `pipelines/roads` | $0 |
 | **Search** (suggestions, search, reverse naming) | on the device over **static index shards** (`public/data/search/`) | $0 |
-| **Weather, air quality, ground heights** | on the device, reading **static tile files** (`public/data/weather/`, `…/air/`, `…/elevation/`) built on a schedule | $0 |
+| **Weather, air quality, ground heights** | on the device, reading **static tile files** built on a schedule: the forecast for the whole world in 2° tiles (≈ 5,050 files, ≈ 40 kB each), air quality worldwide in 4° tiles, heights per region | $0 |
 | Places, speed limits, cameras, borders | static tiles / bundled file (already) | $0 |
 | **Long Trip planner** | on the device (same `src/trip` module) | $0 |
 | Data builds | GitHub Actions (public repo) → deploy of static assets | $0 |
@@ -66,7 +66,9 @@ Rules that follow:
 
 ## Consequences
 - Regions are built one by one (Georgia first). Each region's files must fit the Free plan (20,000 files per Worker
-  version, 25 MiB per file); more regions go to more Workers on the same free account if needed.
+  version, 25 MiB per file); more regions go to more Workers on the same free account if needed. The worldwide
+  forecast uses 2° tiles so it fits beside the app (≈ 14,300 files in all); when more regions need the room, the
+  forecast moves to its own free Worker (where 1° tiles, ≈ 18,200 files, would fit).
 - Routing quality is ours to maintain: hierarchical search (main roads + street tiles near the ends) instead of
   Valhalla; no travel-time matrix yet (detours are estimated).
 - Sharing and reports can pause on very busy days. That is the price of never receiving a bill.

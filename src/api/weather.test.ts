@@ -63,7 +63,7 @@ const rec = record(700, {
 
 describe('the weather grid', () => {
   it('finds the nearest 0.25° cell, its tile and its place in the tile', () => {
-    expect(gridCell(41.6935, 44.8015)).toEqual({ row: 527, col: 899, lat: 41.75, lon: 44.75, ty: 131, tx: 224, i: 15 });
+    expect(gridCell(41.6935, 44.8015)).toEqual({ row: 527, col: 899, lat: 41.75, lon: 44.75, ty: 65, tx: 112, i: 59 });
     expect(gridCell(-90, -180)).toMatchObject({ row: 0, col: 0, i: 0 });
     expect(gridCell(10, 180)).toMatchObject({ col: 0, lon: -180 }); // the date line wraps
     expect(gridCell(10, 179.9)).toMatchObject({ col: 0 });

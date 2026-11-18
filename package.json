@@ -30,7 +30,7 @@
     "data:elevation": "node --experimental-strip-types --no-warnings pipelines/elevation/build.mjs",
     "data:air": "node --experimental-strip-types --no-warnings pipelines/air/build.mjs",
     "data:roads": "node --experimental-strip-types --no-warnings --max-old-space-size=8192 pipelines/roads/build.mjs",
-    "data:all": "npm run data:download && npm run data:osm && npm run data:roads && npm run data:elevation && npm run data:weather -- --bbox 36,38,52,46 && npm run data:air -- --max-mb 60"
+    "data:all": "npm run data:download && npm run data:osm && npm run data:roads && npm run data:elevation && npm run data:weather && npm run data:air -- --max-mb 60"
   },
   "dependencies": {
     "@photostructure/tz-lookup": "11.7.0",

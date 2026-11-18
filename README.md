@@ -26,7 +26,7 @@ Worker for live location sharing and driver reports.
 npm install
 npm run data:all     # our data, once (and again to refresh): Georgia's OpenStreetMap extract (~100 MB, Geofabrik,
                      # MD5-checked) → places, search index (197 000 places, streets, addresses) and road files;
-                     # ground heights (Copernicus DEM); a forecast for the Caucasus (ECMWF/GFS) and air quality
+                     # ground heights (Copernicus DEM); the forecast for the whole world (ECMWF/GFS) and air quality
                      # (CAMS) from the Open-Meteo open-data archive — all as static files under public/data
 npm run dev          # app on http://localhost:5173 + the Worker on :8787 (live sharing, driver reports)
 npm test             # unit + scenario tests, no network (routing on real roads once data:all has run)

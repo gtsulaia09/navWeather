@@ -182,7 +182,7 @@ export class OmVariable {
    * The reader is asked for whole chunks only and the block is cut out here: it decodes small reads inside one
    * chunk wrongly (a single cell of the DEM came back as -32591 instead of 428 m, every time, from the same bytes).
    */
-  async read(r0, r1, c0, c1) {
+  async read(r0, r1, c0, c1, { keepCache = false } = {}) {
     const [cr, cc] = this.reader.getChunkDimensions();
     const R0 = Math.floor(r0 / cr) * cr;
     const R1 = Math.min(this.dims[0], Math.ceil(r1 / cr) * cr);
@@ -207,7 +207,9 @@ export class OmVariable {
         all = c;
       }
     } finally {
-      this.backend.clear();
+      // `keepCache`: the next read of the same rows reuses the downloaded blocks (a block holds whole rows of
+      // chunks, so reads side by side share them); the caller clears with `clearCache()` when moving on.
+      if (!keepCache) this.backend.clear();
     }
     if (R0 === r0 && R1 === r1 && C0 === c0 && C1 === c1) return all;
     const W = C1 - C0;
@@ -217,6 +219,10 @@ export class OmVariable {
     return out;
   }
 
+  /** Forget downloaded blocks (after reads made with `keepCache`). */
+  clearCache() {
+    this.backend.clear();
+  }
   dispose() {
     this.reader.dispose();
   }

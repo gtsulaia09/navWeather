@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Our weather forecast (DEVELOPMENT_PLAN DP-4.6, DP-6.6; ADR-019): open model data → static 1° tile files under
+ * Our worldwide weather forecast (DEVELOPMENT_PLAN DP-4.6, DP-6.6; ADR-019): open model data → static 2° tile files under
  * public/data/weather that the device reads (src/api/weather.ts describes the format). ADR-015 class B: open data
  * files downloaded on a schedule — no weather API, no key, no per-request fee, no weather server.
  *
@@ -8,7 +8,7 @@
  *   npm run data:weather -- --bbox 39,40,47,44            # only tiles touching this box (w,s,e,n): a quick local run
  *   npm run data:weather -- --out data/build/weather      # another folder
  *   npm run data:weather -- --force                       # rebuild even when these runs are already there
- *   npm run data:weather -- --max-mb 400                  # download ceiling for one run (default 350 MB)
+ *   npm run data:weather -- --max-mb 1500                 # download ceiling for one run (default 1200 MB)
  *
  * Sources (read with HTTP range requests from the Open-Meteo open-data archive on AWS, CC BY 4.0):
  *   ECMWF IFS 0.25° (CC BY 4.0) — temperature, humidity, clouds, precipitation, snowfall, wind, gusts, CAPE,
@@ -16,8 +16,8 @@
  *     (00Z/12Z, 15 days) continues it.
  *   NOAA GFS 0.25° (public domain) — visibility (fog).
  * Only land and its coasts are kept (tiles that touch a country of Natural Earth; not Antarctica): about 40 % of
- * the globe, ~250 MB downloaded per run. Two builds stay in R2 (the newest and the one before, for requests in
- * flight); older ones are deleted.
+ * the globe, ≈ 800 MB downloaded per run (in 8 kB blocks, so oceans are not fetched). Two builds stay (the newest and
+ * the one before, for devices still reading it); older ones are deleted.
  */
 import { readFileSync } from 'node:fs';
 import { GRID, LATEST_KEY, MISSING, recordValues, runPrefix, TILE, tileKey, VARS } from '../../src/api/weather.ts';
@@ -31,8 +31,9 @@ const OUT = opt('out');
 const BBOX = opt('bbox')?.split(',').map(Number);
 const FORCE = args.includes('--force');
 const ENV = opt('env');
-// ~270 MB for the world (land and coasts); the run stops before going over this.
-setDownloadLimit(Number(opt('max-mb') ?? 350));
+// ≈ 800 MB for the world (land and coasts; measured on Europe: 52 MB for 323 tiles); the run stops before going over
+// the ceiling. Open data on AWS, free to read; on GitHub Actions it takes ≈ 20 minutes.
+setDownloadLimit(Number(opt('max-mb') ?? 1200));
 
 const IFS = 'ecmwf_ifs025';
 const GFS = 'ncep_gfs025';
@@ -53,8 +54,13 @@ const SOURCES = {
 const SOURCE_TEXT =
   'ECMWF IFS 0.25° open data (CC BY 4.0) and NOAA GFS 0.25° (public domain), from the Open-Meteo open-data archive on AWS (CC BY 4.0)';
 
-/** Tiles read in one go per variable: 8 × 20 columns × 20 rows × ≤210 steps × 4 bytes ≈ 2.7 MB of decoder memory. */
-const MAX_SPAN_TILES = 8;
+/**
+ * The source is read in square blocks of READ cells (a whole number of our tiles, ≈ 20 cells: what the archive reads
+ * well), several blocks side by side per read — at most ≈ 160 columns, so one variable read stays near
+ * 160 columns × READ rows × ≤210 steps × 4 bytes ≈ 3 MB of decoder memory.
+ */
+const READ = TILE * Math.max(1, Math.round(20 / TILE));
+const MAX_SPAN_TILES = Math.max(1, Math.floor(160 / READ));
 const range = (a, b) => Array.from({ length: b - a + 1 }, (_, i) => a + i);
 
 const t0 = Date.now();
@@ -108,9 +114,8 @@ if (previous?.run === run && !FORCE) {
 
 // ---- which tiles: land and its coasts ----
 
-// Files are small 1° tiles (TILE cells a side) that the device downloads whole (ADR-019); the source is read in
+// Files are small tiles (TILE cells a side, 2°) that the device downloads whole (ADR-019); the source is read in
 // larger blocks (READ cells a side) so the download from the archive does not grow.
-const READ = 20;
 const SUB = READ / TILE;
 const countries = decodeCountries(JSON.parse(readFileSync('src/trip/data/countries-v1.json', 'utf8')));
 const wrap = (x) => ((((x + 180) % 360) + 360) % 360) - 180;
@@ -149,7 +154,9 @@ for (const [j, v] of VARS.entries()) {
   const [model, name, unit] = SOURCES[v.key];
   const segments = model === GFS ? [[gfs, -Infinity, Infinity]] : [[newest, -Infinity, newestEnd], ...(older ? [[older, newestEnd, Infinity]] : [])];
   for (const [r, after, until] of segments) {
-    const file = await OmVariable.open(`${r.dir}/${name}.om`);
+    // Small download blocks: a 64 kB block holds about a whole row of the world, so a land-only read would fetch the
+    // oceans too; with 8 kB blocks a read takes little more than its land.
+    const file = await OmVariable.open(`${r.dir}/${name}.om`, { blockKB: 8 });
     if (unit !== null && file.unit !== unit) throw new Error(`${file.path}: unit ${file.unit}, expected ${unit}`);
     if (file.dims[0] !== GRID.rows || file.dims[1] !== GRID.cols) throw new Error(`${file.path}: grid ${file.dims}`);
     const map = [];
@@ -198,7 +205,7 @@ for (let by = 0; by < blockRows; by++) {
     const c0 = bx0 * READ;
     const c1 = (bx1 + 1) * READ;
     const width = c1 - c0;
-    const data = await Promise.all(sources.map((s) => s.file.read(r0, r1, c0, c1)));
+    const data = await Promise.all(sources.map((s) => s.file.read(r0, r1, c0, c1, { keepCache: true })));
     for (const [ty, tx] of smalls) {
       const rec = new Int16Array(TILE * TILE * RV).fill(MISSING);
       for (let pr = 0; pr < TILE; pr++) {
@@ -234,6 +241,8 @@ for (let by = 0; by < blockRows; by++) {
       written++;
     }
   }
+  // Blocks of this band's rows were kept for the band's other reads; the next band needs other rows.
+  for (const s of sources) s.file.clearCache();
   console.log(
     `  tiles ${written}/${tileCount} · downloaded ${(stats.bytes / 1e6).toFixed(0)} MB in ${stats.requests} requests · ${Math.round((Date.now() - t0) / 1000)} s`,
   );

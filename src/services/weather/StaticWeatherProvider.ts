@@ -31,7 +31,7 @@ function zoneLookup() {
 
 /**
  * Our forecast, worked out on the device (ADR-019; DP-4.6, DP-6.6): the weather pipeline publishes open model data
- * (ECMWF IFS, NOAA GFS) as static 1° tile files; this reads the tiles a request needs and answers exactly as the old
+ * (ECMWF IFS, NOAA GFS) for the whole world as static 2° tile files; this reads the tiles a request needs and answers exactly as the old
  * forecast endpoint did (Open-Meteo-shaped, read by the same normaliser). No weather server, no request limit, and no
  * coordinates leave the device — only requests for whole tiles.
  *
@@ -85,7 +85,11 @@ export class StaticWeatherProvider implements WeatherProvider {
     const key = tileKey(i.run, ty, tx);
     return this.tiles.get(key, async () => {
       const bytes = await fetchBytes(dataUrl(this.base, key), PROVIDER, signal);
-      if (!bytes) return null;
+      if (!bytes) {
+        // A new deploy replaced this run's files: look at the index again on the next request, not in 10 minutes.
+        this.indexAt = 0;
+        return null;
+      }
       return new Int16Array(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
     });
   }

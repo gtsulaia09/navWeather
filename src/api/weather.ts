@@ -7,14 +7,15 @@
  * both read from the Open-Meteo open-data archive on AWS (CC BY 4.0). The answer is Open-Meteo-compatible (the same
  * query and the same JSON), so the app's Open-Meteo reader serves both.
  *
- * Storage: one gzip-compressed file per 1° × 1° tile of the 0.25° grid (land and its coasts only, ≈ 30 kB), point
- * after point; every point is a record of int16: the grid cell's height, then each variable at every forecast step.
- * The device downloads the whole tile (static assets have no range requests) and keeps it for the run.
+ * Storage: one gzip-compressed file per 2° × 2° tile of the 0.25° grid (land and its coasts only: ≈ 5,050 files for
+ * the world, ≈ 40 kB each), point after point; every point is a record of int16: the grid cell's height, then each
+ * variable at every forecast step. The device downloads the whole tile (static assets have no range requests) and
+ * keeps it for the run. 2° rather than 1° so the world fits in one Free-plan Worker (20,000 files) with the app.
  */
 
 export const GRID = { lat0: -90, lon0: -180, step: 0.25, rows: 721, cols: 1440 } as const;
 /** Grid cells per tile side (5°). */
-export const TILE = 4;
+export const TILE = 8;
 export const MISSING = -32768;
 export const MAX_LOCATIONS = 100;
 /** Older than this (from the model run's start), our forecast is not served: the app uses its fallback. */

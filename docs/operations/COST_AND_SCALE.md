@@ -29,13 +29,16 @@ could bill (D1, R2, Containers, Queues).
 | --- | --- | --- | --- |
 | Main roads of the region | 1 | 0.87 MB gzip | once per build (cached) |
 | Street tiles (zoom 11) | 410 | 14.4 MB gzip total, ≈ 35 kB each (largest, central Tbilisi, 1.1 MB) | the tiles around start and end |
-| Search index | 2,169 word files + 197 row blocks | ≈ 66 MB raw, compressed by Cloudflare | one word file + a few row blocks |
-| Forecast | 1° tiles, ≈ 30 kB gzip | Caucasus box | the tiles along the route, once per model run |
+| Search index | 2,169 word files + 788 row blocks (250 rows each) | ≈ 66 MB raw, compressed by Cloudflare | one word file + a few row blocks (≈ 55 kB raw each) |
+| Forecast (whole world, land and coasts) | 5,050 tiles of 2°, ≈ 45 kB gzip each | ≈ 200 MB per run | the tiles along the route, once per model run |
 | Places tiles | 2,681 | 8.7 MB | the tiles near the route |
 
 Everything inside a build folder is immutable: cached by the browser for a year and by the service worker (600 files),
-so repeat trips and searches need no download at all. Total files of one deploy (Georgia): ≈ 8,000 of the 20,000 a
-Free-plan Worker may hold.
+so repeat trips and searches need no download at all. Total files of one deploy (Georgia + the world's forecast):
+≈ 14,300 of the 20,000 a Free-plan Worker may hold.
+
+Building the world's forecast reads ≈ 800 MB of open data per run (ECMWF/GFS in the Open-Meteo archive on AWS, read in
+8 kB blocks so oceans are skipped; measured 52 MB for Europe's 323 tiles) — free, on GitHub Actions, ≈ 20 minutes.
 
 ## 3. Scale rules
 
@@ -54,6 +57,6 @@ Free-plan Worker may hold.
 | Trigger | Action |
 | --- | --- |
 | A region's street tile > 1 MB (central Tbilisi today) | split dense tiles one zoom level deeper (smaller first download) |
-| Files of one deploy near 20,000 | move a data set (search, places) to its own free Worker |
+| Files of one deploy near 20,000 (≈ 14,300 now) | move the forecast to its own free Worker (then 1° tiles, ≈ 18,200 files, fit there), or pack places tiles by area |
 | Sharing/reports "busy" on most days | shard reports per region; consider peer-to-peer sharing — never a paid plan |
-| New region | `pipelines/roads`, `pipelines/osm` for its extract; forecast box widened |
+| New region | `pipelines/roads`, `pipelines/osm` for its extract (the forecast already covers the world) |
