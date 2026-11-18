@@ -1,7 +1,7 @@
 import { normalizeOsrmRoute } from '../services/routing/OSRMProvider';
 import { StyleUrlMapProvider } from '../services/map/MapProvider';
 import { FlightEstimateProvider } from '../services/routing/FlightEstimateProvider';
-import { motisToRoutes, type MotisItinerary } from '../services/routing/TransitousProvider';
+import { motisToRoutes, type MotisItinerary } from '../services/routing/motis';
 import { ProviderError } from '../services/http';
 import type { Poi, PoiProvider } from '../services/places/PoiProvider';
 import { setProviders, type Providers } from '../services/providers';

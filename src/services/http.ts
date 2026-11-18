@@ -6,7 +6,9 @@ export type ProviderErrorKind =
   | 'rate-limited'
   | 'invalid-response'
   | 'not-found'
-  | 'no-route';
+  | 'no-route'
+  /** Outside the regions our static data cover (ADR-019): "not available here yet". */
+  | 'not-covered';
 
 export class ProviderError extends Error {
   constructor(

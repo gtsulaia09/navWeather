@@ -2,6 +2,8 @@
 
 **Status:** Accepted · **Date:** 2026-10-02 · **Revised:** 2026-10-04 (aligned with ADR-016; history in git)
 
+> **Revised by [ADR-019](ADR-019-zero-owner-cost.md) (2026-11-18):** no D1 and no R2 — search index, forecasts, air quality, heights and roads are static files under `/data`; Durable Objects only for live sharing and reports, on the Free plan.
+
 ## Context
 Today the server stores only live shares (one SQLite Durable Object per link: latest position, route once, expiry) and
 driver reports (one SQLite Durable Object: reports and votes with daily-salted reporter hashes, hourly expiry).

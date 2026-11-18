@@ -21,15 +21,6 @@ function num(key: string, fallback: number): number {
   return Number.isFinite(n) ? n : fallback;
 }
 
-function list(key: string, fallback: string[]): string[] {
-  const v = env[key];
-  if (typeof v !== 'string' || v.trim() === '') return fallback;
-  return v
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
-}
-
 /** Our API: '' = this page's origin (the Worker serves both); an absolute origin otherwise (DP-2.3). */
 const apiOriginValue = str('VITE_API_ORIGIN', '').replace(/\/+$/, '');
 setApiOrigin(apiOriginValue);
@@ -37,79 +28,38 @@ const api = (path: string) => `${apiOriginValue}/api/v1${path}`;
 
 export const config = {
   providers: {
-    /** Roads: our Valhalla behind the Worker (DP-6.2); `osrm` = the public servers only. */
-    routing: str('VITE_ROUTING_PROVIDER', 'valhalla'),
-    /** When our engine isn't running or a point is outside its region: `osrm` (public servers) or `none`. */
-    routingFallback: str('VITE_ROUTING_FALLBACK', 'osrm'),
-    /** Forecasts: ours, worldwide (`/api/v1/weather`, DP-6.6); `open-meteo` = the public API only. */
-    weather: str('VITE_WEATHER_PROVIDER', 'api'),
-    /** Where our forecast isn't there (not built, too old, far out at sea): `open-meteo` (public API) or `none`. */
-    weatherFallback: str('VITE_WEATHER_FALLBACK', 'open-meteo'),
-    /** Search, suggestions and reverse naming: our geocoder (`/api/v1/geocode` + settlement tiles, DP-6.4). */
-    geocoding: str('VITE_GEOCODING_PROVIDER', 'api'),
-    autocomplete: str('VITE_AUTOCOMPLETE_PROVIDER', 'api'),
-    /** When our index has nothing (a town abroad) or isn't loaded: `photon` (until more regions) or `none`. */
-    geocodingFallback: str('VITE_GEOCODING_FALLBACK', 'photon'),
-    /** Settlements, places and road data: our tiles (DP-6.5); `overpass` (public servers) only to compare. */
+    /**
+     * Everything per user runs on the device over our static files (ADR-019): no routing, weather, search or
+     * elevation server, and no public server with limits. Outside the regions we build, the app says
+     * "not available here yet".
+     */
+    routing: str('VITE_ROUTING_PROVIDER', 'local'),
+    weather: str('VITE_WEATHER_PROVIDER', 'static'),
+    geocoding: str('VITE_GEOCODING_PROVIDER', 'static'),
+    autocomplete: str('VITE_AUTOCOMPLETE_PROVIDER', 'static'),
+    /** Settlements, places and road data: our tiles (DP-6.5). */
     places: str('VITE_PLACES_PROVIDER', 'tiles'),
-    /** Outside the region our tiles cover: `overpass` (until that region is built) or `none`. */
-    placesFallback: str('VITE_PLACES_FALLBACK', 'overpass'),
-    /** Ground heights: our DEM (`/api/v1/elevation`, DP-6.6); `open-meteo` = the public API only. */
-    elevation: str('VITE_ELEVATION_PROVIDER', 'api'),
-    /** Where our DEM tiles don't reach (or the Worker can't answer): `open-meteo` (public API) or `none`. */
-    elevationFallback: str('VITE_ELEVATION_FALLBACK', 'open-meteo'),
+    elevation: str('VITE_ELEVATION_PROVIDER', 'static'),
     map: str('VITE_MAP_PROVIDER', 'openfreemap'),
     poi: str('VITE_POI_PROVIDER', 'tiles'),
     speedLimits: str('VITE_SPEED_LIMIT_PROVIDER', 'tiles'),
     traffic: str('VITE_TRAFFIC_PROVIDER', 'none'),
     incidents: str('VITE_INCIDENT_PROVIDER', 'reports'),
-    /** Air quality: ours, worldwide (`/api/v1/air`, CAMS tiles, DP-4.6); `open-meteo` = the public API only. */
-    airQuality: str('VITE_AIR_QUALITY_PROVIDER', 'api'),
-    /** When our tiles can't answer (not built here, too old): `open-meteo` (public API) or `none`. */
-    airQualityFallback: str('VITE_AIR_QUALITY_FALLBACK', 'open-meteo'),
+    airQuality: str('VITE_AIR_QUALITY_PROVIDER', 'static'),
     speech: str('VITE_SPEECH_PROVIDER', 'browser'),
   },
   endpoints: {
-    /** Our routing API (the Worker's `/api/v1/route`, same origin). */
-    route: str('VITE_ROUTE_URL', api('/route')),
-    osrm: str('VITE_OSRM_BASE_URL', 'https://router.project-osrm.org'),
-    /** OpenStreetMap community routing instances for walking and cycling (the demo server above only does cars). */
-    osrmFoot: str('VITE_OSRM_FOOT_URL', 'https://routing.openstreetmap.de/routed-foot'),
-    osrmBike: str('VITE_OSRM_BIKE_URL', 'https://routing.openstreetmap.de/routed-bike'),
-    /** Public transport: our MOTIS behind the Worker (DP-6.7). Empty turns public transport off. */
-    transit: env.VITE_TRANSIT_URL === '' ? '' : str('VITE_TRANSIT_URL', api('/transit')),
-    /** Where our timetables don't reach (or our engine isn't running): Transitous (MOTIS, open source and
-     * non-commercial use only). Empty = no fallback. */
-    transitFallback: env.VITE_TRANSIT_FALLBACK_URL === '' ? '' : str('VITE_TRANSIT_FALLBACK_URL', 'https://api.transitous.org'),
-    /** Our forecast (the Worker's `/api/v1/weather`, same origin). */
-    weather: str('VITE_WEATHER_URL', api('/weather')),
-    /** Our ground heights (the Worker's `/api/v1/elevation`, same origin). */
-    elevation: str('VITE_ELEVATION_URL', api('/elevation')),
-    /** Our air quality (the Worker's `/api/v1/air`, same origin). */
-    air: str('VITE_AIR_URL', api('/air')),
-    openMeteo: str('VITE_OPEN_METEO_BASE_URL', 'https://api.open-meteo.com'),
-    openMeteoAir: str('VITE_OPEN_METEO_AIR_URL', 'https://air-quality-api.open-meteo.com'),
-    nominatim: str('VITE_NOMINATIM_BASE_URL', 'https://nominatim.openstreetmap.org'),
-    photon: str('VITE_PHOTON_BASE_URL', 'https://photon.komoot.io'),
-    /** Driver reports relay (same origin as the app: the Worker in worker/). */
+    /** Our static data (roads, search, weather, air, heights, places): free static files on the app's origin. */
+    data: str('VITE_DATA_URL', '/data'),
+    /** Driver reports relay (the Worker in worker/, Free plan). */
     reports: str('VITE_REPORTS_URL', api('/reports')),
-    /** Rough area of the connection, when the device can't give a position (same Worker). */
-    whereami: str('VITE_WHEREAMI_URL', api('/whereami')),
-    /** Our geocoder (the Worker's `/api/v1/geocode`, same origin). */
-    geocode: str('VITE_GEOCODE_URL', api('/geocode')),
     /** Our places tiles (static assets built by `npm run data:osm`). */
     placesTiles: str('VITE_PLACES_TILES_URL', '/data/places/v1'),
-    overpass: list('VITE_OVERPASS_URLS', [
-      'https://overpass-api.de/api/interpreter',
-      'https://overpass.kumi.systems/api/interpreter',
-    ]),
     mapStyleLight: str('VITE_MAP_STYLE_LIGHT', 'https://tiles.openfreemap.org/styles/positron'),
     mapStyleDark: str('VITE_MAP_STYLE_DARK', 'https://tiles.openfreemap.org/styles/dark'),
   },
   geocoding: {
     language: str('VITE_GEOCODING_LANGUAGE', 'en'),
-    /** Nominatim policy: max 1 request/second. */
-    nominatimMinIntervalMs: num('VITE_NOMINATIM_MIN_INTERVAL_MS', 1100),
     autocompleteDebounceMs: num('VITE_AUTOCOMPLETE_DEBOUNCE_MS', 300),
   },
   weather: {
@@ -122,18 +72,12 @@ export const config = {
     requestTimeoutMs: num('VITE_WEATHER_TIMEOUT_MS', 15000),
     /** Hours of forecast always requested (rounded up to cover the whole trip). */
     minForecastHours: num('VITE_WEATHER_MIN_FORECAST_HOURS', 48),
-    /** How often to ask the provider whether a newer model run exists. */
+    /** How often to check whether a newer forecast build exists (a small static index file). */
     updateCheckMinutes: num('VITE_WEATHER_UPDATE_CHECK_MINUTES', 10),
-    openMeteoUpdateModels: list('VITE_OPEN_METEO_UPDATE_MODELS', ['ecmwf_ifs025', 'dwd_icon', 'ncep_gfs025']),
   },
   routing: {
     /** Roads offered to choose from (the best one included), each with its own forecast. */
     maxRoutes: Math.max(1, Math.min(4, Math.round(num('VITE_ROUTE_OPTIONS_MAX', 3)))),
-    /**
-     * Least time between requests to one OSRM server (ms). The public servers' usage policy is at most
-     * 1 request per second; set 0 for a self-hosted router.
-     */
-    osrmMinIntervalMs: Math.max(0, num('VITE_OSRM_MIN_INTERVAL_MS', 1000)),
   },
   sampling: {
     maxIntervalMinutes: num('VITE_SAMPLE_MAX_INTERVAL_MINUTES', 45),

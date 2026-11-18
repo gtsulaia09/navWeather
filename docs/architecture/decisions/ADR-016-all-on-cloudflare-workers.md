@@ -6,6 +6,8 @@
 **Revised accordingly:** [ADR-004](ADR-004-routing-engine.md), [ADR-006](ADR-006-map-stack.md), [ADR-007](ADR-007-data-storage.md),
 [ADR-011](ADR-011-public-transport.md), [ADR-013](ADR-013-trip-planner.md) · **Plan:** [DEVELOPMENT_PLAN](../../DEVELOPMENT_PLAN.md) · **Catalogue:** [FREE_STACK_PLAN §6a](../../FREE_STACK_PLAN.md)
 
+> **Revised by [ADR-019](ADR-019-zero-owner-cost.md) (2026-11-18):** Workers (not Pages) and localhost parity stand; Workers Paid, Containers, R2, D1, Queues and the custom domain are dropped — Free plan, static assets, Durable Objects for sharing and reports only.
+
 ## Context
 ADR-015 allows exactly one cost — hosting — and requires every third-party API and data source to be free forever.
 On 2026-10-04 the owner asked whether the whole project (app **and** servers) can run on **Cloudflare Pages**, with

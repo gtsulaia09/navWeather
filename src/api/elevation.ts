@@ -19,6 +19,9 @@ export const ELEV_INDEX_BYTES = ELEV_BLOCKS * ELEV_BLOCKS * 8;
 export const MAX_ELEVATION_POINTS = 100;
 
 export const elevTileKey = (lat: number, lon: number) => `${ELEV_PREFIX}/${lat}/${lon}.bin`;
+/** Static files (ADR-019): a tile's header with its block index, and each non-empty block (deflate-raw). */
+export const elevHeaderKey = (lat: number, lon: number) => `${ELEV_PREFIX}/${lat}/${lon}/h.bin`;
+export const elevBlockKey = (lat: number, lon: number, block: number) => `${ELEV_PREFIX}/${lat}/${lon}/${block}.z`;
 
 /** `elev/v1/index.json`: what has been built. */
 export interface ElevationIndex {

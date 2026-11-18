@@ -3,6 +3,8 @@
 **Status:** Accepted · **Date:** 2026-10-02 · **Revised:** 2026-10-04 (aligned with ADR-016; history in git) ·
 **Amends:** ADR-003 (for trip planning only)
 
+> **Revised by [ADR-019](ADR-019-zero-owner-cost.md) (2026-11-18):** the same planner module runs on the device (`src/services/trip/requests.ts`); stop places come from our places tiles; the Worker endpoints are gone.
+
 ## Context
 Long Trip Mode ([features/LONG_TRIP_MODE.md](../../features/LONG_TRIP_MODE.md)) turns a route into a trip plan:
 classification, rest / fuel / meal / overnight stops, multi-day segments, weather risks at the real (stop-aware) times,

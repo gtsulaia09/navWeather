@@ -8,7 +8,7 @@
   "scripts": {
     "dev": "node scripts/dev.mjs",
     "dev:web": "vite",
-    "dev:api": "node scripts/worker-assets.mjs && wrangler dev --port 8787 --ip 127.0.0.1",
+    "dev:api": "node scripts/worker-assets.mjs && wrangler dev --port 8787 --ip 127.0.0.1 --assets .wrangler/dev-assets",
     "build": "tsc -b && vite build",
     "build:preview": "tsc -b && vite build --mode preview",
     "preview": "vite preview",
@@ -22,11 +22,6 @@
     "test:reports": "node scripts/reports-smoke.mjs",
     "deploy:preview": "npm run build:preview && wrangler deploy --env preview",
     "deploy:production": "npm run build && wrangler deploy --env production",
-    "test:trips": "node scripts/trip-smoke.mjs",
-    "test:geocode": "node scripts/geocode-smoke.mjs",
-    "test:route": "node scripts/route-smoke.mjs",
-    "test:weather": "node scripts/weather-smoke.mjs",
-    "test:elevation": "node scripts/elevation-smoke.mjs",
     "e2e": "playwright test",
     "data:borders": "node pipelines/borders/build.mjs",
     "data:download": "node pipelines/osm/download.mjs",
@@ -34,13 +29,8 @@
     "data:weather": "node --experimental-strip-types --no-warnings pipelines/weather/build.mjs",
     "data:elevation": "node --experimental-strip-types --no-warnings pipelines/elevation/build.mjs",
     "data:air": "node --experimental-strip-types --no-warnings pipelines/air/build.mjs",
-    "db:geo:local": "wrangler d1 execute navweather-geo --local --file data/build/ge/geocode.sql",
-    "seed:local": "npm run data:download && npm run data:osm && npm run db:geo:local",
-    "seed:preview": "npm run data:download && npm run data:osm && wrangler d1 execute navweather-geo-preview --env preview --remote --file data/build/ge/geocode.sql",
-    "seed:production": "npm run data:download && npm run data:osm && wrangler d1 execute navweather-geo-production --env production --remote --file data/build/ge/geocode.sql",
-    "engines:up": "node scripts/engines.mjs up",
-    "engines:down": "node scripts/engines.mjs down",
-    "engines:status": "node scripts/engines.mjs status"
+    "data:roads": "node --experimental-strip-types --no-warnings --max-old-space-size=8192 pipelines/roads/build.mjs",
+    "data:all": "npm run data:download && npm run data:osm && npm run data:roads && npm run data:elevation && npm run data:weather -- --bbox 36,38,52,46 && npm run data:air -- --max-mb 60"
   },
   "dependencies": {
     "@photostructure/tz-lookup": "11.7.0",

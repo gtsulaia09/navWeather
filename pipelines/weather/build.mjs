@@ -1,17 +1,14 @@
 #!/usr/bin/env node
 /**
- * Our worldwide weather forecast (DEVELOPMENT_PLAN DP-4.6, DP-6.6): open model data → weather tiles in R2, which the
- * Worker's `/api/v1/weather/forecast` reads (src/api/weather.ts describes the format). ADR-015 class B: open data
- * files downloaded on a schedule — no weather API, no key, no per-request fee.
+ * Our weather forecast (DEVELOPMENT_PLAN DP-4.6, DP-6.6; ADR-019): open model data → static 1° tile files under
+ * public/data/weather that the device reads (src/api/weather.ts describes the format). ADR-015 class B: open data
+ * files downloaded on a schedule — no weather API, no key, no per-request fee, no weather server.
  *
- *   npm run data:weather                                  # newest runs → local R2 (what `npm run dev` serves)
+ *   npm run data:weather                                  # newest runs → public/data/weather (dev and deploy serve it)
  *   npm run data:weather -- --bbox 39,40,47,44            # only tiles touching this box (w,s,e,n): a quick local run
- *   npm run data:weather -- --out data/build/weather      # write the objects as files instead of R2
+ *   npm run data:weather -- --out data/build/weather      # another folder
  *   npm run data:weather -- --force                       # rebuild even when these runs are already there
  *   npm run data:weather -- --max-mb 400                  # download ceiling for one run (default 350 MB)
- *   npm run data:weather -- --env production              # into that environment's bucket on Cloudflare (needs
- *                                                         # `wrangler login` or CLOUDFLARE_API_TOKEN; the schedule
- *                                                         # in .github/workflows/weather.yml does this)
  *
  * Sources (read with HTTP range requests from the Open-Meteo open-data archive on AWS, CC BY 4.0):
  *   ECMWF IFS 0.25° (CC BY 4.0) — temperature, humidity, clouds, precipitation, snowfall, wind, gusts, CAPE,
@@ -111,6 +108,10 @@ if (previous?.run === run && !FORCE) {
 
 // ---- which tiles: land and its coasts ----
 
+// Files are small 1° tiles (TILE cells a side) that the device downloads whole (ADR-019); the source is read in
+// larger blocks (READ cells a side) so the download from the archive does not grow.
+const READ = 20;
+const SUB = READ / TILE;
 const countries = decodeCountries(JSON.parse(readFileSync('src/trip/data/countries-v1.json', 'utf8')));
 const wrap = (x) => ((((x + 180) % 360) + 360) % 360) - 180;
 function wanted(ty, tx) {
@@ -123,17 +124,22 @@ function wanted(ty, tx) {
   for (let y = s; y <= n; y += GRID.step / 2) for (let x = w; x <= e; x += GRID.step / 2) if (countryAt(countries, [wrap(x), Math.max(-90, Math.min(90, y))])) return true;
   return false;
 }
-const tileRows = Math.ceil(GRID.rows / TILE);
-const tileCols = GRID.cols / TILE;
-const land = [];
-for (let ty = 0; ty < tileRows; ty++) {
-  const row = [];
-  for (let tx = 0; tx < tileCols; tx++) if (wanted(ty, tx)) row.push(tx);
-  land.push(row);
+const blockRows = Math.ceil(GRID.rows / READ);
+const blockCols = GRID.cols / READ;
+/** Per block row: block column → the small tiles [ty, tx] wanted in it. */
+const blocks = [];
+let tileCount = 0;
+for (let by = 0; by < blockRows; by++) {
+  const row = new Map();
+  for (let bx = 0; bx < blockCols; bx++) {
+    const list = [];
+    for (let sy = 0; sy < SUB; sy++) for (let sx = 0; sx < SUB; sx++) if (by * SUB + sy < Math.ceil(GRID.rows / TILE) && wanted(by * SUB + sy, bx * SUB + sx)) list.push([by * SUB + sy, bx * SUB + sx]);
+    if (list.length) row.set(bx, list);
+    tileCount += list.length;
+  }
+  blocks.push(row);
 }
-const tileCount = land.reduce((n, r) => n + r.length, 0);
-console.log(`${tileCount} of ${tileRows * tileCols} tiles (land and coasts${BBOX ? `, inside ${BBOX.join(',')}` : ''})`);
-
+console.log(`${tileCount} tiles of ${TILE * GRID.step}° (land and coasts${BBOX ? `, inside ${BBOX.join(',')}` : ''})`);
 // ---- the variables, mapped onto our steps ----
 
 const outIndex = new Map(times.map((t, i) => [t, i]));
@@ -166,46 +172,52 @@ const odd = new Map();
 const ptypes = new Map();
 let written = 0;
 const out = writer(store);
+const tilesWritten = [];
 
-for (let ty = 0; ty < tileRows; ty++) {
-  if (!land[ty].length) continue;
-  const r0 = ty * TILE;
-  const r1 = Math.min(GRID.rows, r0 + TILE);
-  // Neighbouring tiles are read together (fewer, larger range requests) — but not too many: the reader decodes in
+for (let by = 0; by < blockRows; by++) {
+  if (!blocks[by].size) continue;
+  const r0 = by * READ;
+  const r1 = Math.min(GRID.rows, r0 + READ);
+  // Neighbouring blocks are read together (fewer, larger range requests) — but not too many: the reader decodes in
   // a fixed 64 MB WebAssembly heap shared by every variable read at the same time.
   const spans = [];
-  for (const tx of land[ty]) {
+  for (const bx of [...blocks[by].keys()].sort((a, b) => a - b)) {
     const last = spans[spans.length - 1];
-    if (last && last[1] === tx - 1 && tx - last[0] < MAX_SPAN_TILES) last[1] = tx;
-    else spans.push([tx, tx]);
+    if (last && last[1] === bx - 1 && bx - last[0] < MAX_SPAN_TILES) last[1] = bx;
+    else spans.push([bx, bx]);
   }
-  for (const [tx0, tx1] of spans) {
+  for (const [bx0, bx1] of spans) {
+    const smalls = range(bx0, bx1).flatMap((bx) => blocks[by].get(bx) ?? []);
     // A run stopped half-way resumes: tiles of this build already stored are not read again.
-    const done = await Promise.all(range(tx0, tx1).map((tx) => store.has(tileKey(run, ty, tx))));
+    const done = await Promise.all(smalls.map(([ty, tx]) => store.has(tileKey(run, ty, tx))));
     if (!FORCE && done.every(Boolean)) {
       written += done.length;
+      tilesWritten.push(...smalls);
       continue;
     }
-    const c0 = tx0 * TILE;
-    const c1 = (tx1 + 1) * TILE;
+    const c0 = bx0 * READ;
+    const c1 = (bx1 + 1) * READ;
     const width = c1 - c0;
     const data = await Promise.all(sources.map((s) => s.file.read(r0, r1, c0, c1)));
-    for (let tx = tx0; tx <= tx1; tx++) {
+    for (const [ty, tx] of smalls) {
       const rec = new Int16Array(TILE * TILE * RV).fill(MISSING);
-      for (let pr = 0; pr < r1 - r0; pr++) {
+      for (let pr = 0; pr < TILE; pr++) {
+        const row = ty * TILE + pr;
+        if (row >= r1) break;
         for (let pc = 0; pc < TILE; pc++) {
-          const row = r0 + pr;
           const col = tx * TILE + pc;
           const base = (pr * TILE + pc) * RV;
           const e = elevation[row * GRID.cols + col];
           if (Number.isFinite(e) && e > -999) rec[base] = Math.round(e); // -999: no height (open sea)
           sources.forEach((s, n) => {
             const values = data[n];
-            const off = (pr * width + (col - c0)) * s.T;
+            const off = ((row - r0) * width + (col - c0)) * s.T;
             const [lo, hi] = s.range;
             for (const [k, o] of s.map) {
               let x = values[off + k];
               if (!Number.isFinite(x)) continue;
+              // Accumulations a hair below zero are the model's rounding noise, not bad data: they are 0.
+              if ((s.key === 'precip' || s.key === 'swe') && x < 0 && x >= -1) x = 0;
               if (x < lo || x > hi) {
                 odd.set(s.key, (odd.get(s.key) ?? 0) + 1);
                 continue;
@@ -218,6 +230,7 @@ for (let ty = 0; ty < tileRows; ty++) {
         }
       }
       await out.put(tileKey(run, ty, tx), new Uint8Array(rec.buffer));
+      tilesWritten.push([ty, tx]);
       written++;
     }
   }
@@ -247,7 +260,7 @@ const index = {
   scales: VARS.map((v) => v.scale),
   times,
   cover,
-  tiles: land.flatMap((row, ty) => row.map((tx) => `${ty}/${tx}`)),
+  tiles: tilesWritten.map(([ty, tx]) => `${ty}/${tx}`),
 };
 const indexJson = JSON.stringify(index);
 await store.put(`${runPrefix(run)}index.json`, indexJson);

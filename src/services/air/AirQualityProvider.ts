@@ -1,5 +1,6 @@
 import type { LngLat } from '../../types/geo';
-import { fetchJson, isAbortError } from '../http';
+import { AIR_LATEST_KEY, AIR_MAX_AGE_H, AIR_NONE, airCell, airTileKey, type AirIndex } from '../../api/air';
+import { dataUrl, fetchBytes, fetchIndex, LoadCache } from '../data/staticFiles';
 
 export interface AirQuality {
   /** European AQI (0 good … 100+ extremely poor). */
@@ -12,64 +13,48 @@ export interface AirQualityProvider {
   current(coordinate: LngLat, signal?: AbortSignal): Promise<AirQuality | null>;
 }
 
-/** Open-Meteo Air Quality API (CAMS), free, no key. Cached ~30 min per ~5 km cell. */
-export class OpenMeteoAirQualityProvider implements AirQualityProvider {
-  readonly name = 'open-meteo-air';
-  private cache = new Map<string, { at: number; value: AirQuality | null }>();
-
-  constructor(private baseUrl: string) {}
-
-  async current([lon, lat]: LngLat, signal?: AbortSignal): Promise<AirQuality | null> {
-    const key = `${lat.toFixed(2)},${lon.toFixed(2)}`;
-    const hit = this.cache.get(key);
-    if (hit && Date.now() - hit.at < 30 * 60_000) return hit.value;
-    const params = new URLSearchParams({ latitude: lat.toFixed(2), longitude: lon.toFixed(2), current: 'european_aqi', timeformat: 'unixtime' });
-    const data = await fetchJson<{ current?: { time?: number; european_aqi?: number | null } }>(`${this.baseUrl.replace(/\/$/, '')}/v1/air-quality?${params}`, {
-      provider: 'Air quality service',
-      signal,
-      timeoutMs: 8000,
-    });
-    const aqi = data.current?.european_aqi;
-    const value = typeof aqi === 'number' && Number.isFinite(aqi) ? { europeanAqi: Math.round(aqi), observedAt: (data.current?.time ?? Date.now() / 1000) * 1000 } : null;
-    this.cache.set(key, { at: Date.now(), value });
-    return value;
-  }
-}
-
 /**
- * Air quality from OUR CAMS tiles (`/api/v1/air`, DEVELOPMENT_PLAN DP-4.6): the European AQI now, anywhere on land.
- * The `fallback` (the public Open-Meteo Air Quality API, while VITE_AIR_QUALITY_FALLBACK allows it) answers only when
- * our Worker can't (no tiles here, too old). Cached ~30 min per ~5 km cell, like the fallback.
+ * Air quality on the device (ADR-019; DP-4.6): our CAMS tiles as static files (4° × 4°, one byte per hour and point,
+ * ≈ 5 kB) — the European AQI for the current hour, anywhere on land we build. No air-quality server; where we have no
+ * data the answer is "not available" (null).
  */
-export class ApiAirQualityProvider implements AirQualityProvider {
+export class StaticAirQualityProvider implements AirQualityProvider {
   readonly name = 'navweather-air';
-  private cache = new Map<string, { at: number; value: AirQuality | null }>();
+  private indexAt = 0;
+  private indexP: Promise<AirIndex | null> | null = null;
+  private readonly tiles = new LoadCache<Uint8Array | null>(48);
+  private readonly base: string;
 
-  constructor(
-    private url: string,
-    private fallback: AirQualityProvider | null,
-  ) {}
+  constructor(base: string) {
+    this.base = base;
+  }
+
+  private index(signal?: AbortSignal): Promise<AirIndex | null> {
+    if (!this.indexP || Date.now() - this.indexAt > 15 * 60_000) {
+      this.indexAt = Date.now();
+      const p = fetchIndex<AirIndex>(dataUrl(this.base, AIR_LATEST_KEY), 'Air quality service', signal);
+      this.indexP = p.catch((e) => {
+        if (this.indexP === p) this.indexP = null;
+        throw e;
+      });
+    }
+    return this.indexP;
+  }
 
   async current([lon, lat]: LngLat, signal?: AbortSignal): Promise<AirQuality | null> {
-    const key = `${lat.toFixed(2)},${lon.toFixed(2)}`;
-    const hit = this.cache.get(key);
-    if (hit && Date.now() - hit.at < 30 * 60_000) return hit.value;
-    let value: AirQuality | null;
-    try {
-      const params = new URLSearchParams({ latitude: lat.toFixed(2), longitude: lon.toFixed(2) });
-      const data = await fetchJson<{ current?: { time?: number; european_aqi?: number | null } }>(`${this.url}?${params}`, {
-        provider: 'Air quality service',
-        signal,
-        timeoutMs: 8000,
-      });
-      const aqi = data.current?.european_aqi;
-      value = typeof aqi === 'number' && Number.isFinite(aqi) ? { europeanAqi: Math.round(aqi), observedAt: (data.current?.time ?? Date.now() / 1000) * 1000 } : null;
-    } catch (e) {
-      if (!this.fallback || isAbortError(e)) throw e;
-      return this.fallback.current([lon, lat], signal);
-    }
-    this.cache.set(key, { at: Date.now(), value });
-    return value;
+    const index = await this.index(signal);
+    if (!index) return null;
+    const nowS = Date.now() / 1000;
+    if (nowS - index.referenceTime > AIR_MAX_AGE_H * 3600) return null;
+    const hour = Math.floor(nowS / 3600) * 3600;
+    const h = index.times.indexOf(hour);
+    if (h < 0) return null;
+    const cell = airCell(lat, lon);
+    if (!index.tiles.includes(`${cell.ty}/${cell.tx}`)) return null;
+    const key = airTileKey(index.run, cell.ty, cell.tx);
+    const tile = await this.tiles.get(key, () => fetchBytes(dataUrl(this.base, key), 'Air quality service', signal));
+    const v = tile?.[cell.i * index.times.length + h];
+    return v === undefined || v === AIR_NONE ? null : { europeanAqi: v, observedAt: hour * 1000 };
   }
 }
 

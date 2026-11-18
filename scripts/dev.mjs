@@ -10,7 +10,7 @@
  * Only the app: `npm run dev:web`. Only the Worker: `npm run dev:api`.
  */
 import { spawn } from 'node:child_process';
-import { prepareWorkerAssets } from './worker-assets.mjs';
+import { DEV_ASSETS, prepareWorkerAssets } from './worker-assets.mjs';
 
 const API = 'http://127.0.0.1:8787/api/v1/health';
 const children = [];
@@ -72,8 +72,8 @@ const npx = process.platform === 'win32' ? 'npx.cmd' : 'npx';
 if (await apiRunning()) {
   console.log('\x1b[36m[api]\x1b[0m a Worker already answers on :8787 — using it');
 } else {
-  prepareWorkerAssets(); // dist/ with our places tiles, as the Worker sees them when deployed
-  run('api', 36, npx, ['wrangler', 'dev', '--port', '8787', '--ip', '127.0.0.1']);
+  prepareWorkerAssets(); // the app and data come from Vite here; the Worker only answers /api
+  run('api', 36, npx, ['wrangler', 'dev', '--port', '8787', '--ip', '127.0.0.1', '--assets', DEV_ASSETS]);
   // Vite can start meanwhile; say clearly when the API is (not) there.
   void waitForApi(60_000).then((ok) =>
     console.log(ok ? '\x1b[36m[api]\x1b[0m ready on http://127.0.0.1:8787 (proxied as /api)' : '\x1b[36m[api]\x1b[0m not answering yet — sharing, reports and Long Trip plans need it'),

@@ -8,7 +8,6 @@ import {
   planHours,
   pointForecast,
   recordValues,
-  tileReads,
   VARS,
   weatherCode,
   type VarKey,
@@ -64,20 +63,12 @@ const rec = record(700, {
 
 describe('the weather grid', () => {
   it('finds the nearest 0.25° cell, its tile and its place in the tile', () => {
-    expect(gridCell(41.6935, 44.8015)).toEqual({ row: 527, col: 899, lat: 41.75, lon: 44.75, ty: 26, tx: 44, i: 159 });
+    expect(gridCell(41.6935, 44.8015)).toEqual({ row: 527, col: 899, lat: 41.75, lon: 44.75, ty: 131, tx: 224, i: 15 });
     expect(gridCell(-90, -180)).toMatchObject({ row: 0, col: 0, i: 0 });
     expect(gridCell(10, 180)).toMatchObject({ col: 0, lon: -180 }); // the date line wraps
     expect(gridCell(10, 179.9)).toMatchObject({ col: 0 });
   });
 
-  it('reads neighbouring records of a tile together, far ones apart', () => {
-    expect(tileReads([50, 1, 0, 399, 1], 2000)).toEqual([
-      { offset: 0, length: 4000, points: [0, 1] },
-      { offset: 100_000, length: 2000, points: [50] },
-      { offset: 798_000, length: 2000, points: [399] },
-    ]);
-    expect(tileReads([0, 7], 2000)).toEqual([{ offset: 0, length: 16_000, points: [0, 7] }]);
-  });
 });
 
 describe('the forecast query (Open-Meteo-compatible)', () => {

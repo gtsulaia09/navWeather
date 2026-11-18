@@ -43,10 +43,6 @@ jobs:
           curl -sf http://127.0.0.1:8787/api/v1/health || (cat wrangler.log; exit 1)
           npm run test:share
           npm run test:reports
-          npm run test:trips
-          npm run test:geocode
-          npm run test:route
-          npm run test:weather
           API=/api npm run test:share
           API=/api npm run test:reports
 
@@ -67,11 +63,12 @@ jobs:
       - run: npm ci
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
-      - name: Our data (Georgia places and search index), a forecast for the Caucasus, Valhalla
+      - name: Our data as static files (Georgia roads, search, places; a forecast for the Caucasus) — ADR-019
         run: |
-          npm run seed:local
+          npm run data:download
+          npm run data:osm
+          npm run data:roads
           npm run data:weather -- --bbox 39,40,47,44
-          npm run engines:up
       - run: npm run build
       - name: Browser smoke test against the local Worker
         run: |

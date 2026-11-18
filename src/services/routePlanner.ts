@@ -445,6 +445,7 @@ export async function refinePlanWithWeather(
 export function describeError(e: unknown, fallback: string, m: Messages = en): string {
   if (e instanceof ProviderError) {
     if (e.kind === 'no-route') return m.ui.noRoadRoute;
+    if (e.kind === 'not-covered') return m.ui.notCoveredYet;
     if (e.kind === 'not-found') return e.message;
     // Free public servers: overload and brief outages pass — say so rather than a bare failure.
     if (e.kind === 'rate-limited' || (e.kind === 'http' && (e.status ?? 0) >= 500)) return `${fallback} — ${m.ui.busyService}`;

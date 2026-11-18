@@ -172,14 +172,13 @@ describe('LocationWatcher: "position unavailable" on the map', () => {
 });
 
 describe('tripStart: where a trip from "Your location" starts', () => {
-  const serve = (body: unknown, ok = true) =>
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => new Response(JSON.stringify(body), { status: ok ? 200 : 404 })),
-    );
+  // No server is asked any more (ADR-019): without a position now, the device's last one stands in.
+  const fetchSpy = () => vi.stubGlobal('fetch', vi.fn(async () => new Response('{}')));
+  const lastPosition = (lon: number, lat: number, agoMs = 30 * 60_000) =>
+    rememberFix({ coordinate: [lon, lat], accuracyM: 20, timestampMs: Date.now() - agoMs });
 
   it('the device position when there is one', async () => {
-    serve({ lat: 1, lon: 2 });
+    fetchSpy();
     const g = fakeGeo();
     const p = tripStart(undefined, { secure: true, geo: g.geo });
     g.once[0].ok(position(44.8, 41.7));
@@ -187,16 +186,18 @@ describe('tripStart: where a trip from "Your location" starts', () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it('location blocked or unavailable: the connection\'s rough area, said to be approximate', async () => {
-    serve({ lat: 41.69, lon: 44.8, city: 'Tbilisi' });
+  it('location blocked or unavailable: the last position of the past hours, said to be approximate — no server asked', async () => {
+    fetchSpy();
+    lastPosition(44.8, 41.69, 2 * 3_600_000);
     const g = fakeGeo();
     const p = tripStart(undefined, { secure: true, geo: g.geo });
     g.once[0].err(err(1));
-    await expect(p).resolves.toEqual({ coordinate: [44.8, 41.69], approximate: { city: 'Tbilisi', reason: 'denied' } });
+    await expect(p).resolves.toEqual({ coordinate: [44.8, 41.69], approximate: { city: null, reason: 'denied' } });
+    expect(fetch).not.toHaveBeenCalled();
   });
 
   it('a refusal is asked again at once — allowing location must work on the very next try', async () => {
-    serve({ lat: 41.69, lon: 44.8, city: 'Tbilisi' });
+    lastPosition(44.8, 41.69);
     const g = fakeGeo();
     const first = tripStart(undefined, { secure: true, geo: g.geo });
     g.once[0].err(err(1)); // blocked
@@ -209,7 +210,7 @@ describe('tripStart: where a trip from "Your location" starts', () => {
   });
 
   it('a slow failure (no signal yet) is remembered for a minute, so Go does not wait for it again', async () => {
-    serve({ lat: 41.69, lon: 44.8, city: 'Tbilisi' });
+    lastPosition(44.8, 41.69);
     const g = fakeGeo();
     const p = tripStart(undefined, { secure: true, geo: g.geo });
     g.once[0].err(err(2)); // unavailable → tries the GPS
@@ -217,28 +218,24 @@ describe('tripStart: where a trip from "Your location" starts', () => {
     await Promise.resolve();
     g.once[1].err(err(2));
     await expect(p).resolves.toMatchObject({ approximate: { reason: 'unavailable' } });
-    await expect(tripStart(undefined, { secure: true, geo: g.geo })).resolves.toMatchObject({ approximate: { city: 'Tbilisi' } });
+    await expect(tripStart(undefined, { secure: true, geo: g.geo })).resolves.toMatchObject({ coordinate: [44.8, 41.69] });
     expect(g.mock.getCurrentPosition).toHaveBeenCalledTimes(2);
   });
 
-  it('works on an insecure page too (no device location there at all)', async () => {
-    serve({ lat: 41.69, lon: 44.8, city: null });
-    await expect(tripStart(undefined, { secure: false, geo: fakeGeo().geo })).resolves.toMatchObject({ approximate: { city: null, reason: 'insecure' } });
-  });
-
-  it('neither works: the device\'s own reason', async () => {
-    serve({ error: 'unknown' }, false);
+  it('neither works (no position now, none lately): the device\'s own reason', async () => {
+    fetchSpy();
     const g = fakeGeo();
     const p = tripStart(undefined, { secure: true, geo: g.geo });
     g.once[0].err(err(1));
     await expect(p).rejects.toEqual(new LocationError('denied'));
   });
 
-  it('ignores a malformed answer', async () => {
-    serve({ lat: 'x', lon: 500 });
+  it('a position older than a few hours does not count', async () => {
+    lastPosition(44.8, 41.69, 7 * 3_600_000);
     const g = fakeGeo();
     const p = tripStart(undefined, { secure: true, geo: g.geo });
     g.once[0].err(err(1));
     await expect(p).rejects.toBeInstanceOf(LocationError);
   });
 });
+

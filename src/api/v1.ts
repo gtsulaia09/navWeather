@@ -32,20 +32,8 @@ export const apiPaths = {
   get reports() {
     return `${origin}${API_BASE}/reports`;
   },
-  get whereami() {
-    return `${origin}${API_BASE}/whereami`;
-  },
   get health() {
     return `${origin}${API_BASE}/health`;
-  },
-  get tripsPlan() {
-    return `${origin}${API_BASE}/trips/plan`;
-  },
-  get tripsPlaces() {
-    return `${origin}${API_BASE}/trips/places`;
-  },
-  get tripsBorders() {
-    return `${origin}${API_BASE}/trips/borders`;
   },
 };
 

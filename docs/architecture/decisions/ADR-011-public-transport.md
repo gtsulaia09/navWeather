@@ -2,6 +2,8 @@
 
 **Status:** Accepted · **Date:** 2026-10-02 · **Revised:** 2026-10-04 (aligned with ADR-015/016; history in git)
 
+> **Superseded by [ADR-019](ADR-019-zero-owner-cost.md) (2026-11-18):** no MOTIS server and no Transitous; public transport is off until an on-device timetable router over open GTFS exists (`src/services/routing/motis.ts` keeps the itinerary converter).
+
 ## Context
 Public transport needs timetables. The current code uses Transitous (community-run MOTIS over operators' open GTFS
 feeds). Its policy: open-source and non-commercial projects only, light use, contact before routing use — a limit that

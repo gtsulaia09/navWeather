@@ -2,19 +2,12 @@ import type { LngLat } from '../../types/geo';
 import type { Route, RouteSegment, RouteStep, TransitLeg, TransitTrip, TransitVehicle } from '../../types/route';
 import { bboxOf, haversineM } from '../../utils/distance';
 import { decodePolyline } from '../../utils/polyline';
-import { fetchJson, ProviderError } from '../http';
-import type { RouteRequest, RoutingCapabilities, RoutingProvider } from './RoutingProvider';
+import type { RouteRequest } from './RoutingProvider';
 
 /**
- * Public transport from Transitous (https://transitous.org): a free,
- * community-run journey planner over the open timetables (GTFS) that
- * transport operators publish — no API key, called from the browser. It
- * runs MOTIS; this uses its `plan` endpoint.
- *
- * Coverage is whatever operators publish: Tbilisi's buses and metro are
- * there, intercity trains and minibuses in Georgia are not. An empty answer
- * is "no public transport found", never an invented trip. Terms: open-source,
- * non-commercial use, with a visible link to https://transitous.org/sources/.
+ * Public-transport itineraries in the MOTIS `plan` shape → the app's `Route`. No transit router is wired today
+ * (ADR-019: no free, unlimited one exists yet — Transitous and our own MOTIS server are gone); this converter stays
+ * for the on-device timetable router to come and for the transit screens' tests.
  */
 
 /** MOTIS `plan` response (only what is used). */
@@ -52,47 +45,9 @@ export interface MotisPlan {
 }
 
 /** Itineraries to ask for: departures to choose from. */
-const ITINERARIES = 5;
 
 export { decodePolyline };
 
-export class TransitousProvider implements RoutingProvider {
-  readonly capabilities: RoutingCapabilities = { alternatives: true, avoid: [], laneGuidance: false, matrix: false, multiStop: false };
-
-  constructor(
-    private readonly baseUrl: string,
-    private readonly language = 'en',
-    private readonly timeoutMs = 20000,
-    /** Where MOTIS answers `plan` under `baseUrl`: Transitous `/api/v5/plan`; our Worker `/plan`. */
-    private readonly planPath = '/api/v5/plan',
-    readonly name: string = 'transitous',
-  ) {}
-
-  async calculateRoutes(req: RouteRequest): Promise<Route[]> {
-    const [olon, olat] = req.origin.coordinate;
-    const [dlon, dlat] = req.destination.coordinate;
-    const params = new URLSearchParams({
-      fromPlace: `${olat.toFixed(6)},${olon.toFixed(6)}`,
-      toPlace: `${dlat.toFixed(6)},${dlon.toFixed(6)}`,
-      time: new Date(req.departAtMs ?? Date.now()).toISOString(),
-      numItineraries: String(req.alternatives ? ITINERARIES : 1),
-      language: req.language ?? this.language,
-    });
-    const data = await fetchJson<MotisPlan>(`${this.baseUrl.replace(/\/$/, '')}${this.planPath}?${params}`, {
-      provider: this.name === 'transitous' ? 'Transitous' : 'Public transport',
-      signal: req.signal,
-      timeoutMs: this.timeoutMs,
-    });
-    const routes = motisToRoutes(data, req);
-    if (routes.length === 0) throw new ProviderError('No public transport found', 'no-route', this.name === 'transitous' ? 'Transitous' : 'Public transport');
-    return req.alternatives ? routes : routes.slice(0, 1);
-  }
-}
-
-/**
- * Itineraries → routes, earliest arrival first. Only trips that use a
- * vehicle: a walk-only answer belongs to the walking mode.
- */
 export function motisToRoutes(data: MotisPlan, req: Pick<RouteRequest, 'origin' | 'destination'>): Route[] {
   return (data.itineraries ?? [])
     .filter((it) => it.legs?.some((l) => vehicleOf(l.mode) !== 'walk'))
@@ -224,34 +179,4 @@ export function itineraryToRoute(it: MotisItinerary, req: Pick<RouteRequest, 'or
 function cleanStopName(name: string): string {
   if (name === 'START' || name === 'END') return '';
   return name.replace(/""/g, '"').trim();
-}
-
-/**
- * Public transport from OUR MOTIS (`/api/v1/transit/plan`, DEVELOPMENT_PLAN DP-5.3, DP-6.7): the region's open
- * timetables, no third party. Transitous (the `fallback`, while VITE_TRANSIT_FALLBACK allows it) answers only when
- * our engine isn't running or the trip is outside the region its timetables cover.
- */
-export class ApiTransitProvider implements RoutingProvider {
-  readonly name = 'navweather-transit';
-  readonly capabilities: RoutingCapabilities;
-  private ours: TransitousProvider;
-
-  constructor(
-    url: string,
-    private readonly fallback: RoutingProvider | null,
-    language = 'en',
-  ) {
-    this.ours = new TransitousProvider(url, language, 20000, '/plan', 'navweather-transit');
-    this.capabilities = this.ours.capabilities;
-  }
-
-  async calculateRoutes(req: RouteRequest): Promise<Route[]> {
-    try {
-      return await this.ours.calculateRoutes(req);
-    } catch (e) {
-      const ourEngineCant = e instanceof ProviderError && (e.kind === 'network' || e.kind === 'timeout' || (e.kind === 'http' && (e.status === 503 || e.status === 422)));
-      if (!this.fallback || !ourEngineCant) throw e;
-      return this.fallback.calculateRoutes(req);
-    }
-  }
 }

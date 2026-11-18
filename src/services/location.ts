@@ -1,4 +1,3 @@
-import { config } from '../config';
 import type { LngLat } from '../types/geo';
 
 /**
@@ -114,29 +113,22 @@ export interface ApproximateLocation {
   city: string | null;
 }
 
-let approx: { at: number; value: ApproximateLocation } | null = null;
 /** The device just couldn't give a position: don't make the next tap wait for the same failure. */
 let failed: { at: number; kind: LocationErrorKind } | null = null;
 const FAILED_MS = 60_000;
 const SLOW_FAILURES: LocationErrorKind[] = ['timeout', 'unavailable'];
+/** How old the device's last position may be to stand in for "here" when it can't give one now. */
+const LAST_POSITION_MS = 6 * 3_600_000;
 
 /**
- * The connection's rough area (city level), from our own Worker — for when the
- * device can't give a position at all (location off or blocked, no GPS on a
- * desktop), so a trip can still start from the right city. Asks nothing of
- * the device and involves no third party; kept in memory for 10 minutes.
+ * Where the device last was (in the past few hours), for when it can't give a position now (location off or
+ * blocked, no GPS fix yet) — so a trip can still start from the right town. Asks no server (ADR-019: the old
+ * connection-based `/whereami` is gone). Rejects when the device had no position lately.
  */
-export async function approximateLocation(signal?: AbortSignal): Promise<ApproximateLocation> {
-  if (approx && Date.now() - approx.at < 10 * 60_000) return approx.value;
-  const res = await fetch(config.endpoints.whereami, { signal, headers: { accept: 'application/json' } });
-  if (!res.ok) throw new Error(`whereami ${res.status}`);
-  const b = (await res.json()) as { lat?: unknown; lon?: unknown; city?: unknown };
-  const lat = Number(b.lat);
-  const lon = Number(b.lon);
-  if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) throw new Error('whereami: no position');
-  const value = { coordinate: [lon, lat] as LngLat, city: typeof b.city === 'string' && b.city.trim() ? b.city.trim().slice(0, 80) : null };
-  approx = { at: Date.now(), value };
-  return value;
+export async function approximateLocation(): Promise<ApproximateLocation> {
+  const fix = latestFix(LAST_POSITION_MS);
+  if (!fix) throw new Error('no recent position');
+  return { coordinate: fix.coordinate, city: null };
 }
 
 /**
@@ -161,7 +153,7 @@ export async function tripStart(
     if (SLOW_FAILURES.includes(e.kind) && (!failed || Date.now() - failed.at >= FAILED_MS)) failed = { at: Date.now(), kind: e.kind };
     else if (!SLOW_FAILURES.includes(e.kind)) failed = null;
     try {
-      const a = await approximateLocation(signal);
+      const a = await approximateLocation();
       return { coordinate: a.coordinate, approximate: { city: a.city, reason: e.kind } };
     } catch (e2) {
       if (signal?.aborted) throw e2;
@@ -177,7 +169,6 @@ export function forgetLocationFailure() {
 
 /** Test helper. */
 export function __resetApproximate() {
-  approx = null;
   failed = null;
 }
 

@@ -3,13 +3,14 @@ import { render, screen } from '@testing-library/react';
 import { simProgress } from '../algorithms/simulation';
 import { timeAtDistance } from '../algorithms/routeTiming';
 import { PlanSheet } from '../components/Plan/PlanSheet';
+import { ProviderError } from '../services/http';
 import { setProviders } from '../services/providers';
+import { setTripBackend } from '../services/trip/requests';
 import type { RoutingProvider } from '../services/routing/RoutingProvider';
 import { installFakeProviders, type Harness } from '../test/harness';
 import { tbilisiBatumiDetour, tbilisiBatumiRoute } from '../test/helpers';
 import type { Route } from '../types/route';
 import { createTripPlan, findStopPlaces } from '../trip/planning/planner';
-import { sanitizeStopPlacesRequest, sanitizeTripRequest } from '../trip/protocol';
 import type { RawPlace } from '../trip/stops/places';
 import type { TripPlanRequest } from '../trip/types';
 import { useSettings } from './settings';
@@ -83,24 +84,17 @@ beforeEach(() => {
   requests = [];
   planFails = false;
   bordersCalls = 0;
-  vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
-    const body = JSON.parse(String(init?.body ?? '{}'));
-    if (url === '/api/v1/trips/plan') {
-      if (planFails) return new Response('{"error":"unavailable"}', { status: 503, headers: { 'content-type': 'application/json' } });
-      const req = sanitizeTripRequest(body, Date.now());
-      if (!req) return Response.json({ error: 'bad-request' }, { status: 400 });
+  // The planner runs on the device (ADR-019): record its requests, fail it on demand, give it hotels.
+  setTripBackend({
+    async plan(req, nowMs) {
+      if (planFails) throw new ProviderError('Trip planner unavailable', 'http', 'Trip planner', 503);
       requests.push(req);
-      return Response.json(await createTripPlan(req, { places: null, nowMs: Date.now() }));
-    }
-    if (url === '/api/v1/trips/borders') {
-      bordersCalls++; // the app finds borders on the device now (DP-4.5)
-      return Response.json({ error: 'unexpected' }, { status: 500 });
-    }
-    if (url === '/api/v1/trips/places') {
-      const req = sanitizeStopPlacesRequest(body, Date.now());
-      if (!req) return Response.json({ error: 'bad-request' }, { status: 400 });
-      return Response.json({ places: await findStopPlaces(req, { find: async () => hotels }) });
-    }
+      return createTripPlan(req, { places: null, nowMs });
+    },
+    places: (req) => findStopPlaces(req, { find: async () => hotels }),
+  });
+  vi.stubGlobal('fetch', async (url: string) => {
+    if (url === '/api/v1/trips/borders') bordersCalls++; // borders are found on the device (DP-4.5)
     return new Response('not found', { status: 404 });
   });
   stop = initTrip();
@@ -108,6 +102,7 @@ beforeEach(() => {
 
 afterEach(() => {
   stop();
+  setTripBackend(null);
   vi.unstubAllGlobals();
   vi.useRealTimers();
   setProviders(null);

@@ -1,13 +1,18 @@
-# Deploy to Cloudflare Workers (docs/operations/DELIVERY.md §2, DEVELOPMENT_PLAN DP-3.1, DP-3.5).
-# Needs repository secrets CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID.
-#   preview    → Worker navweather-preview (its own Durable Objects, D1, R2 — test data), then the Worker smoke
-#                tests against it (repository variable PREVIEW_URL, e.g. https://navweather-preview.<you>.workers.dev)
+# Build all our data and deploy to Cloudflare Workers, Free plan (ADR-019; docs/operations/DELIVERY.md §2).
+# Every deploy carries the whole app with all its data as static files — roads, search, places, heights, forecasts,
+# air quality — so it rebuilds them: OpenStreetMap (Geofabrik), Copernicus DEM, ECMWF/GFS and CAMS (Open-Meteo
+# open-data archive). Scheduled four times a day so the forecast stays fresh. Free: GitHub Actions minutes are
+# unlimited for public repositories; static assets cost nothing to serve.
+# Needs repository secrets CLOUDFLARE_API_TOKEN (Workers edit) and CLOUDFLARE_ACCOUNT_ID; without them a scheduled
+# run does nothing.
+#   preview    → Worker navweather-preview (its own Durable Objects — test data), then the Worker smoke tests against
+#                it (repository variable PREVIEW_URL, e.g. https://navweather-preview.<you>.workers.dev)
 #   production → Worker navweather (real users; no smoke tests there — they would create shares and reports)
-# Both build our places tiles and search index (Georgia, OpenStreetMap via Geofabrik) and load the index into the
-# environment's D1. The forecast comes from the scheduled weather workflow (weather.yml).
 name: Deploy
 
 on:
+  schedule:
+    - cron: '40 */6 * * *'
   workflow_dispatch:
     inputs:
       target:
@@ -20,50 +25,64 @@ permissions:
   contents: read
 
 concurrency:
-  group: deploy-${{ inputs.target }}
+  group: deploy-${{ inputs.target || 'production' }}
   cancel-in-progress: false
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    environment: ${{ inputs.target }}
+    timeout-minutes: 60
+    environment: ${{ inputs.target || 'production' }}
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       WRANGLER_SEND_METRICS: 'false'
+      TARGET: ${{ inputs.target || 'production' }}
     steps:
+      - name: Check credentials
+        id: creds
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            if [ "${{ github.event_name }}" = "schedule" ]; then
+              echo "::notice::No Cloudflare credentials yet — nothing to do."
+              echo "ok=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "::error::Set CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID repository secrets first."
+            exit 1
+          fi
+          echo "ok=true" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v4
+        if: steps.creds.outputs.ok == 'true'
       - uses: actions/setup-node@v4
+        if: steps.creds.outputs.ok == 'true'
         with:
           node-version: 22
           cache: npm
       - run: npm ci
-      - name: Check credentials
-        run: |
-          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
-            echo "::error::Set CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID repository secrets first."
-            exit 1
-          fi
+        if: steps.creds.outputs.ok == 'true'
       - run: npm run check:envs
+        if: steps.creds.outputs.ok == 'true'
       - run: npm run typecheck
+        if: steps.creds.outputs.ok == 'true'
       - run: npm test
-      - name: Our data (places tiles, search index)
-        run: npm run data:download && npm run data:osm
+        if: steps.creds.outputs.ok == 'true'
+      - name: Our data as static files (roads, search, places, heights, forecast, air quality)
+        if: steps.creds.outputs.ok == 'true'
+        run: npm run data:all
+      - name: Routing on real roads (src/roads/realData.test.ts runs now that the files exist)
+        if: steps.creds.outputs.ok == 'true'
+        run: npx vitest run src/roads/realData.test.ts
       - name: Build (mode preview or production → .env.preview / .env.production)
-        run: npm run ${{ inputs.target == 'preview' && 'build:preview' || 'build' }}
-      - name: Deploy the Worker
-        run: npx wrangler deploy --env ${{ inputs.target }} --message "${{ github.sha }}"
-      - name: Load the search index into D1
-        run: npx wrangler d1 execute navweather-geo-${{ inputs.target }} --env ${{ inputs.target }} --remote --file data/build/ge/geocode.sql
+        if: steps.creds.outputs.ok == 'true'
+        run: npm run ${{ env.TARGET == 'preview' && 'build:preview' || 'build' }}
+      - name: Deploy the Worker (static assets + sharing and reports)
+        if: steps.creds.outputs.ok == 'true'
+        run: npx wrangler deploy --env $TARGET --message "${{ github.sha }}"
       - name: Worker smoke tests against preview
-        if: inputs.target == 'preview' && vars.PREVIEW_URL != ''
+        if: steps.creds.outputs.ok == 'true' && env.TARGET == 'preview' && vars.PREVIEW_URL != ''
         env:
           BASE_URL: ${{ vars.PREVIEW_URL }}
         run: |
           npm run test:share
           npm run test:reports
-          npm run test:trips
-          npm run test:geocode
-          npm run test:route
-          npm run test:weather

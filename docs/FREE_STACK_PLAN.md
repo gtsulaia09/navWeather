@@ -1,5 +1,13 @@
 # navWeather — бесплатный стек: каталог замен и функций Google Maps (масштаб уровня Google Maps)
 
+> **Важно (2026-11-18, решение владельца, [ADR-019](architecture/decisions/ADR-019-zero-owner-cost.md)):** владелец не
+> платит ничего — даже за хостинг. Cloudflare Workers **Free plan без карты**; все данные — **статические файлы** в
+> `/data`; маршрутизация, поиск, прогноз, качество воздуха, высоты и планировщик Long Trip работают **на устройстве**;
+> Worker обслуживает только живую геопозицию и сообщения водителей. Всё в этом документе, что предполагает платный
+> хостинг (Workers Paid, Containers с Valhalla/MOTIS, R2, D1, Queues, домен), заменено ADR-019; где документ и ADR-019
+> расходятся, действует ADR-019.
+
+
 > **Версия:** 1.2 · **Дата:** 2026-10-04 (1.1 — правило «всегда бесплатно», §1.1; 1.2 — Cloudflare §6a, план перенесён
 > в [DEVELOPMENT_PLAN](DEVELOPMENT_PLAN.md)) · **Статус:** действует (решение владельца)
 > **Решения:** [ADR-015 — Free software and open data on our own hosting](architecture/decisions/ADR-015-free-software-own-hosting.md) ·

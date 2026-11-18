@@ -2,6 +2,8 @@
 
 **Status:** Accepted · **Date:** 2026-10-02 · **Revised:** 2026-10-04 (aligned with ADR-015/016; history in git)
 
+> **Superseded by [ADR-019](ADR-019-zero-owner-cost.md) (2026-11-18):** routing runs on the device over our static road files (`src/roads`, `pipelines/roads`); no Valhalla server, no Containers.
+
 ## Context
 Routing must stay free forever at any scale (ADR-015) and run on Cloudflare (ADR-016). The current code still calls
 the public OSRM demo (car) and FOSSGIS OSRM (walk, bike); their policies allow ≤1 request/s, light non-commercial use and

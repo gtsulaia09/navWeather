@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
  * Air quality worldwide (DEVELOPMENT_PLAN DP-4.6): the CAMS global forecast → the European Air Quality Index per hour
- * in tiles in R2 (format and index: src/api/air.ts), read by `/api/v1/air`. Replaces the Open-Meteo Air Quality API.
+ * in static tile files under public/data (format and index: src/api/air.ts), read on the device (ADR-019). Replaces the
+ * Open-Meteo Air Quality API.
  *
- *   npm run data:air                       # newest CAMS run → local R2 (the bucket of `npm run dev`)
- *   npm run data:air -- --env production   # into that environment's bucket on Cloudflare
+ *   npm run data:air                       # newest CAMS run → public/data/air (what `npm run dev` and the deploy serve)
  *   npm run data:air -- --max-mb 50        # download ceiling for one run (default 32 MB; it stops before it)
  *
  * Source: Copernicus Atmosphere Monitoring Service global forecast, 0.4°, twice a day (free licence with

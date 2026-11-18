@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ApiAirQualityProvider, aqiLevel, type AirQualityProvider } from '../services/air/AirQualityProvider';
+import { aqiLevel, StaticAirQualityProvider } from '../services/air/AirQualityProvider';
 import { airCell, europeanAqi, subIndex, trailingMean } from './air';
 
-/** Air quality from our CAMS tiles (DP-4.6): the European AQI, the grid, the provider's fallback. */
+/** Air quality from our CAMS tiles (DP-4.6): the European AQI, the grid, the reader on the device. */
 
 describe('the European Air Quality Index', () => {
   it('each band is 20 points, linear inside: the band edges land on the app’s levels', () => {
@@ -36,27 +36,33 @@ describe('the European Air Quality Index', () => {
   });
 });
 
-describe('ApiAirQualityProvider', () => {
-  afterEach(() => vi.unstubAllGlobals());
-  const fallback = (): AirQualityProvider & { n: number } => ({
-    name: 'fake',
-    n: 0,
-    async current() {
-      this.n++;
-      return { europeanAqi: 99, observedAt: 0 };
-    },
+describe('StaticAirQualityProvider (on the device, ADR-019)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
   });
 
-  it('our index; the fallback only when our Worker can’t answer; at sea there is simply no index', async () => {
-    let reply = () => Response.json({ current: { time: 1791190800, european_aqi: 27 } });
-    vi.stubGlobal('fetch', async () => reply());
-    const fb = fallback();
-    expect(await new ApiAirQualityProvider('/api/v1/air', fb).current([44.8, 41.69])).toEqual({ europeanAqi: 27, observedAt: 1791190800000 });
-    reply = () => Response.json({ current: { time: 1791190800, european_aqi: null } });
-    expect(await new ApiAirQualityProvider('/api/v1/air', fb).current([-150, 30])).toBeNull();
-    expect(fb.n).toBe(0);
-    reply = () => Response.json({ error: 'unavailable' }, { status: 503 });
-    expect(await new ApiAirQualityProvider('/api/v1/air', fb).current([44.8, 41.69])).toMatchObject({ europeanAqi: 99 });
-    await expect(new ApiAirQualityProvider('/api/v1/air', null).current([44.8, 41.69])).rejects.toThrow();
+  it('reads the hour from our static tile; no tile or no data here is "not available", never borrowed', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    const hour = 1_791_190_800;
+    vi.setSystemTime(hour * 1000 + 600_000);
+    const cell = airCell(41.69, 44.8);
+    const times = [hour - 3600, hour, hour + 3600];
+    const tile = new Uint8Array(100 * times.length).fill(255);
+    tile[cell.i * times.length + 1] = 27;
+    const index = { v: 1, run: 'r1', createdAt: hour, referenceTime: hour - 7200, times, source: 'CAMS', tiles: [`${cell.ty}/${cell.tx}`] };
+    const asked: string[] = [];
+    vi.stubGlobal('fetch', async (url: string) => {
+      asked.push(url);
+      if (url === '/data/air/latest.json') return Response.json(index);
+      if (url === `/data/air/runs/r1/t/${cell.ty}/${cell.tx}.bin`) return new Response(tile, { headers: { 'content-type': 'application/octet-stream' } });
+      return new Response('not found', { status: 404 });
+    });
+    const air = new StaticAirQualityProvider('/data');
+    expect(await air.current([44.8, 41.69])).toEqual({ europeanAqi: 27, observedAt: hour * 1000 });
+    expect(await air.current([-150, 30])).toBeNull(); // a tile we don't build
+    tile[cell.i * times.length + 1] = 255;
+    expect(await new StaticAirQualityProvider('/data').current([44.8, 41.69])).toBeNull(); // no value this hour
+    expect(asked.every((u) => u.startsWith('/data/'))).toBe(true); // nothing but our own static files
   });
 });

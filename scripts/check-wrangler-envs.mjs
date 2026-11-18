@@ -29,5 +29,12 @@ for (const [name, c] of Object.entries(envs)) {
   }
 }
 assert.equal(envs.production.name, 'navweather');
+// ADR-019: nothing that can send a bill — no database, storage, containers or queues.
+for (const [name, c] of Object.entries(envs)) {
+  assert.equal(c.d1_databases.length, 0, `${name}: D1 bills past its free allowance (ADR-019)`);
+  assert.equal(c.r2_buckets.length, 0, `${name}: R2 bills past its free allowance (ADR-019)`);
+  assert.equal((c.containers ?? []).length, 0, `${name}: Containers need Workers Paid (ADR-019)`);
+  assert.equal((c.queues?.producers ?? []).length + (c.queues?.consumers ?? []).length, 0, `${name}: Queues need Workers Paid (ADR-019)`);
+}
 assert.equal(envs.dev.observability.logs.invocation_logs, false, 'invocation logs would record share ids and coordinates');
 console.log(`wrangler environments in step: ${Object.entries(envs).map(([n, c]) => `${n} → ${c.name}`).join(', ')}`);

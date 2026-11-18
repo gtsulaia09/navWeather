@@ -4,17 +4,10 @@ import { REPORT_ID_RE } from '../src/reports/protocol';
 import { json, randomToken, readJson, sha256Hex } from './http';
 import { LiveShare } from './liveShare';
 import { Reports } from './reports';
-import { tripBorders, tripPlaces, tripPlan, type TripEnv } from './trips';
-import { geocode, type GeocodeEnv } from './geocode';
-import { route, routeMatrix, type RouteEnv } from './route';
-import { weatherForecast, weatherMeta, type WeatherEnv } from './weather';
-import { elevation } from './elevation';
-import { air, type AirEnv } from './air';
-import { transitPlan, type TransitEnv } from './transit';
 
 export { LiveShare, Reports };
 
-export interface Env extends TripEnv, GeocodeEnv, RouteEnv, WeatherEnv, AirEnv, TransitEnv {
+export interface Env {
   ASSETS: Fetcher;
   LIVE_SHARE: DurableObjectNamespace<LiveShare>;
   /** Workers rate-limiting binding (wrangler.toml [[ratelimits]]); optional so the relay still runs without it. */
@@ -25,8 +18,6 @@ export interface Env extends TripEnv, GeocodeEnv, RouteEnv, WeatherEnv, AirEnv, 
   REPORT_LIMITER?: { limit(opts: { key: string }): Promise<{ success: boolean }> };
   /** Abuse guard for listing reports (per client IP; generous — a long route asks for several boxes). */
   REPORT_LIST_LIMITER?: { limit(opts: { key: string }): Promise<{ success: boolean }> };
-  /** Abuse guard for the approximate-location lookup (per client IP). */
-  WHEREAMI_LIMITER?: { limit(opts: { key: string }): Promise<{ success: boolean }> };
   /** Abuse guard for live-share traffic: updates, viewers' polling and WebSocket opens (per client IP). */
   SHARE_LIMITER?: { limit(opts: { key: string }): Promise<{ success: boolean }> };
 }
@@ -37,7 +28,8 @@ async function allowed(limiter: { limit(opts: { key: string }): Promise<{ succes
 }
 
 /**
- * navWeather on Cloudflare: static app (assets) + the live-location relay.
+ * navWeather on Cloudflare (Free plan): static app and data (assets) + the two things users share — live location
+ * and driver reports.
  *
  * Every route is served under /api/v1/… (the versioned API for web and future
  * mobile clients, docs/api/API_V1.md) and, for clients from before versioning,
@@ -55,19 +47,9 @@ async function allowed(limiter: { limit(opts: { key: string }): Promise<{ succes
  *   POST   /api/reports                    report { kind, lat, lon }
  *   POST   /api/reports/:id/vote           { vote: 'still' | 'gone' }
  *
- *   GET    /api/whereami           approximate location of the connection (city level)
- *   GET    /api/geocode?q=…        search and suggestions from our index (D1 FTS5; worker/geocode.ts)
- *   POST   /api/route              our routing engine (Valhalla; OSRM-format answer; worker/route.ts)
- *   POST   /api/route/matrix       travel times between points (detours)
- *   GET    /api/weather/forecast?latitude=…&longitude=…   our forecast anywhere (Open-Meteo-compatible; worker/weather.ts)
- *   GET    /api/weather/meta       which model runs the forecast is built from
- *   GET    /api/elevation?latitude=…&longitude=…  ground heights from our DEM tiles (worker/elevation.ts)
- *   GET    /api/air?latitude=…&longitude=…        European Air Quality Index now (CAMS tiles; worker/air.ts)
- *   GET    /api/transit/plan?fromPlace=…&toPlace=… public transport from our MOTIS (worker/transit.ts)
- *
- *   POST   /api/trips/plan         long-trip plan for a route (stateless; worker/trips.ts)
- *   POST   /api/trips/places       places around one planned stop (Overpass, edge-cached)
- *   POST   /api/trips/borders      countries along the route and where they change (Overpass, edge-cached)
+ * Nothing else runs here (ADR-019): routing, search, forecasts, air quality, heights and the long-trip planner work on
+ * the device over static files. On the Free plan the Worker cannot bill: past its daily limits it answers with errors,
+ * and the app says sharing or reports are busy until midnight UTC.
  */
 export default {
   async fetch(request, env, ctx): Promise<Response> {
@@ -83,34 +65,6 @@ export default {
     if (path === '/api/health') return request.method === 'GET' ? json({ ok: true, api: API_VERSION }) : json({ error: 'method-not-allowed' }, 405);
 
     if (path === '/api/reports' || path.startsWith('/api/reports/')) return reports(request, path, url, env);
-
-    if (path === '/api/geocode') return geocode(request, url, env);
-    if (path === '/api/route') return route(request, env);
-    if (path === '/api/route/matrix') return routeMatrix(request, env);
-    if (path === '/api/weather/forecast') return weatherForecast(request, url, env, ctx);
-    if (path === '/api/weather/meta') return weatherMeta(request, env);
-    if (path === '/api/elevation') return elevation(request, url, env);
-    if (path === '/api/air') return air(request, url, env);
-    if (path === '/api/transit/plan') return transitPlan(request, url, env);
-
-    if (path === '/api/trips/plan') return tripPlan(request, env);
-    if (path === '/api/trips/places') return tripPlaces(request, env);
-    if (path === '/api/trips/borders') return tripBorders(request, env);
-
-    // When the device can't say where it is (location off, no GPS on a desktop), a trip can
-    // still start from the right city: Cloudflare already knows the connection's rough area.
-    // Nothing is stored; no CORS headers, so other sites can't read it.
-    if (path === '/api/whereami') {
-      if (request.method !== 'GET') return json({ error: 'method-not-allowed' }, 405);
-      if (!(await allowed(env.WHEREAMI_LIMITER, request))) return json({ error: 'too-many-requests' }, 429);
-      const cf = request.cf as { latitude?: string; longitude?: string; city?: string; country?: string; asn?: number; clientTcpRtt?: number } | undefined;
-      const lat = Number(cf?.latitude);
-      const lon = Number(cf?.longitude);
-      // `wrangler dev` offline fills in a made-up Austin, TX (asn 395747, no round trip): not a location.
-      const placeholder = cf?.city === 'Austin' && cf.asn === 395747 && !cf.clientTcpRtt;
-      if (!cf?.latitude || !cf?.longitude || !Number.isFinite(lat) || !Number.isFinite(lon) || placeholder) return json({ error: 'unknown' }, 404);
-      return json({ lat, lon, city: cf.city ?? null, country: cf.country ?? null });
-    }
 
     if (path === '/api/share') {
       if (request.method !== 'POST') return json({ error: 'method-not-allowed' }, 405);

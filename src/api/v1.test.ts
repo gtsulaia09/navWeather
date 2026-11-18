@@ -28,12 +28,12 @@ describe('API v1 routing', () => {
     setApiOrigin('https://navweather.example/');
     try {
       expect(apiOrigin()).toBe('https://navweather.example');
-      expect(apiPaths.tripsPlan).toBe('https://navweather.example/api/v1/trips/plan');
+      expect(apiPaths.reports).toBe('https://navweather.example/api/v1/reports');
       expect(apiPaths.shareItem('x')).toBe('https://navweather.example/api/v1/share/x');
       expect(apiPaths.shareSocket('x')).toBe('/api/v1/share/x/ws'); // the viewer puts it on a wss:// origin
     } finally {
       setApiOrigin('');
     }
-    expect(apiPaths.tripsPlan).toBe('/api/v1/trips/plan');
+    expect(apiPaths.reports).toBe('/api/v1/reports');
   });
 });

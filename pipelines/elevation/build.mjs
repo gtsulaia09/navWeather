@@ -1,14 +1,13 @@
 #!/usr/bin/env node
 /**
- * Ground heights for the app and the Worker (DEVELOPMENT_PLAN DP-4.7): Copernicus DEM GLO-90 → our elevation tiles in
- * R2 (format: src/api/elevation.ts), read by `/api/v1/elevation` (route profiles, passes) and by the forecast (the
- * temperature at a point's own height). Replaces the Open-Meteo Elevation API (ADR-015 class B: open data files).
+ * Ground heights (DEVELOPMENT_PLAN DP-4.7; ADR-019): Copernicus DEM GLO-90 → our elevation tiles as static files
+ * under public/data (format: src/api/elevation.ts), read on the device for route profiles, passes and the forecast
+ * (the temperature at a point's own height). No elevation server (ADR-015 class B: open data files).
  *
- *   npm run data:elevation                         # Georgia and its borders (default box 39,41,47,44) → local R2
+ *   npm run data:elevation                         # Georgia and its borders (default box 39,41,47,44) → public/data
  *   npm run data:elevation -- --bbox 26,36,45,43   # another area (whole degrees, w,s,e,n)
  *   npm run data:elevation -- --world              # every land tile (~10 GB read; for the scheduled job, not a laptop)
- *   npm run data:elevation -- --env production     # into that environment's bucket on Cloudflare
- *   npm run data:elevation -- --out data/build/elev   # files instead of R2
+ *   npm run data:elevation -- --out data/build/elev   # another folder
  *   npm run data:elevation -- --max-mb 60          # download ceiling for one run (default 40 MB; the run stops before it)
  *   npm run data:elevation -- --index-only         # just list the tiles already in the bucket (no download)
  *
@@ -20,7 +19,7 @@
  */
 import { deflateRawSync } from 'node:zlib';
 import { decodeCountries, countryAt } from '../../src/trip/countries.ts';
-import { ELEV_BLOCKS, ELEV_HEADER_BYTES, ELEV_INDEX_BYTES, ELEV_INDEX_KEY, ELEV_MISSING, elevTileKey, encodeHeader } from '../../src/api/elevation.ts';
+import { ELEV_BLOCKS, ELEV_HEADER_BYTES, ELEV_INDEX_BYTES, ELEV_INDEX_KEY, ELEV_MISSING, elevBlockKey, elevHeaderKey, encodeHeader } from '../../src/api/elevation.ts';
 import { option, openStore, writer } from '../lib/store.mjs';
 import { OmVariable, setDownloadLimit, stats } from '../weather/om.mjs';
 import { readFileSync } from 'node:fs';
@@ -63,7 +62,7 @@ for (let lat = S; lat < N; lat++) {
     const k = `${lat}/${lon}`;
     if (!FORCE && (have.has(k) || sea.has(k))) continue;
     // A run stopped earlier (the download ceiling) left tiles without an index: keep them.
-    if (!FORCE && (await store.has(elevTileKey(lat, lon)))) {
+    if (!FORCE && (await store.has(elevHeaderKey(lat, lon)))) {
       have.add(k);
       continue;
     }
@@ -126,15 +125,12 @@ for (let lat = S; lat < N; lat++) {
         offset += z.length;
       }
     }
+    // Static files (ADR-019): the header (with the block index) and each block separately, so the device downloads
+    // the few kB a point needs — static assets have no range requests.
     const header = encodeHeader({ rows, cols: cpd, blockRows, blockCols, lat, lon }, blocks);
-    const file = new Uint8Array(offset);
-    file.set(header, 0);
-    let o = header.length;
-    for (const z of parts) {
-      file.set(z, o);
-      o += z.length;
-    }
-    await out.put(elevTileKey(lat, lon), file);
+    await out.put(elevHeaderKey(lat, lon), header);
+    let k = 0;
+    for (let b = 0; b < blocks.length; b++) if (blocks[b].length) await out.put(elevBlockKey(lat, lon, b), parts[k++]);
     have.add(`${lat}/${lon}`);
     built++;
   }

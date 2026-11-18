@@ -4,9 +4,9 @@ import { expect, test, type Request } from '@playwright/test';
  * The app end to end (DEVELOPMENT_PLAN DP-2.6, gate G4): search → a road with its weather → a simulated drive →
  * live sharing (and its viewer) → a driver report while really driving. Same suite on localhost and on preview.
  *
- * E2E_STRICT=1 (localhost with `npm run seed:local`, `data:weather`, `engines:up`; preview with its data) also
- * checks that nothing went to the public services with usage limits — our own API answered everything
- * (elevation and air quality excepted until DP-4.6/4.7).
+ * Always checked (ADR-019): the app talks to nobody but its own origin (static data + the sharing/reports API) and
+ * OpenFreeMap — routing, search and forecasts run on the device. E2E_STRICT=1 (localhost after `npm run data:osm`,
+ * `data:roads`, `data:weather`; preview with its data) also requires our data files to be there.
  *
  * The basemap (OpenFreeMap style and tiles) is not loaded unless E2E_MAP=1: in headless Chrome every map frame
  * waits on a GPU process that has no display, and the page stalls for about a minute after the map appears. The
@@ -14,26 +14,28 @@ import { expect, test, type Request } from '@playwright/test';
  */
 
 const STRICT = process.env.E2E_STRICT === '1';
-const LIMITED_HOSTS = ['router.project-osrm.org', 'routing.openstreetmap.de', 'photon.komoot.io', 'nominatim.openstreetmap.org', 'overpass-api.de', 'overpass.kumi.systems'];
-const limitedUrl = (u: URL) => LIMITED_HOSTS.includes(u.host) || (u.host === 'api.open-meteo.com' && u.pathname === '/v1/forecast');
+/** The only other host the app may reach: the map background (OpenFreeMap, no limits). */
+const ALLOWED_HOSTS = ['tiles.openfreemap.org'];
 // Where the example road starts (Tbilisi, our geocoder's city point).
 const TBILISI = { latitude: 41.6936, longitude: 44.8014, accuracy: 8 };
 
 test('search → road with weather → simulated drive → live share → driver report', async ({ page, context }) => {
-  const limited: string[] = [];
+  const foreign: string[] = [];
   const watch = (r: Request) => {
     const u = new URL(r.url());
-    if (limitedUrl(u)) limited.push(`${u.host}${u.pathname}?${[...u.searchParams.keys()].join('&')} (${u.searchParams.get('latitude')?.slice(0, 60) ?? ''})`);
+    if (u.protocol === 'data:' || u.protocol === 'blob:') return;
+    const own = u.host === new URL(page.url() === 'about:blank' ? (process.env.BASE_URL ?? 'http://localhost:5173') : page.url()).host;
+    if (!own && !ALLOWED_HOSTS.includes(u.host)) foreign.push(`${u.host}${u.pathname}`);
   };
   context.on('request', watch);
   if (process.env.E2E_MAP !== '1') await context.route(/tiles\.openfreemap\.org/, (r) => r.abort());
   await context.grantPermissions(['geolocation']);
   await context.setGeolocation(TBILISI);
 
-  await test.step('search answers from our geocoder', async () => {
+  await test.step('search answers on the device from our index files', async () => {
     await page.goto('/');
     const search = page.getByRole('combobox', { name: 'Search a place or address' });
-    const answer = page.waitForResponse((r) => r.url().includes('/api/v1/geocode') && r.request().method() === 'GET');
+    const answer = page.waitForResponse((r) => r.url().includes('/data/search/') && r.request().method() === 'GET');
     await search.fill('Kutaisi');
     expect((await answer).ok()).toBe(true);
     await expect(page.getByRole('option', { name: /Kutaisi/ }).first()).toBeVisible();
@@ -41,10 +43,12 @@ test('search → road with weather → simulated drive → live share → driver
     await page.keyboard.press('Escape');
   });
 
-  await test.step('a road with the weather along it', async () => {
-    const forecast = page.waitForResponse((r) => r.url().includes('/api/v1/weather/forecast'));
+  await test.step('a road (routed on the device) with the weather along it', async () => {
+    const roads = page.waitForResponse((r) => r.url().includes('/data/roads/'));
+    const forecast = page.waitForResponse((r) => r.url().includes('/data/weather/'));
     await page.getByRole('button', { name: 'Try Tbilisi → Batumi' }).click();
     await expect(page.getByText(/\d{3}\s?km\b/).first()).toBeVisible();
+    expect((await roads).ok()).toBe(true);
     const f = await forecast;
     if (STRICT) expect(f.status()).toBe(200);
     // The weather at each place on the way, at the time we get there.
@@ -86,5 +90,5 @@ test('search → road with weather → simulated drive → live share → driver
     await expect(page.getByText(/hazard on the road reported/i)).toBeVisible();
   });
 
-  if (STRICT) expect(limited, 'requests to public services with limits').toEqual([]);
+  expect(foreign, 'requests to anyone but our own origin and the map background').toEqual([]);
 });

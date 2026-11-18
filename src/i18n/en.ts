@@ -437,6 +437,7 @@ export const en = {
     waitingForLocation: 'Waiting for your location…',
     unableRoute: 'Unable to calculate route',
     noRoadRoute: 'Unable to calculate route — no drivable road connects these places',
+    notCoveredYet: 'Routes aren\'t available here yet — our road data covers Georgia for now',
     busyService: 'the free service is busy, try again in a moment',
     checkConnection: 'check your connection',
     samePlace: 'Start and destination are the same place',

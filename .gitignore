@@ -13,8 +13,9 @@ coverage
 # Open data downloaded and built by the pipelines (pipelines/); never committed
 data/raw/
 data/build/
-# Places tiles built from OSM by `npm run data:osm` (ODbL, rebuilt from the extract)
-public/data/places/
+# Our static data, built by `npm run data:all` (ADR-019): places, search, roads, heights, forecast, air quality —
+# rebuilt from open data on every deploy, never committed
+public/data/
 
 # Browser tests (Playwright)
 test-results/

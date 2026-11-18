@@ -1,15 +1,19 @@
 /*
- * navWeather service worker — offline APP SHELL only.
+ * navWeather service worker — the app shell and our data files, for speed and offline use (ADR-019).
  *
  * - Same-origin hashed assets (/assets/*): cache-first (immutable).
  * - Page navigations: network-first, falling back to the cached shell.
- * - Cross-origin requests (routing, weather, geocoding, map tiles) are NEVER
- *   cached here: their URLs contain route coordinates, and persisting them
- *   would amount to storing location history. Live data is labelled stale in
- *   the app instead of being served from a hidden cache.
+ * - Our data in build/run folders (/data/roads/<build>/…, /data/search/<build>/…, /data/weather/runs/…,
+ *   /data/air/runs/…): cache-first — those files never change. The cache keeps the most recent DATA_MAX files;
+ *   they are region files (roads, search words, forecast tiles), on this device only, never sent anywhere.
+ * - Index files (which build is current) and anything cross-origin (map tiles) are never cached here; the API
+ *   (live sharing, reports) neither.
  */
 const PREFIX = 'navweather-shell-';
-const VERSION = `${PREFIX}v4`;
+const VERSION = `${PREFIX}v5`;
+const DATA = 'navweather-data-v1';
+const DATA_MAX = 600;
+const IMMUTABLE_DATA = /^\/data\/(roads\/[^/]+\/|search\/[^/]+\/|weather\/runs\/|air\/runs\/)/;
 /** The downloadable voice was removed; free the space it took (~93 MB) on devices that had it. */
 const RETIRED = ['navweather-voices-v1'];
 const SHELL = ['/', '/manifest.webmanifest', '/favicon.svg', '/icons/icon-192.png', '/icons/icon-512.png'];
@@ -23,7 +27,7 @@ self.addEventListener('activate', (event) => {
     caches
       .keys()
       // Older app shells and retired caches; anything else is not ours to delete.
-      .then((keys) => Promise.all(keys.filter((k) => (k.startsWith(PREFIX) && k !== VERSION) || RETIRED.includes(k)).map((k) => caches.delete(k))))
+      .then((keys) => Promise.all(keys.filter((k) => (k.startsWith(PREFIX) && k !== VERSION) || (k.startsWith('navweather-data-') && k !== DATA) || RETIRED.includes(k)).map((k) => caches.delete(k))))
       .then(() => self.clients.claim()),
   );
 });
@@ -51,6 +55,24 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  if (IMMUTABLE_DATA.test(url.pathname)) {
+    event.respondWith(
+      caches.open(DATA).then((cache) =>
+        cache.match(req).then(
+          (hit) =>
+            hit ||
+            fetch(req).then((res) => {
+              if (res.ok && !(res.headers.get('content-type') || '').includes('text/html')) {
+                cache.put(req, res.clone()).then(() => trim(cache));
+              }
+              return res;
+            }),
+        ),
+      ),
+    );
+    return;
+  }
+
   if (url.pathname.startsWith('/assets/') || url.pathname.startsWith('/icons/')) {
     event.respondWith(
       caches.match(req).then(
@@ -67,3 +89,16 @@ self.addEventListener('fetch', (event) => {
     );
   }
 });
+
+/** Keep the data cache to its most recent DATA_MAX files (oldest first out). */
+let trimming = false;
+function trim(cache) {
+  if (trimming) return;
+  trimming = true;
+  cache
+    .keys()
+    .then((keys) => Promise.all(keys.slice(0, Math.max(0, keys.length - DATA_MAX)).map((k) => cache.delete(k))))
+    .finally(() => {
+      trimming = false;
+    });
+}

@@ -1,5 +1,13 @@
 # navWeather HTTP API — v1
 
+> **2026-11-18 ([ADR-019](../architecture/decisions/ADR-019-zero-owner-cost.md)):** the API now has only `/health`,
+> `/share…` and `/reports…`. `/geocode`, `/route`, `/route/matrix`, `/weather/*`, `/elevation`, `/air`,
+> `/transit/plan`, `/trips/*` and `/whereami` are **removed**: the app does that work on the device over static files
+> under `/data` (`roads.json` + `roads/<build>/`, `search.json` + `search/<build>/`, `weather/`, `air/`, `elev/v1/`,
+> `places/v1/`). Their formats: `src/roads/format.ts`, `src/search/format.ts`, `src/api/weather.ts`, `src/api/air.ts`,
+> `src/api/elevation.ts`.
+
+
 Base path: **`/api/v1`** on the app's origin. The unversioned `/api/…` paths
 are aliases of v1 for clients from before versioning (ADR-009). Types are
 shared code: `src/api/v1.ts`, `src/share/protocol.ts`, `src/reports/protocol.ts`.

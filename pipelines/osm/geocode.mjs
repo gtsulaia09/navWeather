@@ -1,15 +1,15 @@
 /**
- * Our geocoder index (DEVELOPMENT_PLAN DP-4.4): settlements, named places, streets and addresses of a region in a
- * D1 (SQLite) table with an FTS5 full-text index, so search and suggestions need no third party (Nominatim,
- * Photon). Collected in the same pass over the extract as the places tiles (build.mjs); written as SQL that
- * `npm run db:geo:local` loads into the local D1 (and `wrangler d1 execute --remote` into Cloudflare's).
+ * Our search index (DEVELOPMENT_PLAN DP-4.4; ADR-019): settlements, named places, streets and addresses of a region
+ * as static files the device searches itself (src/search/format.ts) — no search server, no third party (Nominatim,
+ * Photon). Collected in the same pass over the extract as the places tiles (build.mjs).
  *
  * Every row has its names in the source script plus English and Russian (OSM `name:en`/`name:ru`, else the
  * app's own transliteration of Georgian — the same as on screen), and the settlement it belongs to for labels
  * ("Rustavelis Ave, Tbilisi").
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { BLOCK_ROWS, encodePostings, MAX_POSTINGS, SEARCH_VERSION, shardFile, shardOf, words } from '../../src/search/format.ts';
 import { hasGeorgian, localizeScript } from '../../src/i18n/script.ts';
 import { countryAt, decodeCountries } from '../../src/trip/countries.ts';
 
@@ -138,8 +138,8 @@ export function createGeocodeCollector() {
       for (const r of list) rows.push({ ...r, fixedCtx: r.ctx });
     },
 
-    /** Resolve settlements for labels and write the SQL. */
-    write(path, meta) {
+    /** Resolve settlements for labels and write the static search files under `dir` (public/data). */
+    write(dir, meta) {
       // Streets: per name, cluster ways that are within 3 km of each other (one row per town's street).
       for (const [, ways] of streets) {
         const clusters = [];
@@ -171,48 +171,76 @@ export function createGeocodeCollector() {
             }
         return best;
       };
-      const sql = [
-        '-- navWeather geocoder index (pipelines/osm/geocode.mjs). OpenStreetMap contributors, ODbL 1.0.',
-        'DROP TABLE IF EXISTS geo_fts;',
-        'DROP TABLE IF EXISTS geo;',
-        'DROP TABLE IF EXISTS geo_meta;',
-        'CREATE TABLE geo (rowid INTEGER PRIMARY KEY, id TEXT NOT NULL, kind TEXT NOT NULL, rank REAL NOT NULL, lat REAL NOT NULL, lon REAL NOT NULL, name TEXT NOT NULL, name_en TEXT NOT NULL, name_ru TEXT NOT NULL, ctx_en TEXT, ctx_ru TEXT);',
-        "CREATE VIRTUAL TABLE geo_fts USING fts5(names, ctx, tokenize = 'unicode61 remove_diacritics 2', prefix = '2 3 4');",
-        'CREATE TABLE geo_meta (k TEXT PRIMARY KEY, v TEXT NOT NULL);',
-      ];
-      const q = (s) => (s ? `'${String(s).replace(/'/g, "''")}'` : 'NULL');
-      // D1 accepts statements up to 100 KB: flush by size, not by row count.
-      const MAX_STATEMENT = 90_000;
-      let batchGeo = [];
-      let batchFts = [];
-      let sizeGeo = 0;
-      let sizeFts = 0;
-      const flush = () => {
-        if (batchGeo.length) sql.push(`INSERT INTO geo VALUES ${batchGeo.join(',')};`, `INSERT INTO geo_fts(rowid, names, ctx) VALUES ${batchFts.join(',')};`);
-        batchGeo = [];
-        batchFts = [];
-        sizeGeo = 0;
-        sizeFts = 0;
-      };
-      rows.forEach((r, i) => {
+      // Rows best first (rank), then static files (ADR-019, format: src/search/format.ts).
+      const built = rows.map((r) => {
         const s = r.country || r.fixedCtx ? null : nearest(r.lon, r.lat);
         const ctx = r.fixedCtx ?? (r.country ? countryOf(r.lon, r.lat) : s ?? (r.city ? namesOf({ name: r.city }) : null));
         // A street or place counts more in a bigger town: Tbilisi's Rustaveli Avenue before a village's.
         const rank = r.rank + (s ? s.rank * (r.kind === 'street' ? 0.25 : 0.08) : 0);
-        const rowid = i + 1;
-        const g = `(${rowid},${q(r.id)},${q(r.kind)},${rank.toFixed(2)},${r.lat.toFixed(6)},${r.lon.toFixed(6)},${q(r.local)},${q(r.en)},${q(r.ru)},${q(ctx?.en)},${q(ctx?.ru)})`;
-        const f = `(${rowid},${q(r.all)},${q(ctx ? [...new Set([ctx.local, ctx.en, ctx.ru])].join(' ') : '')})`;
-        const [gb, fb] = [Buffer.byteLength(g), Buffer.byteLength(f)]; // the limit is in bytes (Georgian: 3 per letter)
-        if (sizeGeo + gb > MAX_STATEMENT || sizeFts + fb > MAX_STATEMENT) flush();
-        batchGeo.push(g);
-        batchFts.push(f);
-        sizeGeo += gb + 1;
-        sizeFts += fb + 1;
+        const ctxText = ctx ? [...new Set([ctx.local, ctx.en, ctx.ru])].join(' ') : '';
+        return { r, ctx, rank, nameWords: [...new Set(words(r.all))], ctxWords: [...new Set(words(ctxText))] };
       });
-      flush();
-      for (const [k, v] of Object.entries(meta)) sql.push(`INSERT INTO geo_meta VALUES (${q(k)}, ${q(v)});`);
-      mkdirSync(dirname(path), { recursive: true });
-      writeFileSync(path, sql.join('\n') + '\n');
+      built.sort((x, y) => y.rank - x.rank);
+      const root = join(dir, 'search', meta.build);
+      rmSync(join(dir, 'search'), { recursive: true, force: true });
+      const postings = new Map();
+      const total = new Map();
+      built.forEach((b, id) => {
+        // Name words count fully; place-name words (the town) only to narrow a search down ("Rustaveli Tbilisi").
+        for (const w of new Set([...b.nameWords, ...b.ctxWords])) {
+          if ([...w].length < 2) continue;
+          total.set(w, (total.get(w) ?? 0) + 1);
+          let l = postings.get(w);
+          if (!l) postings.set(w, (l = []));
+          if (l.length < MAX_POSTINGS) l.push(id);
+        }
+      });
+      const shards = new Map();
+      for (const [w, ids] of postings) {
+        const k = shardOf(w);
+        let sh = shards.get(k);
+        if (!sh) shards.set(k, (sh = {}));
+        sh[w] = [total.get(w), encodePostings(ids)];
+      }
+      for (const [k, sh] of shards) {
+        mkdirSync(join(root, 'w'), { recursive: true });
+        writeFileSync(join(root, 'w', `${shardFile(k)}.json`), JSON.stringify(sh));
+      }
+      mkdirSync(join(root, 'r'), { recursive: true });
+      const round = (v) => Math.round(v * 1e5) / 1e5;
+      for (let i = 0; i < built.length; i += BLOCK_ROWS) {
+        const block = built.slice(i, i + BLOCK_ROWS).map((b) => [
+          b.r.id,
+          b.r.kind,
+          Math.round(b.rank * 100) / 100,
+          round(b.r.lon),
+          round(b.r.lat),
+          b.r.en,
+          b.r.ru,
+          b.ctx?.en ?? '',
+          b.ctx?.ru ?? '',
+          b.nameWords.join(' ') + (b.ctxWords.length ? ` | ${b.ctxWords.join(' ')}` : ''),
+        ]);
+        writeFileSync(join(root, 'r', `${i / BLOCK_ROWS}.json`), JSON.stringify(block));
+      }
+      let w = 180, so = 90, e = -180, n = -90;
+      for (const b of built) {
+        if (b.r.fixedCtx) continue; // world cities don't widen the region
+        w = Math.min(w, b.r.lon);
+        e = Math.max(e, b.r.lon);
+        so = Math.min(so, b.r.lat);
+        n = Math.max(n, b.r.lat);
+      }
+      const index = {
+        version: SEARCH_VERSION,
+        build: meta.build,
+        rows: built.length,
+        blockRows: BLOCK_ROWS,
+        shards: [...shards.keys()].sort(),
+        bbox: [w, so, e, n].map((v) => Math.round(v * 1e4) / 1e4),
+        source: meta.source,
+      };
+      writeFileSync(join(dir, 'search.json'), JSON.stringify(index));
       const kinds = {};
       for (const r of rows) kinds[r.kind === 'address' || r.kind === 'street' || PLACE_RANK[r.kind] !== undefined ? r.kind : 'place'] = (kinds[r.kind === 'address' || r.kind === 'street' || PLACE_RANK[r.kind] !== undefined ? r.kind : 'place'] ?? 0) + 1;
       return { rows: rows.length, kinds };

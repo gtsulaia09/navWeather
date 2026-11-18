@@ -16,46 +16,32 @@ ETA   11:40  Samtredia   ☀ 21°
 ETA   13:00  Batumi      ☁ 23°
 ```
 
-It runs on free services with no API keys (OSRM, Open-Meteo, Nominatim/Photon,
-Overpass, OpenFreeMap, Transitous) plus a tiny Cloudflare Worker for live location sharing
-and driver reports.
+It runs on open data (OpenStreetMap, ECMWF/GFS forecasts, CAMS, Copernicus DEM) turned into static files that the
+app reads on your device — no API keys, no paid service, no server doing your routing — plus a tiny Cloudflare
+Worker for live location sharing and driver reports.
 
 ## Quick start
 
 ```bash
 npm install
-npm run dev          # everything on localhost: app on http://localhost:5173 + the Worker on :8787
-                     # (live sharing, driver reports, Long Trip planner; local Durable Objects, no account)
-npm test             # unit + end-to-end scenarios, no network
-npm run build        # type-check + production build
+npm run data:all     # our data, once (and again to refresh): Georgia's OpenStreetMap extract (~100 MB, Geofabrik,
+                     # MD5-checked) → places, search index (197 000 places, streets, addresses) and road files;
+                     # ground heights (Copernicus DEM); a forecast for the Caucasus (ECMWF/GFS) and air quality
+                     # (CAMS) from the Open-Meteo open-data archive — all as static files under public/data
+npm run dev          # app on http://localhost:5173 + the Worker on :8787 (live sharing, driver reports)
+npm test             # unit + scenario tests, no network (routing on real roads once data:all has run)
+npm run build        # type-check + production build (app + data in dist/)
 npm run preview:worker   # the production build served by the Worker, as on Cloudflare: http://127.0.0.1:8787
 ```
 
-`npm run dev:web` starts only the app (sharing, reports and Long Trip plans then say the server is missing);
+Everything a user does runs **on their device** over those static files — routing (car, walking, cycling, with
+turn-by-turn steps), search, forecasts, air quality, heights and the Long Trip planner — so the app costs nothing to
+run at any number of users ([ADR-019](docs/architecture/decisions/ADR-019-zero-owner-cost.md)). The Worker only relays
+live sharing and driver reports, on Cloudflare's Free plan. Outside the regions we build, routing and search say
+"not available here yet"; no public server with limits is ever called.
+
+`npm run dev:web` starts only the app (sharing and reports then say the server is missing);
 `npm run dev:api` starts only the Worker.
-
-Our own data (instead of public services with limits): once, and again to refresh —
-
-```bash
-npm run seed:local   # downloads Georgia's OpenStreetMap extract (~100 MB, Geofabrik, MD5-checked), builds the
-                     # places tiles (places, speed limits, cameras, level crossings) into public/data/places and
-                     # loads the search index (188 000 places, streets, addresses) into the local D1 database
-```
-
-Our routing engine (Valhalla) runs in Docker — [Colima](https://github.com/abiosoft/colima) (free) or Docker Desktop:
-
-```bash
-npm run engines:up   # starts Valhalla and builds Georgia's road graph on first run (~1 min); then restart npm run dev
-```
-
-Our forecast, for the whole world (ECMWF IFS and NOAA GFS open data, twice a day — run it again for a fresh one):
-
-```bash
-npm run data:weather # reads the newest model runs from the Open-Meteo open-data archive (~270 MB, land and coasts
-                     # only) into the local R2 bucket of `npm run dev` (~30 min); `-- --bbox 39,40,47,44` for one area
-```
-
-Without them the app still works and asks the public Overpass, Photon, OSRM and Open-Meteo servers instead.
 
 Use Node 22+ (required by the Cloudflare tooling; the tests need 20+).
 Location only works on `https://` or `localhost` — opening the dev server from

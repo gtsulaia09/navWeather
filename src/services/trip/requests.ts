@@ -1,4 +1,4 @@
-import { apiPaths } from '../../api/v1';
+import { config } from '../../config';
 import { positionAtDistance, timeAtDistance } from '../../algorithms/routeTiming';
 import type { LocationForecast } from '../../types/weather';
 import type { TimedRoute, RouteSample, PlaceAlongRoute } from '../../types/route';
@@ -16,14 +16,17 @@ import type {
   TripWeatherSample,
   VehicleProfile,
 } from '../../trip/types';
-import { fetchJson } from '../http';
+import { ProviderError } from '../http';
+import { PlacesTiles } from '../places/tiles';
+import { createTripPlan, findStopPlaces, TripPlanError } from '../../trip/planning/planner';
+import { sanitizeStopPlacesRequest, sanitizeTripRequest } from '../../trip/protocol';
+import { TileTripPlaces } from '../../trip/stops/tilePlaces';
 import type { BordersResponse } from '../../trip/borders';
 import { countriesAlong, decodeCountries, type CountriesFile, type CountryIndex } from '../../trip/countries';
 
 /**
- * Client side of the long-trip planner (ADR-013): turn the app's route,
- * forecasts and settlements into a TripPlanRequest, and call the Worker.
- * Positions sent are the route itself (needed to plan it) — nothing else.
+ * The long-trip planner on the device (ADR-013, ADR-019): turn the app's route, forecasts and settlements into a
+ * TripPlanRequest and plan it here — the route never leaves the device.
  */
 
 /** The client's own timed route as a planner profile (exact, no resampling). */
@@ -131,16 +134,47 @@ export function buildTripRequest(input: TripRequestInput): TripPlanRequest {
   };
 }
 
-export function fetchTripPlan(req: TripPlanRequest, signal?: AbortSignal): Promise<TripPlan> {
-  return fetchJson<TripPlan>(apiPaths.tripsPlan, {
-    provider: 'Trip planner',
-    signal,
-    timeoutMs: 15_000,
-    init: { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(req) },
-  });
+/**
+ * The long-trip plan, worked out on the device (ADR-019; was `POST /api/v1/trips/plan`): the same planner module,
+ * the same validation — no server, no request limit, and the route never leaves the device.
+ */
+export async function fetchTripPlan(req: TripPlanRequest, signal?: AbortSignal): Promise<TripPlan> {
+  const now = Date.now();
+  const clean = sanitizeTripRequest(JSON.parse(JSON.stringify(req)), now);
+  if (!clean) throw new ProviderError('This trip cannot be planned', 'invalid-response', 'Trip planner');
+  if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+  try {
+    return await backend.plan(clean, now);
+  } catch (e) {
+    if (e instanceof TripPlanError) throw new ProviderError('This trip cannot be planned', 'invalid-response', 'Trip planner');
+    throw e;
+  }
 }
 
-/** Places around one stop: sends the stop and the road ±30 km around it. */
+let stopPlaceTiles: TileTripPlaces | null = null;
+
+/** Where plans and stop places come from: the planner on this device (tests swap it). */
+export interface TripBackend {
+  plan(req: TripPlanRequest, nowMs: number): Promise<TripPlan>;
+  places(req: StopPlacesRequest, signal?: AbortSignal): Promise<StopPlaces[]>;
+}
+const deviceBackend: TripBackend = {
+  plan: (req, nowMs) => createTripPlan(req, { places: null, nowMs }),
+  places: (req, signal) => {
+    stopPlaceTiles ??= new TileTripPlaces(new PlacesTiles(config.endpoints.placesTiles), null);
+    return findStopPlaces(req, stopPlaceTiles, signal);
+  },
+};
+let backend: TripBackend = deviceBackend;
+/** Tests: another planner; null puts the device's back. */
+export function setTripBackend(b: TripBackend | null): void {
+  backend = b ?? deviceBackend;
+}
+
+/**
+ * Places around one stop (hotels, food, fuel, rest) from our places tiles on the device (ADR-019; was
+ * `POST /api/v1/trips/places` with Overpass): the stop and the road ±30 km around it, no server.
+ */
 export async function fetchStopPlaces(
   stop: TripStop,
   timed: TimedRoute,
@@ -151,7 +185,7 @@ export async function fetchStopPlaces(
 ): Promise<StopPlaces[]> {
   const pts = [];
   for (let d = Math.max(0, stop.alongM - 30_000); d <= Math.min(timed.totalDistM, stop.alongM + 30_000); d += 500) pts.push(positionAtDistance(timed, d).coordinate);
-  const req: StopPlacesRequest = {
+  const raw: StopPlacesRequest = {
     version: 1,
     stop: { lat: stop.lat, lon: stop.lon, kinds: stop.kinds, arriveMs: stop.arriveMs, tz: stop.tz },
     route: encodePolyline(pts, 5),
@@ -159,13 +193,9 @@ export async function fetchStopPlaces(
     preferences,
     locale,
   };
-  const res = await fetchJson<{ places: StopPlaces[] }>(apiPaths.tripsPlaces, {
-    provider: 'Trip planner',
-    signal,
-    timeoutMs: 25_000,
-    init: { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(req) },
-  });
-  return res.places;
+  const req = sanitizeStopPlacesRequest(JSON.parse(JSON.stringify(raw)), Date.now());
+  if (!req) throw new ProviderError('Places around this stop are not available', 'invalid-response', 'Trip planner');
+  return backend.places(req, signal);
 }
 
 /** Countries along the route and where they change (a few dozen points, never the user's position). */

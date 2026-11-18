@@ -22,7 +22,7 @@ import { LAYERS, POINT_LAYERS, keepTags, layersOf, ROAD_LIMIT_HIGHWAY, tileOf, t
 
 const SRC = process.argv[2] ?? 'data/raw/georgia-latest.osm.pbf';
 const OUT = process.env.PLACES_OUT ?? 'public/data/places/v1';
-const GEO_OUT = process.env.GEO_OUT ?? 'data/build/ge/geocode.sql';
+const GEO_OUT = process.env.GEO_OUT ?? 'public/data';
 const geo = createGeocodeCollector();
 const hasTags = (t) => {
   for (const _ in t) return true;
@@ -150,12 +150,13 @@ for (const layer of LAYERS) {
 writeFileSync(join(OUT, 'index.json'), JSON.stringify(index));
 // The region's countries come from OSM; the rest of the world's cities from Natural Earth (if downloaded).
 geo.addRows(worldCities(process.env.WORLD_CITIES ?? 'data/raw/ne_10m_populated_places.geojson', new Set(['GE'])));
-const geoStats = geo.write(GEO_OUT, { source: index.source, license: index.license, dataDate: index.dataDate, region: index.region, builtAt: index.builtAt });
+// A unique folder per build: its files are cached as immutable, so a rebuild must never reuse a name.
+const geoStats = geo.write(GEO_OUT, { build: `${index.dataDate}-${Date.now().toString(36)}`, source: index.source });
 console.log(
   `${count.toLocaleString('en')} nodes read; ${Object.entries(stats)
     .map(([k, v]) => `${k} ${v}`)
     .join(', ')}`,
 );
 console.log(`${files} tiles, ${(bytes / 1e6).toFixed(1)} MB → ${OUT}`);
-console.log(`geocoder: ${geoStats.rows} rows (${Object.entries(geoStats.kinds).map(([k, v]) => `${k} ${v}`).join(', ')}) → ${GEO_OUT}`);
+console.log(`search: ${geoStats.rows} rows (${Object.entries(geoStats.kinds).map(([k, v]) => `${k} ${v}`).join(', ')}) → ${GEO_OUT}/search`);
 console.log(`done in ${((Date.now() - t0) / 1000).toFixed(1)} s`);

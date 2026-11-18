@@ -1,5 +1,15 @@
 # Architecture
 
+> **2026-11-18 ([ADR-019](architecture/decisions/ADR-019-zero-owner-cost.md)) — where things run now:** routing on the
+> device (`src/roads`: road files from `pipelines/roads`, A* over directed edges with turn restrictions, turn-by-turn
+> steps, in a Web Worker via `src/roads/client.ts`; `LocalRoutingProvider`), search on the device
+> (`StaticGeocodingProvider` over `src/search/format.ts` files), forecasts, air quality and heights on the device
+> (`StaticWeatherProvider`, `StaticAirQualityProvider`, `StaticElevationProvider` over static tiles), the Long Trip
+> planner on the device (`src/services/trip/requests.ts`). The Worker serves the static assets and only live sharing and
+> driver reports. Public servers with limits (OSRM, FOSSGIS, Photon, Nominatim, Overpass, Open-Meteo API, Transitous)
+> are no longer called; public transport is off. Sections below that describe those servers are history.
+
+
 navWeather is a single-page React app plus a Cloudflare Worker (live location sharing, driver reports,
 approximate location, the Long Trip planner). Everything else currently runs in the browser against free public
 services; the target moves them onto our own engines on Cloudflare ([TARGET_ARCHITECTURE](architecture/TARGET_ARCHITECTURE.md),

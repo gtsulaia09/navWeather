@@ -1,56 +1,59 @@
 # Cost and scale model
 
-Decisions: [ADR-015](../architecture/decisions/ADR-015-free-software-own-hosting.md) — the only cost is hosting; every
-third-party component is free forever. [ADR-016](../architecture/decisions/ADR-016-all-on-cloudflare-workers.md) —
-hosting is Cloudflare. Placement of each component: [FREE_STACK_PLAN §6a](../FREE_STACK_PLAN.md).
+Decision: [ADR-019](../architecture/decisions/ADR-019-zero-owner-cost.md) (owner, 2026-11-18) — **the owner pays
+nothing, at any number of users.** Earlier model (ADR-015/016: "only hosting is paid") and its simulation are in git
+history; at 1 billion users (30 % daily) it came to ≈ $200,000 a month, mostly Worker requests and Valhalla/MOTIS in
+Containers. Prices verified 2026-11-18 at developers.cloudflare.com.
 
-**Status:** the measured model (hosting cost per 1,000 daily active users) comes from the capacity pilot
-**DP-5.6** and is then reported monthly (DP-12.7). Until then this file lists the cost drivers, list prices and the
-method. Prices verified 2026-10-04 at developers.cloudflare.com.
+## 1. Where every part runs and what it costs
 
-## 1. What costs money (only Cloudflare hosting)
-
-| Item | Price (list) | Cost driver | How we keep it low |
+| Part | Runs | Cost to the owner | Limit, and what happens past it |
 | --- | --- | --- | --- |
-| Workers Paid base | $5/month, 10 M requests included, then $0.30 per million | API requests | static assets for everything that fits (free, unlimited); one corridor request for reports; caching |
-| Static assets | free, unlimited requests | — | app, small regional tile sets, borders |
-| R2 | storage and operations; **egress free** | tile/places/weather reads | Cache API on the custom domain; immutable files; offline region packs |
-| D1 | rows read/written, storage | geocoder and places queries | answers by tile → cache; one database per region |
-| Durable Objects | requests and active duration | live share, reports, traffic aggregates | hibernating WebSockets (incoming messages billed 20:1); sharding by geohash |
-| Queues | messages | push fan-out, traffic ingestion | aggregation on the device; drop raw points |
-| Containers | $0.000020 per vCPU-second, $0.0000025 per GiB-second, disk per GB-second, only while running; egress $0.025/GB in North America/Europe (1 TB/month included) | routing, transit, radar requests | regional instance groups; scale to zero; cache identical requests; matrices only on demand |
-| Domain | registrar price | — | attached to the Worker (DP-12.1) |
+| App, map styles | static assets (Worker, Free plan) | $0 | none for requests; 20,000 files × 25 MiB per Worker version |
+| Map background | OpenFreeMap | $0 | none ("no limits on map views or requests") |
+| Routing (car, walk, bike) | device, over static road files (`/data/roads`) | $0 | — |
+| Search | device, over static index files (`/data/search`) | $0 | — |
+| Forecast, air quality, heights | device, over static tiles (`/data/weather`, `/data/air`, `/data/elev`) | $0 | — |
+| Places, speed limits, cameras, borders | static tiles / bundled file | $0 | — |
+| Long Trip planner | device | $0 | — |
+| Data builds | GitHub Actions, public repository | $0 | unlimited minutes for public repositories |
+| Live sharing, driver reports | Worker + Durable Objects, Free plan | $0 | 100,000 Worker requests and 100,000 Durable Object requests a day: past that, errors until 00:00 UTC — the app says "busy", never a bill |
+| Domain | `*.workers.dev` | $0 | — |
 
-Development and the preview Worker cost $0 on Workers Free until the first engine runs in Containers (DP-5.1).
+The account has **no payment method**, so nothing can be charged. `npm run check:envs` (CI) fails on any binding that
+could bill (D1, R2, Containers, Queues).
 
-## 2. Request pattern per daily active user (to be measured)
+## 2. What a user downloads (measured 2026-11-18, Georgia)
 
-The pilot measures, per role, requests per DAU and requests per second one container instance sustains:
+| Data | Files | Size | Per trip / search |
+| --- | --- | --- | --- |
+| Main roads of the region | 1 | 0.87 MB gzip | once per build (cached) |
+| Street tiles (zoom 11) | 410 | 14.4 MB gzip total, ≈ 35 kB each (largest, central Tbilisi, 1.1 MB) | the tiles around start and end |
+| Search index | 2,169 word files + 197 row blocks | ≈ 66 MB raw, compressed by Cloudflare | one word file + a few row blocks |
+| Forecast | 1° tiles, ≈ 30 kB gzip | Caucasus box | the tiles along the route, once per model run |
+| Places tiles | 2,681 | 8.7 MB | the tiles near the route |
 
-| Role | What triggers requests | Measured in |
-| --- | --- | --- |
-| Routing (Valhalla) | plan (1 + alternatives), re-routes, detour matrices, weather re-route checks | DP-5.6 |
-| Geocoder (D1) | autocomplete (debounced), submit, reverse naming | DP-5.6 |
-| Places (R2/D1) | places along the route, POI search, limits/cameras by corridor | DP-5.6 |
-| Weather cells (R2) | plan samples, place cards, map layer; refresh on new model runs | DP-5.6 |
-| Real time (DO) | live share updates, report corridor refreshes | DP-5.6 |
-| Tiles (R2 / static) | map views; offline region downloads | DP-5.6 |
+Everything inside a build folder is immutable: cached by the browser for a year and by the service worker (600 files),
+so repeat trips and searches need no download at all. Total files of one deploy (Georgia): ≈ 8,000 of the 20,000 a
+Free-plan Worker may hold.
 
 ## 3. Scale rules
 
-- Upstream data volume (model files, OSM extracts, feeds) depends on regions and refresh cadence, **not on users**.
-- Every server role is stateless and horizontally scalable; Durable Objects are sharded by region before any object
-  nears ~1,000 req/s (REQ-CF-008).
-- Engines run per region; a region is added by the procedure DP-13.9.
-- If container limits (4 vCPU / 12 GiB / 20 GB per instance; 1,500 vCPU per account) block planet-scale engines, the
-  heavy engines move to rented servers behind the same Worker routes — decided by the pilot, recorded in an ADR.
+- Per-user server work: only sharing and reports. A feature that needs the server per user is redesigned as static
+  data + device code, or not built (ADR-019).
+- Upstream data volume (OSM extracts, model runs, CAMS, DEM) depends on regions and refresh cadence, **not on users**.
+- More regions: each region's road, search and places files are added to the deploy; past 20,000 files, further regions
+  go to further Workers on the same free account (static assets of each are free).
+- Sharing and reports: the Free plan's daily limits cap them. At very large scale they will often be "busy"; that is the
+  price of never receiving a bill.
+- At Google-Maps-class traffic Cloudflare may ask for an Enterprise contract for the static traffic: the risk is a limit
+  on the account, not a charge.
 
 ## 4. Triggers
 
 | Trigger | Action |
 | --- | --- |
-| First engine needed on preview | enable Workers Paid; spend alerts (DP-5.1) |
-| Custom domain bought | Cache API in front of tiles, places and weather; WAF rules (DP-12.1) |
-| Reports object > 200 req/s at peak | shard by region (DP-7.2) |
-| Container group CPU > 70 % sustained | more instances in that region; review cache hit rates |
-| New region | data pipeline + engine images + checks (DP-13.9) |
+| A region's street tile > 1 MB (central Tbilisi today) | split dense tiles one zoom level deeper (smaller first download) |
+| Files of one deploy near 20,000 | move a data set (search, places) to its own free Worker |
+| Sharing/reports "busy" on most days | shard reports per region; consider peer-to-peer sharing — never a paid plan |
+| New region | `pipelines/roads`, `pipelines/osm` for its extract; forecast box widened |

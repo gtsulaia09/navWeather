@@ -4,6 +4,8 @@
 **Hosting:** [ADR-016](ADR-016-all-on-cloudflare-workers.md) (Cloudflare Workers; where each engine runs) ·
 **Catalogue:** [FREE_STACK_PLAN](../../FREE_STACK_PLAN.md) · **Plan:** [DEVELOPMENT_PLAN](../../DEVELOPMENT_PLAN.md)
 
+> **Revised by [ADR-019](ADR-019-zero-owner-cost.md) (2026-11-18):** the owner pays for nothing — hosting included. Cloudflare Free plan without a card, static data files, engines on the device. Everything else below (free for users, no sponsors, free software and open data only, no limited public servers) stands.
+
 ## Context
 On 2026-10-04 the owner set the cost rules for the whole project:
 

@@ -1,20 +1,20 @@
 /**
- * `/api/v1/weather/forecast` and `/api/v1/weather/meta` (DEVELOPMENT_PLAN DP-4.6, DP-6.6): our forecast for any
- * point on Earth, from open model data the weather pipeline (`pipelines/weather/build.mjs`) turns into tiles in R2.
- * Platform-neutral: the pipeline writes with these definitions, the Worker reads with them, the tests check them.
+ * Our forecast (DEVELOPMENT_PLAN DP-4.6, DP-6.6; ADR-019): open model data that the weather pipeline
+ * (`pipelines/weather/build.mjs`) turns into static tile files, which the device reads and answers from itself —
+ * no weather server. Platform-neutral: the pipeline writes with these definitions, the app reads with them.
  *
  * Sources: ECMWF IFS 0.25° (CC BY 4.0) for everything but visibility, NOAA GFS 0.25° (public domain) for visibility,
  * both read from the Open-Meteo open-data archive on AWS (CC BY 4.0). The answer is Open-Meteo-compatible (the same
  * query and the same JSON), so the app's Open-Meteo reader serves both.
  *
- * Storage: one object per 5° × 5° tile of the 0.25° grid (land and its coasts only), point after point; every point
- * is a record of int16: the grid cell's height, then each variable at every forecast step. A point's record sits at
- * a fixed offset, so the Worker reads exactly that record with a range request.
+ * Storage: one gzip-compressed file per 1° × 1° tile of the 0.25° grid (land and its coasts only, ≈ 30 kB), point
+ * after point; every point is a record of int16: the grid cell's height, then each variable at every forecast step.
+ * The device downloads the whole tile (static assets have no range requests) and keeps it for the run.
  */
 
 export const GRID = { lat0: -90, lon0: -180, step: 0.25, rows: 721, cols: 1440 } as const;
 /** Grid cells per tile side (5°). */
-export const TILE = 20;
+export const TILE = 4;
 export const MISSING = -32768;
 export const MAX_LOCATIONS = 100;
 /** Older than this (from the model run's start), our forecast is not served: the app uses its fallback. */
@@ -344,19 +344,4 @@ export function pointForecast(
   const hourly: Record<string, (number | null)[]> = { time: plan.hours };
   for (const key of q.hourly) hourly[key] = all[key]();
   return { ...(q.elevation !== undefined ? { elevation: q.elevation } : gridElev !== null ? { elevation: gridElev } : {}), hourly };
-}
-
-/** Byte ranges to read from one tile for these point indexes: neighbours share a read when the gap is small. */
-export function tileReads(points: number[], recBytes: number, maxGapBytes = 16_384, maxSpanBytes = 262_144): { offset: number; length: number; points: number[] }[] {
-  const sorted = [...new Set(points)].sort((a, b) => a - b);
-  const out: { offset: number; length: number; points: number[] }[] = [];
-  for (const p of sorted) {
-    const start = p * recBytes;
-    const cur = out[out.length - 1];
-    if (cur && start - (cur.offset + cur.length) <= maxGapBytes && start + recBytes - cur.offset <= maxSpanBytes) {
-      cur.length = start + recBytes - cur.offset;
-      cur.points.push(p);
-    } else out.push({ offset: start, length: recBytes, points: [p] });
-  }
-  return out;
 }
