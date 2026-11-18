@@ -9,6 +9,8 @@ coverage
 # Cloudflare local dev state and secrets
 .wrangler/
 .dev.vars*
+# HTTPS certificate for `npm run dev:phone` (scripts/dev-cert.mjs)
+.cert/
 
 # Open data downloaded and built by the pipelines (pipelines/); never committed
 data/raw/

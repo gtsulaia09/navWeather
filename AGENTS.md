@@ -63,6 +63,7 @@ weather. It is not "a map site" or "a weather site" — keep that direction.
 ## Commands
 ```
 npm run dev          # app on :5173 + Worker on :8787 (sharing, reports); the dev server proxies /api
+npm run dev:phone    # the same over HTTPS on the Wi-Fi address (own certificate), to test on a phone
 npm run dev:web      # only the app        npm run dev:api   # only the Worker (live share, reports)
 npm run preview:worker   # production build served by the Worker on :8787 (as deployed)
 npm test             # vitest (unit + scenarios; src/roads/realData.test.ts runs once road files exist)

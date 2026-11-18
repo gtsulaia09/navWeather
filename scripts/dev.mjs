@@ -5,6 +5,9 @@
  *     http://127.0.0.1:8787 with local Durable Objects and rate limits (`wrangler dev`, no Cloudflare account);
  *   - the Vite dev server on http://localhost:5173, which proxies /api to the Worker (vite.config.ts).
  *
+ * `npm run dev:phone` does the same over HTTPS on this computer's network addresses, for testing on a phone on the
+ * same Wi-Fi (scripts/dev-cert.mjs makes the certificate).
+ *
  * Extra arguments go to Vite (`npm run dev -- --port 5174`). If a Worker already answers on :8787
  * (`npm run dev:api` in another terminal), it is reused. Ctrl+C stops both.
  * Only the app: `npm run dev:web`. Only the Worker: `npm run dev:api`.
@@ -16,8 +19,8 @@ const API = 'http://127.0.0.1:8787/api/v1/health';
 const children = [];
 let stopping = false;
 
-function run(name, color, cmd, args) {
-  const child = spawn(cmd, args, { stdio: ['inherit', 'pipe', 'pipe'], env: { ...process.env, FORCE_COLOR: '1' } });
+function run(name, color, cmd, args, env = process.env) {
+  const child = spawn(cmd, args, { stdio: ['inherit', 'pipe', 'pipe'], env: { ...env, FORCE_COLOR: '1' } });
   const tag = `\x1b[${color}m[${name}]\x1b[0m `;
   const pipe = (from, to) => {
     let rest = '';
@@ -79,4 +82,24 @@ if (await apiRunning()) {
     console.log(ok ? '\x1b[36m[api]\x1b[0m ready on http://127.0.0.1:8787 (proxied as /api)' : '\x1b[36m[api]\x1b[0m not answering yet — sharing, reports and Long Trip plans need it'),
   );
 }
-run('web', 35, npx, ['vite', ...process.argv.slice(2)]);
+// `--phone` (npm run dev:phone): HTTPS on every network address, so a phone on the same Wi-Fi can open the app with
+// location working (phones allow it only on secure pages). Vite reads DEV_HTTPS (vite.config.ts).
+const args = process.argv.slice(2);
+const phone = args.includes('--phone');
+const viteArgs = args.filter((a) => a !== '--phone');
+const viteEnv = { ...process.env };
+if (phone) {
+  const { ensureDevCert } = await import('./dev-cert.mjs');
+  const { ips } = ensureDevCert();
+  viteEnv.DEV_HTTPS = '1';
+  viteArgs.push('--host');
+  const at = viteArgs.indexOf('--port');
+  const port = at >= 0 && viteArgs[at + 1] ? viteArgs[at + 1] : '5173';
+  console.log(
+    ips.length
+      ? `\x1b[35m[web]\x1b[0m phone (same Wi-Fi): ${ips.map((ip) => `https://${ip}:${port}`).join('  ')}` +
+          '\n\x1b[35m[web]\x1b[0m the phone warns "not private" once (our own certificate): open the details and continue to the site'
+      : '\x1b[35m[web]\x1b[0m no network address found — is this computer on Wi-Fi?',
+  );
+}
+run('web', 35, npx, ['vite', ...viteArgs], viteEnv);
