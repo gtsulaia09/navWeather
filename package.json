@@ -34,7 +34,7 @@
     "data:all": "npm run data:download && npm run data:osm && npm run data:roads && npm run data:elevation && npm run data:weather && npm run data:air -- --max-mb 60"
   },
   "dependencies": {
-    "@photostructure/tz-lookup": "11.7.0",
+    "@photostructure/tz-lookup": "11.8.0",
     "maplibre-gl": "^6.11.2",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
