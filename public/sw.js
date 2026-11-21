@@ -13,7 +13,7 @@ const PREFIX = 'navweather-shell-';
 const VERSION = `${PREFIX}v5`;
 const DATA = 'navweather-data-v1';
 const DATA_MAX = 600;
-const IMMUTABLE_DATA = /^\/data\/(roads\/[^/]+\/|search\/[^/]+\/|weather\/runs\/|air\/runs\/)/;
+const IMMUTABLE_DATA = /^\/data\/(roads\/[^/]+\/|search\/[^/]+\/|weather\/runs\/|air\/runs\/|basemap\/m\d+\/|basemap\/assets\/)/;
 /** The downloadable voice was removed; free the space it took (~93 MB) on devices that had it. */
 const RETIRED = ['navweather-voices-v1'];
 const SHELL = ['/', '/manifest.webmanifest', '/favicon.svg', '/icons/icon-192.png', '/icons/icon-512.png'];

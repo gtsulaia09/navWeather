@@ -145,7 +145,11 @@ interface Link {
   pc: RTCPeerConnection;
   ch: RTCDataChannel;
   routeSent: string | null;
+  createdAt: number;
 }
+
+/** A connection attempt still not up after this long is started again when the viewer says hello again. */
+const STALE_ATTEMPT_MS = 8000;
 
 /** The SHARER's side: answers every viewer's hello with a direct channel, sends each snapshot to all of them. */
 export class PeerSender {
@@ -181,7 +185,8 @@ export class PeerSender {
         if (this.last) void this.relaySnap(this.last);
       }
       const old = this.links.get(from);
-      if (!old || old.pc.connectionState === 'failed' || old.pc.connectionState === 'closed') void this.connect(from);
+      const stuck = old && old.pc.connectionState !== 'connected' && Date.now() - old.createdAt > STALE_ATTEMPT_MS;
+      if (!old || stuck || old.pc.connectionState === 'failed' || old.pc.connectionState === 'closed') void this.connect(from);
     } else if (m.t === 'answer' && m.to === this.signal?.me) {
       const link = this.links.get(from);
       if (link && link.pc.signalingState === 'have-local-offer') void link.pc.setRemoteDescription({ type: 'answer', sdp: m.sdp }).catch(() => undefined);
@@ -192,7 +197,7 @@ export class PeerSender {
     this.links.get(viewer)?.pc.close();
     const pc = (this.opts.createPeer ?? defaultPeer)();
     const ch = pc.createDataChannel('live', { ordered: true });
-    const link: Link = { pc, ch, routeSent: null };
+    const link: Link = { pc, ch, routeSent: null, createdAt: Date.now() };
     this.links.set(viewer, link);
     ch.onopen = () => this.last && this.sendTo(link, this.last);
     pc.addEventListener('connectionstatechange', () => {

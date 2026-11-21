@@ -5,7 +5,7 @@ import { StaticElevationProvider } from './elevation/StaticElevationProvider';
 import type { AutocompleteProvider, GeocodingProvider } from './geocoding/GeocodingProvider';
 import { StaticGeocodingProvider } from './geocoding/StaticGeocodingProvider';
 import { TileReverseGeocoder } from './geocoding/TileReverseGeocoder';
-import { StyleUrlMapProvider, type MapProvider } from './map/MapProvider';
+import { PackMapProvider, StyleUrlMapProvider, type MapProvider } from './map/MapProvider';
 import type { PlacesProvider } from './places/PlacesProvider';
 import type { PoiProvider } from './places/PoiProvider';
 import { PlacesTiles } from './places/tiles';
@@ -96,9 +96,11 @@ export function createProviders(cfg: AppConfig = config): Providers {
   const places: PlacesProvider | null = p.places === 'tiles' ? new TilePlacesProvider(tiles, lang, null) : p.places === 'none' ? null : unknown('places', p.places);
 
   const map: MapProvider =
-    p.map === 'openfreemap' || p.map === 'style-url'
-      ? new StyleUrlMapProvider(p.map, e.mapStyleLight, e.mapStyleDark)
-      : unknown('map', p.map);
+    p.map === 'packs'
+      ? new PackMapProvider(e.basemap, lang, { light: e.mapStyleLight, dark: e.mapStyleDark })
+      : p.map === 'openfreemap' || p.map === 'style-url'
+        ? new StyleUrlMapProvider(p.map, e.mapStyleLight, e.mapStyleDark)
+        : unknown('map', p.map);
 
   const poi: PoiProvider | null = p.poi === 'tiles' ? new TilePoiProvider(tiles, lang, null) : p.poi === 'none' ? null : unknown('poi', p.poi);
   const speedLimits: SpeedLimitProvider | null =

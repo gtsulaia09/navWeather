@@ -22,6 +22,7 @@
 | Border crossings | after a Long Trip plan | nowhere: worked out on the device from Natural Earth data (since 2026-10-04) | — | — |
 | Approximate location from IP | only when the device gives none | computed by our Worker from Cloudflare metadata | not stored | legitimate interest — **LEGAL REVIEW** |
 | IP address | every request (transport) | Cloudflare; reports DO keeps only a daily-salted hash | hash rotates daily, rows expire with reports | legitimate interest (abuse prevention) |
+| Overflow messages (ADR-020) | only when our Worker is busy | public Nostr relays (3 of a configurable list) and STUN servers: a live share's handshake and, behind strict NATs, its snapshots — **end-to-end encrypted** (key derived from the share link, which never leaves the link; relays see a hash tag and random one-time keys); a report or vote — public anyway, signed with a random key rotated daily; the other phone's IP address in a direct WebRTC connection | live-share events are ephemeral (not stored); reports carry a NIP-40 expiry (≤ 3× their lifetime) | user request (contract) |
 | Voice | only during push-to-talk | browser vendor's speech service (Chrome) | vendor policy | consent (user presses the mic; disclosed in Settings) |
 | TTS text | when guidance speaks | Google voices in Chrome are online (text to Google) | vendor policy | disclosed in Settings |
 | Preferences, saved places, recents | on device | nowhere | user-controlled; recents can be off/cleared | — |

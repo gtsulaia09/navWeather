@@ -37,4 +37,22 @@ for (const [name, c] of Object.entries(envs)) {
   assert.equal((c.queues?.producers ?? []).length + (c.queues?.consumers ?? []).length, 0, `${name}: Queues need Workers Paid (ADR-019)`);
 }
 assert.equal(envs.dev.observability.logs.invocation_logs, false, 'invocation logs would record share ids and coordinates');
-console.log(`wrangler environments in step: ${Object.entries(envs).map(([n, c]) => `${n} → ${c.name}`).join(', ')}`);
+
+// ADR-020: the reports feed and the basemap are Workers with static assets only — no code, no bindings of any kind,
+// so they can neither bill nor use up a request limit.
+const siblings = { 'wrangler.reports.toml': 'navweather-reports', 'wrangler.basemap.toml': 'navweather-basemap' };
+for (const [file, prodName] of Object.entries(siblings)) {
+  for (const env of [undefined, 'preview', 'production']) {
+    const c = unstable_readConfig({ config: file, env }, { hideWarnings: true });
+    const where = `${file}${env ? ` [${env}]` : ''}`;
+    assert.ok(!c.main, `${where}: static assets only — no Worker script`);
+    assert.ok(c.assets?.directory, `${where}: needs an assets directory`);
+    for (const key of ['durable_objects', 'd1_databases', 'r2_buckets', 'kv_namespaces', 'ratelimits', 'services']) {
+      const v = c[key];
+      const n = Array.isArray(v) ? v.length : (v?.bindings?.length ?? 0);
+      assert.equal(n, 0, `${where}: no ${key} (ADR-020)`);
+    }
+    if (env === 'production') assert.equal(c.name, prodName);
+  }
+}
+console.log(`wrangler environments in step: ${Object.entries(envs).map(([n, c]) => `${n} → ${c.name}`).join(', ')}; feed and basemap Workers: static assets only`);

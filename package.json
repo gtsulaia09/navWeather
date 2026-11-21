@@ -34,7 +34,8 @@
     "data:all": "npm run data:download && npm run data:osm && npm run data:roads && npm run data:elevation && npm run data:weather && npm run data:air -- --max-mb 60",
     "data:reports": "node --experimental-strip-types --no-warnings pipelines/reports/build.mjs --export http://127.0.0.1:8787/api/v1/reports/export --relays ws://127.0.0.1:7777 --out public/data/reports --keep-builds 3",
     "dev:relay": "node --experimental-strip-types --no-warnings scripts/nostr-relay.mjs",
-    "check:relays": "node --experimental-strip-types --no-warnings scripts/check-relays.mjs"
+    "check:relays": "node --experimental-strip-types --no-warnings scripts/check-relays.mjs",
+    "data:basemap": "node --experimental-strip-types --no-warnings pipelines/basemap/build.mjs"
   },
   "dependencies": {
     "@noble/curves": "2.3.0",

@@ -1,4 +1,4 @@
-import { AttributionControl, Map as MLMap, Marker, setWorkerUrl, type MapLayerMouseEvent } from 'maplibre-gl';
+import { addProtocol, AttributionControl, Map as MLMap, Marker, setWorkerUrl, type MapLayerMouseEvent } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 // MapLibre 6 resolves its worker relative to its own module URL, which breaks
 // once bundled — let Vite build the worker and hand MapLibre the final URL.
@@ -107,6 +107,9 @@ export default function RouteMap({ viewer = false }: { viewer?: boolean }) {
   // ---- Create the map once ------------------------------------------------
   useEffect(() => {
     if (!container.current) return;
+    // Our own basemap (ADR-020) loads through a custom URL scheme: register it before the style is requested.
+    const proto = getProviders().map.protocol;
+    if (proto) addProtocol(proto.name, proto.load as Parameters<typeof addProtocol>[1]);
     let map: MLMap;
     try {
       map = new MLMap({

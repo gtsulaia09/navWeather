@@ -43,7 +43,8 @@ export const config = {
     /** Settlements, places and road data: our tiles (DP-6.5). */
     places: str('VITE_PLACES_PROVIDER', 'tiles'),
     elevation: str('VITE_ELEVATION_PROVIDER', 'static'),
-    map: str('VITE_MAP_PROVIDER', 'openfreemap'),
+    /** Our own basemap files (ADR-020); 'openfreemap' uses OpenFreeMap's styles directly. */
+    map: str('VITE_MAP_PROVIDER', 'packs'),
     poi: str('VITE_POI_PROVIDER', 'tiles'),
     speedLimits: str('VITE_SPEED_LIMIT_PROVIDER', 'tiles'),
     traffic: str('VITE_TRAFFIC_PROVIDER', 'none'),
@@ -69,6 +70,12 @@ export const config = {
     nostrRelays: str('VITE_NOSTR_RELAYS', DEFAULT_RELAYS),
     /** Our places tiles (static assets built by `npm run data:osm`). */
     placesTiles: str('VITE_PLACES_TILES_URL', '/data/places/v1'),
+    /**
+     * Our basemap (ADR-020): production — the `navweather-basemap` Worker's origin (set by the deploy workflow);
+     * localhost — `npm run data:basemap` writes public/data/basemap. Missing → the OpenFreeMap styles below.
+     */
+    basemap: str('VITE_BASEMAP_URL', '/data/basemap'),
+    /** Fallback basemap styles while none of ours is deployed. */
     mapStyleLight: str('VITE_MAP_STYLE_LIGHT', 'https://tiles.openfreemap.org/styles/positron'),
     mapStyleDark: str('VITE_MAP_STYLE_DARK', 'https://tiles.openfreemap.org/styles/dark'),
   },

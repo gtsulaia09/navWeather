@@ -1,5 +1,7 @@
-# Response headers for the static assets (Cloudflare Workers static assets apply this file). ADR-019: the app talks
-# only to its own origin (static data + sharing/reports API) and OpenFreeMap (map background) — no other server.
+# Response headers for the static assets (Cloudflare Workers static assets apply this file). ADR-019/020: the app
+# talks to its own origin (static data + sharing/reports API), its sibling Workers (reports feed, basemap), the Nostr
+# relays of the overflow paths and OpenFreeMap (fallback map) — `connect-src` below is rewritten at build time from
+# the build's VITE_* values (vite.config.ts, cspConnectSrc).
 /*
   Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://tiles.openfreemap.org; worker-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; object-src 'none'
   Permissions-Policy: geolocation=(self), microphone=(self), camera=(), payment=(), usb=()

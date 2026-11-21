@@ -349,30 +349,33 @@ export function circleFeature(center: LngLat, radiusM: number, steps = 48): GeoJ
 }
 
 /**
- * 3D buildings from the basemap's own building heights (OpenMapTiles
- * `render_height`), under the route so it stays visible. Added hidden; shown
- * while the map is tilted. Skipped when the style has no building layer.
+ * 3D buildings from the basemap's own building heights (our Protomaps basemap: `buildings` with `height`;
+ * OpenMapTiles fallback: `building` with `render_height`), under the route so it stays visible. Added hidden;
+ * shown while the map is tilted. Skipped when the style has no building layer.
  */
 export function add3dBuildings(map: MLMap) {
   if (map.getLayer('building-3d')) return;
   const layers = map.getStyle().layers ?? [];
-  const flat = layers.find((l) => l.type === 'fill' && 'source-layer' in l && l['source-layer'] === 'building') as maplibregl.FillLayerSpecification | undefined;
+  // The region copy of our basemap ("r-…") carries the detail; else the first building layer.
+  const isBuildings = (l: maplibregl.LayerSpecification) => l.type === 'fill' && 'source-layer' in l && (l['source-layer'] === 'building' || l['source-layer'] === 'buildings');
+  const flat = (layers.find((l) => isBuildings(l) && l.id.startsWith('r-')) ?? layers.find(isBuildings)) as maplibregl.FillLayerSpecification | undefined;
   if (!flat || typeof flat.source !== 'string') return;
+  const sourceLayer = flat['source-layer']!;
   const before = map.getLayer('me-accuracy') ? 'me-accuracy' : layers.find((l) => l.type === 'symbol')?.id;
   map.addLayer(
     {
       id: 'building-3d',
       type: 'fill-extrusion',
       source: flat.source,
-      'source-layer': 'building',
+      'source-layer': sourceLayer,
       minzoom: 15,
       filter: ['!=', ['get', 'hide_3d'], true],
       layout: { visibility: 'none' },
       paint: {
         'fill-extrusion-color': cssVar('--map-building-3d', '#dcdcd5'),
         // Grow in over half a zoom level instead of popping up.
-        'fill-extrusion-height': ['interpolate', ['linear'], ['zoom'], 15, 0, 15.5, ['coalesce', ['get', 'render_height'], 0]],
-        'fill-extrusion-base': ['interpolate', ['linear'], ['zoom'], 15, 0, 15.5, ['coalesce', ['get', 'render_min_height'], 0]],
+        'fill-extrusion-height': ['interpolate', ['linear'], ['zoom'], 15, 0, 15.5, ['coalesce', ['get', 'render_height'], ['get', 'height'], 0]],
+        'fill-extrusion-base': ['interpolate', ['linear'], ['zoom'], 15, 0, 15.5, ['coalesce', ['get', 'render_min_height'], ['get', 'min_height'], 0]],
         'fill-extrusion-opacity': 0.8,
       },
     },
