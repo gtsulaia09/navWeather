@@ -43,6 +43,8 @@ export interface PublicReport {
   expiresAt: number;
   confirms: number;
   denies: number;
+  /** 'n': came through Nostr relays while the Worker was busy (ADR-020) — votes on it go the same way. */
+  src?: 'n';
 }
 
 export function sanitizeReport(body: unknown): { kind: ReportKind; lat: number; lon: number } | null {

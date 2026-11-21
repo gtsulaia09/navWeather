@@ -26,6 +26,7 @@ import type { RoutingProvider } from './routing/RoutingProvider';
 import { StaticAirQualityProvider, type AirQualityProvider } from './air/AirQualityProvider';
 import { NoIncidentProvider, type IncidentProvider } from './traffic/IncidentProvider';
 import { ReportsIncidentProvider } from './traffic/ReportsIncidentProvider';
+import { parseRelayList } from '../p2p/nostr';
 import { NoTrafficProvider, type TrafficProvider } from './traffic/TrafficProvider';
 import { StaticWeatherProvider } from './weather/StaticWeatherProvider';
 import type { WeatherProvider } from './weather/WeatherProvider';
@@ -107,7 +108,7 @@ export function createProviders(cfg: AppConfig = config): Providers {
   // Driver reports go through the app's own relay (worker/reports.ts); official feeds can plug in here.
   const incidents: IncidentProvider =
     p.incidents === 'reports'
-      ? new ReportsIncidentProvider(e.reports)
+      ? new ReportsIncidentProvider(e.reports, { feedUrl: e.reportsFeed, relays: parseRelayList(e.nostrRelays) })
       : p.incidents === 'none'
         ? new NoIncidentProvider()
         : unknown('incident', p.incidents);

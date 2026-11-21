@@ -26,7 +26,7 @@ import { useNetworkStatus } from './hooks/useNetworkStatus';
 import { useVisibleViewport } from './hooks/useVisibleViewport';
 import { useSimulationLoop } from './hooks/useSimulationLoop';
 import { useWakeLock } from './hooks/useWakeLock';
-import { parseLiveUrl, parsePlaceUrl } from './share/links';
+import { parseLiveLink, parsePlaceUrl } from './share/links';
 import { resumeLiveShare, useLiveShare } from './share/liveShare';
 import { initTrip } from './state/trip';
 import { useViewer } from './share/viewer';
@@ -45,11 +45,11 @@ const SettingsDialog = lazy(() => import('./components/Settings/SettingsDialog')
 const DevPanel = import.meta.env.DEV ? lazy(() => import('./dev/DevPanel')) : null;
 
 /** Opened from a live-location link? (/live/:id) */
-const liveId = typeof location !== 'undefined' ? parseLiveUrl(location.pathname) : null;
+const live = typeof location !== 'undefined' ? parseLiveLink(location.pathname) : null;
 
 export default function App() {
   // Last line of defence: an unexpected error shows a way back instead of a blank page.
-  return <ErrorBoundary fallback={<CrashScreen />}>{liveId ? <LiveApp id={liveId} /> : <MainApp />}</ErrorBoundary>;
+  return <ErrorBoundary fallback={<CrashScreen />}>{live ? <LiveApp id={live.id} peer={live.peer} /> : <MainApp />}</ErrorBoundary>;
 }
 
 function CrashScreen() {
@@ -126,7 +126,7 @@ function MainApp() {
 }
 
 /** Someone else's live location (read-only). */
-function LiveApp({ id }: { id: string }) {
+function LiveApp({ id, peer }: { id: string; peer: boolean }) {
   useAppTimers();
   useNetworkStatus();
   useApplyTheme();
@@ -135,9 +135,9 @@ function LiveApp({ id }: { id: string }) {
   useLocationSync();
   const m = useMessages();
   useEffect(() => {
-    useViewer.getState().start(id);
+    useViewer.getState().start(id, { peer });
     return () => useViewer.getState().stop();
-  }, [id]);
+  }, [id, peer]);
   return (
     <div className="app">
       <ErrorBoundary fallback={<div className="map-placeholder map-placeholder--error">{m.ui.mapUnavailable}</div>}>

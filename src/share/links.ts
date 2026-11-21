@@ -22,13 +22,18 @@ export function parsePlaceUrl(search: string): Place | null {
   return { id: `link:${lat.toFixed(5)},${lon.toFixed(5)}`, name: name || coords, label: coords, coordinate: [lon, lat], kind: name ? 'shared' : 'pin' };
 }
 
-export function liveUrl(id: string, origin = location.origin): string {
-  return new URL(`/live/${id}`, origin).toString();
+/** A live link. `/p` marks a share that runs phone to phone (ADR-020): the viewer skips the Worker. */
+export function liveUrl(id: string, origin = location.origin, peer = false): string {
+  return new URL(`/live/${id}${peer ? '/p' : ''}`, origin).toString();
 }
 
 export function parseLiveUrl(pathname: string): string | null {
-  const m = /^\/live\/([^/]+)\/?$/.exec(pathname);
-  return m && SHARE_ID_RE.test(m[1]) ? m[1] : null;
+  return parseLiveLink(pathname)?.id ?? null;
+}
+
+export function parseLiveLink(pathname: string): { id: string; peer: boolean } | null {
+  const m = /^\/live\/([^/]+)(\/p)?\/?$/.exec(pathname);
+  return m && SHARE_ID_RE.test(m[1]) ? { id: m[1], peer: !!m[2] } : null;
 }
 
 /** The system share sheet exists (phones, some desktops). */

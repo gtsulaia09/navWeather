@@ -5,12 +5,17 @@ import { getProviders } from '../services/providers';
 import type { LngLat } from '../types/geo';
 import type { WeatherAtTime } from '../types/weather';
 import { haversineM } from '../utils/distance';
+import { mergeSnapshot, PeerViewer } from './peer';
+import { peerOptions } from './peerConfig';
 import type { ServerMessage, ShareSnapshot } from './protocol';
 
 /**
  * VIEWER side of live location: opens /live/:id, streams snapshots over a
  * WebSocket (reconnecting with backoff; HTTP polling when sockets fail) and
  * looks up the weather where the sharer is and at their destination on arrival.
+ *
+ * ADR-020: a `/live/:id/p` link, or a Worker that is busy, unreachable or silent, switches the viewer to the
+ * phone-to-phone channel (`peer.ts`) — directly from the sharer's phone, or through relays every 15 s.
  */
 
 export interface ViewerWeather {
@@ -24,7 +29,7 @@ export interface ViewerState {
   snapshot: ShareSnapshot | null;
   follow: boolean;
   weather: ViewerWeather;
-  start(id: string): void;
+  start(id: string, opts?: { peer?: boolean }): void;
   stop(): void;
   setFollow(follow: boolean): void;
 }
@@ -38,6 +43,8 @@ let watchdog: ReturnType<typeof setInterval> | null = null;
 /** Each start() is a new session; late callbacks from an older one are ignored (StrictMode double-mount, restarts). */
 let session = 0;
 let lastMessageAt = 0;
+let peerViewer: PeerViewer | null = null;
+let peerTimer: ReturnType<typeof setTimeout> | null = null;
 let weatherFor: { here: LngLat | null; hereAt: number; dest: string | null } = { here: null, hereAt: 0, dest: null };
 
 export const useViewer = create<ViewerState>()((set, get) => ({
@@ -47,16 +54,21 @@ export const useViewer = create<ViewerState>()((set, get) => ({
   follow: true,
   weather: { here: null, destination: null },
 
-  start(id) {
+  start(id, opts = {}) {
     get().stop();
     const sid = ++session;
     set({ id, status: 'connecting', snapshot: null, follow: true, weather: { here: null, destination: null } });
     weatherFor = { here: null, hereAt: 0, dest: null };
-    void firstLoad(id, sid);
+    if (opts.peer) startPeer(id, sid);
+    else void firstLoad(id, sid);
     // A socket can die silently (phone backgrounded, network switch): the relay
     // answers our pings, so a long silence means reconnect.
     watchdog = setInterval(() => {
-      if (sid !== session || !socket || socket.readyState !== WebSocket.OPEN) return;
+      if (sid !== session) return;
+      // The sharer sends at least every 20 s; a Worker snapshot this old means it moved phone to phone.
+      const snap = useViewer.getState().snapshot;
+      if (!peerViewer && snap?.updatedAt && Date.now() - snap.updatedAt > 90_000) startPeer(id, sid);
+      if (!socket || socket.readyState !== WebSocket.OPEN) return;
       if (Date.now() - lastMessageAt > 60_000) socket.close();
     }, 15_000);
     document.addEventListener('visibilitychange', onVisible);
@@ -90,7 +102,36 @@ function onVisible() {
   }
 }
 
+/** Join the share's phone-to-phone room (ADR-020); harmless next to the Worker path. */
+function startPeer(id: string, sid: number) {
+  if (peerViewer || sid !== session || !peerOptions().relays.length) return;
+  const pv = new PeerViewer(id, peerOptions(), {
+    onSnapshot: (s) => {
+      if (sid !== session || useViewer.getState().id !== id) return;
+      const cur = useViewer.getState().snapshot;
+      // Both paths may answer for a while: keep whichever position is newer.
+      if (cur?.pos && s.pos && cur.pos.t > s.pos.t) return;
+      onSnapshot(id, sid, mergeSnapshot(cur, s));
+    },
+    onEnded: () => {
+      if (sid !== session) return;
+      useViewer.setState({ status: 'ended' });
+      closeAll();
+    },
+  });
+  peerViewer = pv;
+  void pv.start();
+  // A link with nobody sharing behind it: say so after a minute instead of waiting forever.
+  peerTimer = setTimeout(() => {
+    if (sid === session && !useViewer.getState().snapshot && useViewer.getState().status === 'connecting') useViewer.setState({ status: 'notfound' });
+  }, 60_000);
+}
+
 function closeAll() {
+  peerViewer?.close();
+  peerViewer = null;
+  if (peerTimer) clearTimeout(peerTimer);
+  peerTimer = null;
   if (retryTimer) clearTimeout(retryTimer);
   if (pollTimer) clearInterval(pollTimer);
   if (pingTimer) clearInterval(pingTimer);
@@ -114,9 +155,11 @@ async function firstLoad(id: string, sid: number) {
       useViewer.setState({ status: 'notfound' });
       return;
     }
+    if (res.status === 429 || res.status >= 500) startPeer(id, sid); // the Worker is busy: phone to phone too
     if (res.ok && (res.headers.get('content-type') ?? '').includes('application/json')) onSnapshot(id, sid, (await res.json()) as ShareSnapshot);
   } catch {
-    /* fall through to the socket, which retries */
+    // Unreachable: try phone to phone as well; the socket keeps retrying.
+    startPeer(id, sid);
   }
   connect(id, sid);
 }
@@ -162,8 +205,11 @@ function connect(id: string, sid: number) {
     if (sid !== session || st.status === 'ended' || st.status === 'notfound') return;
     useViewer.setState({ status: 'reconnecting' });
     retry++;
-    // After repeated socket failures (proxies), fall back to polling as well.
-    if (retry >= 3) startPolling(id, sid);
+    // After repeated socket failures (proxies, a busy Worker), fall back to polling and phone to phone as well.
+    if (retry >= 3) {
+      startPolling(id, sid);
+      startPeer(id, sid);
+    }
     retryTimer = setTimeout(() => connect(id, sid), Math.min(15_000, 1000 * 2 ** Math.min(retry, 4)));
   };
 }
@@ -179,6 +225,7 @@ function startPolling(id: string, sid: number) {
         closeAll();
         return;
       }
+      if (res.status === 429 || res.status >= 500) startPeer(id, sid);
       if (res.ok) onSnapshot(id, sid, (await res.json()) as ShareSnapshot);
     } catch {
       /* keep trying */

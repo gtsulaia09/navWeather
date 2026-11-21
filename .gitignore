@@ -18,6 +18,9 @@ data/build/
 # Our static data, built by `npm run data:all` (ADR-019): places, search, roads, heights, forecast, air quality —
 # rebuilt from open data on every deploy, never committed
 public/data/
+# The reports feed and the basemap built for their own Workers (ADR-020)
+dist-reports/
+dist-basemap/
 
 # Browser tests (Playwright)
 test-results/

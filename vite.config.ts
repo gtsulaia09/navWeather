@@ -12,7 +12,8 @@ export default defineConfig({
   // MapLibre's worker is an ES module that imports shared chunks.
   worker: { format: 'es' },
   // Live location relay: `npm run dev:api` runs the Worker locally.
-  server: { https, proxy: { '/api': { target: 'http://127.0.0.1:8787', ws: true } } },
+  // The local Nostr relay (scripts/nostr-relay.mjs, ADR-020) behind /nostr, so phones on the Wi-Fi reach it too.
+  server: { https, proxy: { '/api': { target: 'http://127.0.0.1:8787', ws: true }, '/nostr': { target: 'ws://127.0.0.1:7777', ws: true } } },
   preview: { proxy: { '/api': { target: 'http://127.0.0.1:8787', ws: true } } },
   build: {
     target: 'es2022',

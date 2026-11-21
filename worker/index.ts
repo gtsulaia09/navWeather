@@ -43,7 +43,8 @@ async function allowed(limiter: { limit(opts: { key: string }): Promise<{ succes
  *   PUT    /api/share/:id          position update   (Authorization: Bearer key)
  *   DELETE /api/share/:id          stop sharing      (Authorization: Bearer key)
  *
- *   GET    /api/reports?bbox=w,s,e,n       active driver reports in an area
+ *   GET    /api/reports?bbox=w,s,e,n       active driver reports in an area (fallback when no static feed answers)
+ *   GET    /api/reports/export             every active report (the feed builder, every ~10 min — ADR-020)
  *   POST   /api/reports                    report { kind, lat, lon }
  *   POST   /api/reports/:id/vote           { vote: 'still' | 'gone' }
  *
@@ -104,6 +105,10 @@ async function reports(request: Request, path: string, url: URL, env: Env): Prom
     // Every list request reaches the one Reports object: keep a single client from monopolising it.
     if (env.REPORT_LIST_LIMITER && !(await env.REPORT_LIST_LIMITER.limit({ key: ip })).success) return json({ error: 'too-many-requests' }, 429);
     return stub.fetch(`https://reports/list?bbox=${encodeURIComponent(url.searchParams.get('bbox') ?? '')}`);
+  }
+  if (path === '/api/reports/export' && request.method === 'GET') {
+    if (env.REPORT_LIST_LIMITER && !(await env.REPORT_LIST_LIMITER.limit({ key: ip })).success) return json({ error: 'too-many-requests' }, 429);
+    return stub.fetch('https://reports/export');
   }
   const vote = /^\/api\/reports\/([^/]+)\/vote$/.exec(path);
   const create = path === '/api/reports';

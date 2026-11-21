@@ -3,7 +3,9 @@
  * `npm run dev` — the whole app on localhost with one command (REQ-DEV-001):
  *   - the Worker (live sharing, driver reports, approximate location, Long Trip planner) on
  *     http://127.0.0.1:8787 with local Durable Objects and rate limits (`wrangler dev`, no Cloudflare account);
- *   - the Vite dev server on http://localhost:5173, which proxies /api to the Worker (vite.config.ts).
+ *   - a tiny Nostr relay on ws://127.0.0.1:7777 (scripts/nostr-relay.mjs) for the overflow paths of ADR-020 — live
+ *     sharing phone to phone and reports past the Worker's daily limit — so they work with no internet;
+ *   - the Vite dev server on http://localhost:5173, which proxies /api to the Worker and /nostr to the relay.
  *
  * `npm run dev:phone` does the same over HTTPS on this computer's network addresses, for testing on a phone on the
  * same Wi-Fi (scripts/dev-cert.mjs makes the certificate).
@@ -13,6 +15,7 @@
  * Only the app: `npm run dev:web`. Only the Worker: `npm run dev:api`.
  */
 import { spawn } from 'node:child_process';
+import { connect } from 'node:net';
 import { DEV_ASSETS, prepareWorkerAssets } from './worker-assets.mjs';
 
 const API = 'http://127.0.0.1:8787/api/v1/health';
@@ -82,6 +85,15 @@ if (await apiRunning()) {
     console.log(ok ? '\x1b[36m[api]\x1b[0m ready on http://127.0.0.1:8787 (proxied as /api)' : '\x1b[36m[api]\x1b[0m not answering yet — sharing, reports and Long Trip plans need it'),
   );
 }
+// The local Nostr relay (ADR-020), unless one already listens on :7777.
+const relayUp = await new Promise((resolve) => {
+  const sock = connect(7777, '127.0.0.1');
+  sock.once('connect', () => (sock.destroy(), resolve(true)));
+  sock.once('error', () => resolve(false));
+});
+if (relayUp) console.log('\x1b[33m[relay]\x1b[0m a relay already listens on :7777 — using it');
+else run('relay', 33, process.execPath, ['--experimental-strip-types', '--no-warnings', 'scripts/nostr-relay.mjs']);
+
 // `--phone` (npm run dev:phone): HTTPS on every network address, so a phone on the same Wi-Fi can open the app with
 // location working (phones allow it only on secure pages). Vite reads DEV_HTTPS (vite.config.ts).
 const args = process.argv.slice(2);
