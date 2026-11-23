@@ -63,12 +63,11 @@ export function weatherSamples(
         h.push(-1);
         continue;
       }
-      // Precipitation describes the hour BEFORE its timestamp: take the next hour's value for this hour.
-      const next = i + 1 < f.times.length ? i + 1 : i;
+      // All hourly fields align to the same forecast hour index `i` (B-09).
       h.push(
         hazardCode({
           condition: f.hourly.condition[i],
-          precipitation: f.hourly.precipitation[next],
+          precipitation: f.hourly.precipitation[i],
           temperature: f.hourly.temperature[i],
           windGusts: f.hourly.windGusts[i],
           visibility: f.hourly.visibility[i],

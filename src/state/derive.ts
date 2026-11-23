@@ -1,3 +1,4 @@
+import { HAZARD_THRESHOLDS } from '../algorithms/hazardThresholds';
 import type { RouteCamera } from '../algorithms/cameras';
 import type { RouteIncident } from '../algorithms/incidents';
 import { routeVia } from '../algorithms/routeAlternatives';
@@ -320,14 +321,14 @@ export function summarizeOption(
     const prev = s[i - 1]?.travelTimeS ?? s[i].travelTimeS;
     const span = (next - prev) / 2 / 60;
     if (isPrecipitating(w.condition)) wet += span;
-    const isHeavy = w.condition === 'HEAVY_RAIN' || w.condition === 'THUNDERSTORM' || (w.precipitation ?? 0) >= 4;
+    const isHeavy = w.condition === 'HEAVY_RAIN' || w.condition === 'THUNDERSTORM' || (w.precipitation ?? 0) >= HAZARD_THRESHOLDS.heavyPrecipMmH;
     if (isHeavy) heavy += span;
     if (w.condition === 'THUNDERSTORM') ex.storm += span;
     else if (w.condition === 'SNOW' || w.condition === 'SLEET') ex.snow += span;
     else if (isHeavy) ex.heavy += span;
     else if (w.condition === 'RAIN') ex.rain += span;
-    if (w.condition === 'FOG' || (w.visibility !== undefined && w.visibility < 1000)) ex.fog += span;
-    if ((w.windGusts ?? 0) >= 70) ex.wind += span;
+    if (w.condition === 'FOG' || (w.visibility !== undefined && w.visibility < HAZARD_THRESHOLDS.fogVisibilityM)) ex.fog += span;
+    if ((w.windGusts ?? 0) >= HAZARD_THRESHOLDS.windGustKmh) ex.wind += span;
   }
   const classes = [...new Set(o.route.legs.flatMap((l) => l.steps.flatMap((st) => st.classes ?? [])))];
   return {

@@ -394,7 +394,7 @@ export default function RouteMap({ viewer = false }: { viewer?: boolean }) {
     if (!map || !styleVersion) return;
     setData(map, 'cameras', {
       type: 'FeatureCollection',
-      features: camerasOn ? cameras.map((c) => pointFeature(c.coordinate, { id: c.id })) : [],
+      features: camerasOn ? cameras.map((c) => pointFeature(c.coordinate, { id: c.id, kmh: c.kmh ?? 0 })) : [],
     });
   }, [cameras, camerasOn, styleVersion]);
 
@@ -429,7 +429,7 @@ export default function RouteMap({ viewer = false }: { viewer?: boolean }) {
     const list = poi?.results.map((r) => r.poi) ?? (timed ? [] : (nearby?.results.map((r) => r.poi) ?? []));
     setData(map, 'pois', {
       type: 'FeatureCollection',
-      features: list.map((p) => pointFeature(p.coordinate, { id: p.id })),
+      features: list.map((p) => pointFeature(p.coordinate, { id: p.id, category: p.category, name: p.name ?? p.brand ?? '' })),
     });
     if (!timed && nearby?.status === 'ready' && nearby.results.length) {
       const pts = nearby.results.slice(0, 12).map((r) => r.poi.coordinate).concat([nearby.center]);

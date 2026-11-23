@@ -65,11 +65,12 @@ jobs:
       - run: npm ci
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
-      - name: Our data as static files (Georgia roads, search, places; a forecast for the Caucasus) — ADR-019
+      - name: Our data as static files (Georgia roads, search, places, transit; a forecast for the Caucasus) — ADR-019
         run: |
           npm run data:download
           npm run data:osm
           npm run data:roads
+          npm run data:transit
           npm run data:weather -- --bbox 39,40,47,44
       - run: npm run build
       - name: Browser smoke test against the local Worker

@@ -76,10 +76,11 @@ export function createProviders(cfg: AppConfig = config): Providers {
   const roads = createRoadClient(e.data);
   const alternates = Math.min(2, cfg.routing.maxRoutes - 1);
   const routing: RoutingProvider = new LocalRoutingProvider(roads, 'drive', alternates);
+  const walkRouter = new LocalRoutingProvider(roads, 'walk', alternates);
   const routingByMode: NonNullable<Providers['routingByMode']> = {
-    walk: new LocalRoutingProvider(roads, 'walk', alternates),
+    walk: walkRouter,
     bike: new LocalRoutingProvider(roads, 'bike', alternates),
-    transit: new StaticTransitProvider(e.data),
+    transit: new StaticTransitProvider(e.data, walkRouter),
     flight: new FlightEstimateProvider(),
   };
 
