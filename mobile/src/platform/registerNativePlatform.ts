@@ -1,7 +1,7 @@
 /**
  * Single bootstrap hook that connects React Native native modules (MMKV, CoreLocation / FusedLocation,
  * react-native-fs, AVSpeechSynthesizer / Android TTS, KeepAwake, Share, Haptics, Notifications,
- * CarPlay, Android Auto, Watch/Wear OS) into navWeather's shared `src/platform/*` seams (ADR-010).
+ * CarPlay, Android Auto, Watch/Wear OS) into wayther's shared `src/platform/*` seams (ADR-010).
  *
  * Keeps `src/*` 100% platform-neutral (enforced by `src/test/architecture.test.ts`).
  */

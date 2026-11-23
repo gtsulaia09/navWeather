@@ -33,7 +33,7 @@ export function LiveView() {
   return (
     <>
       <a className="live-brand" href="/">
-        navWeather
+        wayther
       </a>
       <BottomSheet
         state={sheet}

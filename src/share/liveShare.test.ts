@@ -129,6 +129,6 @@ describe('sharer', () => {
   it('explains when the relay is missing (static hosting)', async () => {
     fetchMock.mockImplementationOnce(async () => new Response('<!doctype html>', { status: 200, headers: { 'content-type': 'text/html' } }));
     await useLiveShare.getState().start({ minutes: 60, name: '' });
-    expect(useLiveShare.getState()).toMatchObject({ status: 'idle', error: expect.stringMatching(/needs the navWeather server/) });
+    expect(useLiveShare.getState()).toMatchObject({ status: 'idle', error: expect.stringMatching(/needs the wayther server/) });
   });
 });

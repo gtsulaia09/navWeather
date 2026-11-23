@@ -1,9 +1,9 @@
 {
-  "name": "navweather-mobile",
+  "name": "wayther-mobile",
   "private": true,
   "license": "MIT",
   "version": "0.1.0",
-  "description": "ADR-010 React Native (Hermes) mobile app importing the shared navWeather TypeScript core with zero paid SDKs or closed-source dependencies.",
+  "description": "ADR-010 React Native (Hermes) mobile app importing the shared wayther TypeScript core with zero paid SDKs or closed-source dependencies.",
   "scripts": {
     "start": "react-native start --config metro.config.js",
     "ios": "react-native run-ios",

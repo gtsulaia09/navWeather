@@ -1,6 +1,6 @@
 {
-  "name": "navWeather — weather-aware navigation",
-  "short_name": "navWeather",
+  "name": "wayther — weather-aware navigation",
+  "short_name": "wayther",
   "description": "Know what's ahead before you get there: navigation with the weather at your arrival time.",
   "start_url": "/",
   "scope": "/",

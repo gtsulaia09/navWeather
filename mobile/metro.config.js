@@ -1,7 +1,7 @@
 const path = require('path');
 
 /**
- * Metro configuration for navWeather React Native (ADR-010).
+ * Metro configuration for wayther React Native (ADR-010).
  *
  * Watches the repository root so `mobile/src/*` can import the shared platform-free
  * TypeScript core (`../src/algorithms`, `../src/intelligence`, `../src/navigation`,

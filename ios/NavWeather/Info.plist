@@ -5,7 +5,7 @@
     <key>CFBundleDevelopmentRegion</key>
     <string>en</string>
     <key>CFBundleDisplayName</key>
-    <string>navWeather</string>
+    <string>wayther</string>
     <key>CFBundleExecutable</key>
     <string>NavWeather</string>
     <key>CFBundleIdentifier</key>
@@ -23,9 +23,9 @@
     <key>LSRequiresIPhoneOS</key>
     <true/>
     <key>NSLocationWhenInUseUsageDescription</key>
-    <string>navWeather uses your location to track road weather along your driving route.</string>
+    <string>wayther uses your location to track road weather along your driving route.</string>
     <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-    <string>navWeather provides background navigation and real-time severe weather alerts while driving.</string>
+    <string>wayther provides background navigation and real-time severe weather alerts while driving.</string>
     <key>UIBackgroundModes</key>
     <array>
         <string>location</string>
