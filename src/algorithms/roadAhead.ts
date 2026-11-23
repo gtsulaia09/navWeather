@@ -1,5 +1,4 @@
-import type { Route, RouteSample } from '../types/route';
-import type { PlannedRoute } from '../services/routePlanner';
+import type { PlannedRoute, Route, RouteSample } from '../types/route';
 import { timeAtDistance } from './routeTiming';
 
 /** What the road summaries need of a road: its forecast samples, size and steps. */

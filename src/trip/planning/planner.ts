@@ -1,4 +1,4 @@
-import { mapWithConcurrency } from '../../services/http';
+import { mapWithConcurrency } from '../../utils/async';
 import { atLeast, classifyFromSchedule, countTimeZoneChanges } from '../classification/classify';
 import { PACE_PRESETS, PLACE_RADIUS_KM, STOP_DEFAULTS } from '../config';
 import { pointAtAlong, profileFromRequest, timeAtAlong, windowAround, type RouteProfile } from '../route/profile';

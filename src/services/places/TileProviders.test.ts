@@ -4,7 +4,7 @@ import type { PlacesProvider } from './PlacesProvider';
 import type { PoiProvider } from './PoiProvider';
 import { PlacesTiles, splitByCoverage, tileOf, tilesAlong, type TilesIndex } from './tiles';
 import { TilePlacesProvider, TilePoiProvider, TileSpeedLimitProvider } from './TileProviders';
-import { TileTripPlaces } from '../../trip/stops/tilePlaces';
+import { TileTripPlaces } from '../trip/tilePlaces';
 import type { TripPlacesSource } from '../../trip/stops/places';
 
 /** A small "region" around Tbilisi with a few features, served by a stubbed fetch. */

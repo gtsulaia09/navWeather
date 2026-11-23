@@ -3,6 +3,7 @@
  * fonts and sprites, all static files under one base URL. When no basemap is deployed (or the index cannot be read)
  * the style request returns the fallback style instead (OpenFreeMap), so the map never stays blank.
  */
+import { gunzip as gunzipBytes } from '../utils/gzip';
 import { isBasemapIndex, packOf, packPath, readPackDirectory, type BasemapIndex, type PackDirectory } from './packs';
 
 export interface PackProtocolOptions {
@@ -65,8 +66,8 @@ export function createPackProtocol(opts: PackProtocolOptions) {
   }
 
   async function gunzip(bytes: Uint8Array): Promise<ArrayBuffer> {
-    const stream = new Response(bytes as BodyInit).body!.pipeThrough(new DecompressionStream('gzip'));
-    return new Response(stream).arrayBuffer();
+    const out = await gunzipBytes(bytes);
+    return out.buffer.slice(out.byteOffset, out.byteOffset + out.byteLength) as ArrayBuffer;
   }
 
   async function tile(z: number, x: number, y: number, signal?: AbortSignal): Promise<ArrayBuffer> {

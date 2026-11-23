@@ -1,3 +1,4 @@
+import { getLocationProvider, type LocationProvider, type RawPosition } from '../platform/location';
 import type { LngLat } from '../types/geo';
 
 /**
@@ -25,13 +26,14 @@ export class LocationError extends Error {
 
 interface Env {
   secure: boolean;
-  geo: Geolocation | undefined;
+  geo: Pick<LocationProvider, 'getCurrentPosition' | 'watchPosition' | 'clearWatch'> | undefined;
 }
 
 function defaultEnv(): Env {
+  const provider = getLocationProvider();
   return {
-    secure: typeof window === 'undefined' || window.isSecureContext !== false,
-    geo: typeof navigator !== 'undefined' && 'geolocation' in navigator ? navigator.geolocation : undefined,
+    secure: provider.isSecureContext(),
+    geo: provider.supported ? provider : undefined,
   };
 }
 
@@ -44,7 +46,7 @@ export function classifyLocationError(err: { code: number } | null, env: Pick<En
   return 'unavailable';
 }
 
-export function toFix(p: GeolocationPosition): LocationFix {
+export function toFix(p: RawPosition): LocationFix {
   const { longitude, latitude, accuracy, heading, speed } = p.coords;
   return {
     coordinate: [longitude, latitude],

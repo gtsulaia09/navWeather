@@ -1,18 +1,7 @@
 import type { LngLat } from '../../types/geo';
+import type { SpeedCamera, SpeedLimitWay } from '../../types/route';
 
-/** A road stretch with a posted limit (km/h) from map data. */
-export interface SpeedLimitWay {
-  kmh: number;
-  geometry: LngLat[];
-}
-
-/** A fixed speed camera from map data (only where the user enabled camera alerts). */
-export interface SpeedCamera {
-  id: string;
-  coordinate: LngLat;
-  /** Enforced limit when mapped, km/h. */
-  kmh?: number;
-}
+export type { SpeedCamera, SpeedLimitWay };
 
 export interface SpeedLimitProvider {
   readonly name: string;

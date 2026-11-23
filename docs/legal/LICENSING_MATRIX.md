@@ -56,7 +56,8 @@ decision/lawyer) · **NOT SUITABLE** (for production/commercial use as currently
 | zustand | MIT | — |
 | maplibre-gl | BSD-3-Clause | notices kept in bundle |
 | Material Icons paths (travel-mode and transit glyphs) | Apache-2.0 | credited in `Icons.tsx` |
-| @photostructure/tz-lookup | CC0-1.0 | in the Worker: time zone of a forecast point (`worker/weather.ts`) |
+| @photostructure/tz-lookup | CC0-1.0 | time zone of a forecast point (shared/client) |
+| fflate | MIT | pure-JS gzip and raw deflate decompression (`src/utils/gzip.ts`, `src/map/packProtocol.ts`) — works in browsers, Web Workers, Node, and React Native Hermes (where `DecompressionStream` is absent) |
 
 Build-time only (pipelines; never bundled into the app or the Worker):
 

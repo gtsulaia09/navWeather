@@ -52,7 +52,7 @@ Target scale: Google-Maps-class (ADR-015).
 | GOAL-1 | A trustworthy answer to "what weather will I drive into, and when?" for any road trip | P0 | IMPLEMENTED (verified live for trips up to ~2 days; multi-day: REQ-WX-008) |
 | GOAL-2 | Turn-by-turn navigation good enough to drive with, on the web today and natively later | P0 | IMPLEMENTED (web limits: §32) |
 | GOAL-3 | Timely, non-spammy weather alerts that separate forecast, derived estimate and official warning | P0 | PARTIALLY (no official warnings, REQ-WX-006) |
-| GOAL-4 | Only hosting costs money, and hosting cost grows sub-linearly with users (static assets, caching, offline packs) | P0 | IN PROGRESS (§29, DP-5.6) |
+| GOAL-4 | Zero owner cost ($0) at any number of users: static assets, on-device engines, Free-plan Worker + device overflow (ADR-019, ADR-020) | P0 | IMPLEMENTED (localhost + checks; deploy needs owner's free Cloudflare secrets) |
 | GOAL-5 | One versioned backend API for Web, iOS, Android, CarPlay, Android Auto | P1 | IN PROGRESS (`/api/v1` exists, §12) |
 | GOAL-6 | Privacy by design: no location history, minimal server data | P0 | IMPLEMENTED |
 
@@ -109,11 +109,11 @@ decision: [ADR-013](architecture/decisions/ADR-013-trip-planner.md).
 | ID | Platform | Priority | Status |
 | --- | --- | --- | --- |
 | REQ-PLAT-001 | Web (desktop, tablet, iPhone, Android), installable PWA | P0 | IMPLEMENTED |
-| REQ-PLAT-002 | iOS native app | P2 | BLOCKED — Apple Developer Program fee is not hosting (ADR-015); the installable PWA is the iOS product |
-| REQ-PLAT-003 | Android native app | P2 | PLANNED only through free channels (APK / F-Droid, needs an open-source repo; DEVELOPMENT_PLAN stage 14); Google Play BLOCKED by its fee |
-| REQ-PLAT-004 | Apple CarPlay (navigation entitlement) | P3 | BLOCKED — needs a paid Apple developer account (ADR-015) |
-| REQ-PLAT-005 | Android Auto (Car App Library, NAVIGATION category) | P3 | BLOCKED — distributed only through Google Play, which has a fee (ADR-015) |
-| REQ-PLAT-006 | Wearables, vehicle integrations, public API | P3 | FUTURE |
+| REQ-PLAT-002 | iOS / iPadOS native app (React Native + shared core) | P2 | BLOCKED for App Store / TestFlight by Apple Developer Program fee (\$99/yr, ADR-015); free routes: installable PWA on every iOS/iPadOS device, plus personal builds on owner's own devices with a free Apple ID (re-signed every 7 days, limited app count) |
+| REQ-PLAT-003 | Android native app (phones, tablets, foldables — React Native + shared core) | P2 | PLANNED via free channels (direct APK / F-Droid; open-source repo); Google Play (\$25 once) BLOCKED by fee (ADR-015) until owner decides |
+| REQ-PLAT-004 | Apple CarPlay (navigation entitlement, `CPMapTemplate`, voice first) | P3 | BLOCKED for distribution by paid Apple Developer account + CarPlay entitlement (ADR-015); free route: Xcode CarPlay simulator only until owner decides to pay |
+| REQ-PLAT-005 | Android Auto (Car App Library, `NavigationTemplate`, voice first) | P3 | BLOCKED for Play distribution by Google Play fee (ADR-015); free route: Android Auto Desktop Head Unit (DHU) and non-Play sideload with phone developer "Unknown sources" setting |
+| REQ-PLAT-006 | Wearables (Apple Watch, Wear OS companion: next maneuver, ETA, next weather event), vehicle integrations, public API | P3 | FUTURE — Wear OS free via sideloading; watchOS distribution BLOCKED by Apple fee (Xcode simulator free) |
 
 ## 5. Architecture principles
 
@@ -126,8 +126,10 @@ decision: [ADR-013](architecture/decisions/ADR-013-trip-planner.md).
    client. AI may explain or converse, never replace them.
 4. **Provider-agnostic.** Business logic sees interfaces; `services/providers.ts` is the only place naming
    implementations. Swapping a provider is configuration.
-5. **Always free, only hosting paid** ([ADR-015](architecture/decisions/ADR-015-free-software-own-hosting.md)): own
-   instances of free software, open data files, or services without limits.
+5. **Zero cost for the owner and users, always free** ([ADR-015](architecture/decisions/ADR-015-free-software-own-hosting.md),
+   [ADR-019](architecture/decisions/ADR-019-zero-owner-cost.md), [ADR-020](architecture/decisions/ADR-020-free-at-any-scale-overflow.md)):
+   Cloudflare Workers Free plan without a payment method, static data files + on-device engines, free software and open
+   data only, and device overflow (WebRTC + public Nostr relays) past the Free plan's daily Worker limit.
 6. **All hosting on Cloudflare Workers, not Pages** ([ADR-001](architecture/decisions/ADR-001-cloudflare-first.md),
    [ADR-016](architecture/decisions/ADR-016-all-on-cloudflare-workers.md)); every part also runs on localhost.
 7. **Thin, versioned edge API; no server state that isn't needed**
@@ -149,7 +151,7 @@ decision: [ADR-013](architecture/decisions/ADR-013-trip-planner.md).
 | REQ-CF-011 | No feature relies on the Cache API while the app runs on `*.workers.dev`; once the custom domain is attached (DP-12.1) the Cache API fronts tiles, places and weather | P1 | PLANNED (fixes B-22) | `worker/trips.ts` |
 | REQ-CF-012 | Per-feature request budgets, spend alerts, back-off on 429 and rate limits on every endpoint incl. `/whereami` — protect the hosting bill | P1 | PLANNED (DP-3.4, DP-5.1) | `worker/*`, `share/liveShare.ts`, `ReportsIncidentProvider.ts` |
 | REQ-CF-013 | **All hosting on Cloudflare Workers (not Pages)** — one Worker project with static assets and `/api/v1/*`; custom domain attached to it when bought | P0 | IMPLEMENTED (Worker with assets) / PLANNED (domain, DP-12.1) | `wrangler.toml`, ADR-016 |
-| REQ-CF-014 | `wrangler.toml` environments `dev` / `preview` / `production` with separate Durable Object namespaces, D1 databases and R2 buckets; preview never touches production data | P1 | PLANNED (DP-2.2, DP-3.2) | `wrangler.toml`, [DELIVERY](operations/DELIVERY.md) |
+| REQ-CF-014 | `wrangler.toml` environments `dev` / `preview` / `production` with separate Durable Object namespaces and rate-limit namespaces (no billable D1/R2/Containers/Queues per ADR-019; asset-only Workers for basemap and reports feed per ADR-020); preview never touches production data | P1 | VERIFIED (`npm run check:envs`, CI) | `wrangler.toml`, `wrangler.basemap.toml`, `wrangler.reports.toml`, `scripts/check-wrangler-envs.mjs` |
 | REQ-CF-015 | ~~D1 per region for places and the geocoder~~ → static search files per region (`/data/search/`) | P1 | SUPERSEDED by ADR-019 (IMPLEMENTED as static files) | `pipelines/osm/geocode.mjs`, `src/services/geocoding/StaticGeocodingProvider.ts` |
 | REQ-CF-016 | ~~R2 for tiles, weather cells, terrain~~ → static assets under `/data` (roads, search, forecast, air, heights, places) | P1 | SUPERSEDED by ADR-019 (IMPLEMENTED as static files) | `pipelines/lib/store.mjs`, `public/_headers` |
 | REQ-CF-017 | ~~Cloudflare Containers for Valhalla, MOTIS, LibreWXR~~ → routing on the device; transit off until an on-device timetable router | P1 | SUPERSEDED by ADR-019 | `src/roads/` |
@@ -268,7 +270,7 @@ attribution, caching, limits and a verdict, with source and verification date.
 
 | ID | Requirement | Priority | Status |
 | --- | --- | --- | --- |
-| REQ-LEGAL-001 | Attribution for every data source and engine actually used (today: OSM, OpenMapTiles, OpenFreeMap, ECMWF, NOAA GFS, the Open-Meteo archive and API, Valhalla, routing servers, Photon, Transitous) | P0 | IMPLEMENTED (today) / PLANNED (target list, DP-6.9) |
+| REQ-LEGAL-001 | Attribution for every data source and engine actually used (OpenStreetMap ODbL, Protomaps / OpenFreeMap fallback, ECMWF IFS CC BY 4.0, NOAA GFS, CAMS, Copernicus DEM, Natural Earth, Open-Meteo open-data archive CC BY 4.0) | P0 | IMPLEMENTED (attribution synced with ADR-019/020 stack; LICENSING_MATRIX kept current) |
 | REQ-LEGAL-002 | Non-commercial licences (e.g. EOX Sentinel-2 cloudless 2018+) are used only while REQ-COST-006 holds | P1 | IMPLEMENTED (policy) |
 | REQ-LEGAL-003 | Repository public under an OSI licence (AGPL services, open feeds, F-Droid, free CI) | P1 | IN PROGRESS (owner decision D1 2026-10-04: open, MIT; `LICENSE` added — the owner switches the GitHub repository to public) |
 | REQ-LEGAL-004 | Speed-camera alerts: legality varies by country; **on by default (owner decision D4, 2026-10-04)**, one switch in Settings with the user's responsibility shown there | P1 | IMPLEMENTED |
@@ -318,12 +320,12 @@ Model: [COST_AND_SCALE](operations/COST_AND_SCALE.md); free stack: [FREE_STACK_P
 
 | ID | Requirement | Priority | Status |
 | --- | --- | --- | --- |
-| REQ-MOB-001 | Engines free of React/DOM so they can run in a mobile JS runtime or be ported | P0 | VERIFIED (2026-11-18: `src/test/architecture.test.ts` checks every core file; storage behind `platform/storage.ts`, device language via `i18n/systemLanguage.ts` — B-34) |
-| REQ-MOB-002 | Every server feature reachable via `/api/v1` with Bearer-token auth (no cookie-only flows) | P1 | PLANNED (accounts) |
-| REQ-MOB-003 | Decide the mobile stack via a time-boxed spike, only for free channels (PWA, APK / F-Droid); store apps blocked by fees (ADR-015) | P2 | PLANNED |
+| REQ-MOB-001 | Engines free of React/DOM/services/Hermes-missing APIs so they run unchanged in React Native (Hermes) | P0 | VERIFIED (2026-11-23: `src/test/architecture.test.ts` checks 78 core files — zero React/DOM/services imports, zero `DecompressionStream`/`Blob`; pure-JS `fflate` gzip; storage, location, notifications, wake lock, share, file cache, haptics, car/wrist surfaces behind `src/platform/*`) |
+| REQ-MOB-002 | Every server feature reachable via `/api/v1` with Bearer-token auth (no cookie-only flows) | P1 | IMPLEMENTED (live share uses Bearer key; reports anonymous; accounts PLANNED) |
+| REQ-MOB-003 | Decide the mobile stack via a time-boxed spike, only for free channels (PWA, APK / F-Droid, simulators); store apps blocked by fees (ADR-015) | P2 | IN PROGRESS (ADR-010) |
 | REQ-MOB-004 | Voice layer as platform-neutral instruction IDs + params, rendered by a per-platform TTS adapter | P1 | IMPLEMENTED (web) / PLANNED (mobile) |
-| REQ-MOB-005 | Location behind a `LocationProvider` interface (today an injectable browser `geolocation`) | P2 | PLANNED |
-| REQ-MOB-006 | Notifications behind a `NotificationProvider` interface; alerts can reach a backgrounded app where the platform allows (Web Push) | P2 | PLANNED (DP-7.5) |
+| REQ-MOB-005 | Location behind a `LocationProvider` interface (web `geolocation` default, injectable native provider) | P2 | VERIFIED (`src/platform/location.ts`, `src/services/location.ts`, `src/platform/platform.test.ts`) |
+| REQ-MOB-006 | Notifications behind a `NotificationProvider` interface; alerts can reach a backgrounded app where the platform allows | P2 | VERIFIED (interface + web adapter in `src/platform/notifications.ts`, `src/platform/platform.test.ts`; Web Push PLANNED DP-7.5) |
 
 ## 21. CarPlay requirements
 

@@ -20,7 +20,7 @@ import { ProviderError } from '../http';
 import { PlacesTiles } from '../places/tiles';
 import { createTripPlan, findStopPlaces, TripPlanError } from '../../trip/planning/planner';
 import { sanitizeStopPlacesRequest, sanitizeTripRequest } from '../../trip/protocol';
-import { TileTripPlaces } from '../../trip/stops/tilePlaces';
+import { TileTripPlaces } from './tilePlaces';
 import type { BordersResponse } from '../../trip/borders';
 import { countriesAlong, decodeCountries, type CountriesFile, type CountryIndex } from '../../trip/countries';
 

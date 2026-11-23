@@ -1,5 +1,4 @@
-import type { Incident } from '../services/traffic/IncidentProvider';
-import type { TimedRoute } from '../types/route';
+import type { Incident, TimedRoute } from '../types/route';
 import { createRouteProjector } from './placesAlongRoute';
 
 export interface RouteIncident extends Incident {

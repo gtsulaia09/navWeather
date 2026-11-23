@@ -1,6 +1,5 @@
 import type { LngLat } from '../types/geo';
-import type { PlaceAlongRoute, PlaceKind, TimedRoute } from '../types/route';
-import type { RawPlace } from '../services/places/PlacesProvider';
+import type { PlaceAlongRoute, PlaceKind, RawPlace, TimedRoute } from '../types/route';
 import { projectOntoLine, type LineProjection } from '../utils/distance';
 
 /** Max distance from the road for a settlement to count as "on the route". */

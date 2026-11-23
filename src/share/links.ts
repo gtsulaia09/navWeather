@@ -1,3 +1,4 @@
+import { getShareProvider } from '../platform/share';
 import type { Place } from '../types/geo';
 import { SHARE_ID_RE } from './protocol';
 
@@ -36,25 +37,15 @@ export function parseLiveLink(pathname: string): { id: string; peer: boolean } |
   return m && SHARE_ID_RE.test(m[1]) ? { id: m[1], peer: !!m[2] } : null;
 }
 
-/** The system share sheet exists (phones, some desktops). */
+/** The system share sheet exists (phones, some desktops, native RN). */
 export function canNativeShare(): boolean {
-  return typeof navigator !== 'undefined' && typeof navigator.share === 'function';
+  return getShareProvider().canShare();
 }
 
-export async function nativeShare(data: { title: string; text?: string; url: string }): Promise<'shared' | 'cancelled' | 'failed'> {
-  try {
-    await navigator.share(data);
-    return 'shared';
-  } catch (e) {
-    return (e as DOMException)?.name === 'AbortError' ? 'cancelled' : 'failed';
-  }
+export function nativeShare(data: { title: string; text?: string; url: string }): Promise<'shared' | 'cancelled' | 'failed'> {
+  return getShareProvider().share(data);
 }
 
-export async function copyText(text: string): Promise<boolean> {
-  try {
-    await navigator.clipboard.writeText(text);
-    return true;
-  } catch {
-    return false;
-  }
+export function copyText(text: string): Promise<boolean> {
+  return getShareProvider().copyText(text);
 }

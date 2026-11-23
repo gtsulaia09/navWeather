@@ -7,30 +7,16 @@ import { matchForecastToTime } from '../algorithms/weatherMatching';
 import { config } from '../config';
 import { en, type Messages } from '../i18n/en';
 import type { LngLat, Place } from '../types/geo';
-import type { ElevationProfile, PlaceAlongRoute, Route, RouteSample, TimedRoute } from '../types/route';
+import type { ElevationProfile, PlaceAlongRoute, PlannedRoute, Route, RouteSample, TimedRoute } from '../types/route';
 import type { LocationForecast, WeatherAtTime } from '../types/weather';
 import { isAbortError, mapWithConcurrency, ProviderError } from './http';
 import type { Providers } from './providers';
 import type { AvoidOption } from './routing/RoutingProvider';
 import type { ForecastLookup } from './weather/WeatherService';
 
-export type PlanStage = 'geocoding' | 'routing' | 'places' | 'weather';
+export type { PlannedRoute };
 
-export interface PlannedRoute {
-  timed: TimedRoute;
-  places: PlaceAlongRoute[];
-  elevation: ElevationProfile | null;
-  samples: RouteSample[];
-  /** Non-fatal degradations, e.g. place names unavailable. */
-  warnings: string[];
-  /** Whether weather-change refinement already ran for this plan. */
-  refined: boolean;
-  /**
-   * Settlements that missed the soft deadline. Resolves later (or to []);
-   * the store then names samples without re-sampling or refetching weather.
-   */
-  latePlaces?: Promise<PlaceAlongRoute[]>;
-}
+export type PlanStage = 'geocoding' | 'routing' | 'places' | 'weather';
 
 /** How long route planning waits for place names before continuing without them. */
 export const PLACES_SOFT_DEADLINE_MS = 3500;
