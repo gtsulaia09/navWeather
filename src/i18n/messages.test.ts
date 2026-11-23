@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { en } from './en';
+import { ka } from './ka';
 import { ru } from './ru';
+import { localizeScript } from './script';
 
 describe('message grammar', () => {
   it('Russian: verb agrees with one or several hazards', () => {
@@ -25,11 +27,39 @@ describe('message grammar', () => {
   });
 
   it('every report kind has a name and a hint in every language', () => {
-    for (const m of [en, ru]) {
+    for (const m of [en, ru, ka]) {
       for (const k of ['accident', 'hazard', 'roadworks', 'closure', 'weather']) {
         expect(m.reports.kinds[k]).toBeTruthy();
         expect(m.reports.hints[k]).toBeTruthy();
       }
     }
+  });
+
+  it('Georgian: complete translation with zero English string leftovers', () => {
+    expect(ka.locale).toBe('ka');
+    expect(ka.speechLang).toBe('ka-GE');
+    const georgian = /[\u10A0-\u10FF]/;
+    const skipPaths = new Set(['locale', 'speechLang', 'time.and']);
+    const untranslated: string[] = [];
+
+    const walk = (obj: Record<string, unknown>, prefix = '') => {
+      for (const [key, val] of Object.entries(obj)) {
+        const path = prefix ? `${prefix}.${key}` : key;
+        if (skipPaths.has(path)) continue;
+        if (typeof val === 'string') {
+          if (!georgian.test(val)) untranslated.push(`${path} = ${JSON.stringify(val)}`);
+        } else if (val && typeof val === 'object') {
+          walk(val as Record<string, unknown>, path);
+        }
+      }
+    };
+
+    walk(ka as unknown as Record<string, unknown>);
+    expect(untranslated).toEqual([]);
+  });
+
+  it('Georgian: localizeScript preserves native Georgian street names', () => {
+    expect(localizeScript('დაჩი უჯარმელის ქუჩა', 'ka')).toBe('დაჩი უჯარმელის ქუჩა');
+    expect(localizeScript('პეკინის გამზირი', 'ka')).toBe('პეკინის გამზირი');
   });
 });

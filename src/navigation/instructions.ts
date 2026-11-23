@@ -26,6 +26,7 @@ export function roadLabel(name?: string, ref?: string): string | undefined {
 export function spokenRoad(name: string | undefined, ref: string | undefined, m: Messages): string | undefined {
   const readable = (s?: string) => {
     if (!s) return false;
+    if (m.locale === 'ka') return !CYRILLIC.test(s);
     if (m.locale === 'ru') return !GEORGIAN.test(s);
     return !GEORGIAN.test(s) && !CYRILLIC.test(s);
   };

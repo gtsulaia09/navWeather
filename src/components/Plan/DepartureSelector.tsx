@@ -66,6 +66,8 @@ export function DepartureSelector() {
     setOpen(false);
   };
   const isEn = m.locale === 'en';
+  const isKa = m.locale === 'ka';
+  const t = (en: string, ru: string, ka: string) => (isKa ? ka : isEn ? en : ru);
   const weatherDelayS = plan ? analyzeRouteConditions(plan.timed, points).weatherDelayS : 0;
 
   return (
@@ -85,7 +87,7 @@ export function DepartureSelector() {
               className={`departure__tab${pickerMode === 'depart' ? ' is-on' : ''}`}
               onClick={() => setPickerMode('depart')}
             >
-              {isEn ? 'Leave at' : 'Выехать в'}
+              {t('Leave at', 'Выехать в', 'გასვლა')}
             </button>
             <button
               type="button"
@@ -94,7 +96,7 @@ export function DepartureSelector() {
               className={`departure__tab${pickerMode === 'arrive' ? ' is-on' : ''}`}
               onClick={() => setPickerMode('arrive')}
             >
-              {isEn ? 'Arrive by' : 'Прибыть к'}
+              {t('Arrive by', 'Прибыть к', 'ჩასვლა')}
             </button>
           </div>
           {pickerMode === 'depart' ? (
@@ -127,7 +129,13 @@ export function DepartureSelector() {
             </>
           ) : (
             <label className="departure__custom">
-              <span>{isEn ? `Target arrival (${formatUtcOffset(now, originTz)})` : `Желаемое прибытие (${formatUtcOffset(now, originTz)})`}</span>
+              <span>
+                {t(
+                  `Target arrival (${formatUtcOffset(now, originTz)})`,
+                  `Желаемое прибытие (${formatUtcOffset(now, originTz)})`,
+                  `სასურველი ჩასვლა (${formatUtcOffset(now, originTz)})`,
+                )}
+              </span>
               <input
                 type="datetime-local"
                 min={toDateTimeLocalValue(now, originTz)}
@@ -142,12 +150,12 @@ export function DepartureSelector() {
                     const delayMin = Math.round(weatherDelayS / 60);
                     setArriveHint(
                       delayMin >= 3
-                        ? isEn
-                          ? `Weather buffer ~${delayMin} min`
-                          : `Запас на погоду ~${delayMin} мин`
-                        : isEn
-                          ? `Target ${formatLocalTime(targetUtc, originTz)}`
-                          : `К ${formatLocalTime(targetUtc, originTz)}`,
+                        ? t(`Weather buffer ~${delayMin} min`, `Запас на погоду ~${delayMin} мин`, `ამინდის მარაგი ~${delayMin} წთ`)
+                        : t(
+                            `Target ${formatLocalTime(targetUtc, originTz)}`,
+                            `К ${formatLocalTime(targetUtc, originTz)}`,
+                            `ჩასვლა ${formatLocalTime(targetUtc, originTz)}-ზე`,
+                          ),
                     );
                   }
                 }}

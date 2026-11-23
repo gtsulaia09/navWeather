@@ -52,6 +52,8 @@ export function RouteInsights() {
   if (!conditions) return null;
 
   const isEn = m.locale === 'en';
+  const isKa = m.locale === 'ka';
+  const t = (en: string, ru: string, ka: string) => (isKa ? ka : isEn ? en : ru);
   const showWindElevation =
     travelMode === 'bike' ||
     travelMode === 'walk' ||
@@ -73,40 +75,38 @@ export function RouteInsights() {
 
   const windText = (() => {
     if (conditions.crosswindWarning) {
-      return isEn
-        ? `Strong crosswind ${formatSpeed(conditions.maxCrosswindKmh, units.wind, m)} around km ${conditions.maxCrosswindKm}`
-        : `Сильный боковой ветер ${formatSpeed(conditions.maxCrosswindKmh, units.wind, m)} около ${conditions.maxCrosswindKm} км`;
+      const sp = formatSpeed(conditions.maxCrosswindKmh, units.wind, m);
+      return t(
+        `Strong crosswind ${sp} around km ${conditions.maxCrosswindKm}`,
+        `Сильный боковой ветер ${sp} около ${conditions.maxCrosswindKm} км`,
+        `ძლიერი გვერდითი ქარი ${sp} (${conditions.maxCrosswindKm} კმ-თან)`,
+      );
     }
     if (conditions.dominantWind === 'headwind') {
-      return isEn
-        ? `Mostly headwind ${formatSpeed(Math.abs(conditions.avgHeadwindKmh), units.wind, m)}`
-        : `В основном встречный ветер ${formatSpeed(Math.abs(conditions.avgHeadwindKmh), units.wind, m)}`;
+      const sp = formatSpeed(Math.abs(conditions.avgHeadwindKmh), units.wind, m);
+      return t(`Mostly headwind ${sp}`, `В основном встречный ветер ${sp}`, `ძირითადად შემხვედრი ქარი ${sp}`);
     }
     if (conditions.dominantWind === 'tailwind') {
-      return isEn
-        ? `Mostly tailwind ${formatSpeed(Math.abs(conditions.avgHeadwindKmh), units.wind, m)}`
-        : `В основном попутный ветер ${formatSpeed(Math.abs(conditions.avgHeadwindKmh), units.wind, m)}`;
+      const sp = formatSpeed(Math.abs(conditions.avgHeadwindKmh), units.wind, m);
+      return t(`Mostly tailwind ${sp}`, `В основном попутный ветер ${sp}`, `ძირითადად ზურგის ქარი ${sp}`);
     }
     if (conditions.dominantWind === 'crosswind') {
-      return isEn
-        ? `Crosswind up to ${formatSpeed(conditions.maxCrosswindKmh, units.wind, m)}`
-        : `Боковой ветер до ${formatSpeed(conditions.maxCrosswindKmh, units.wind, m)}`;
+      const sp = formatSpeed(conditions.maxCrosswindKmh, units.wind, m);
+      return t(`Crosswind up to ${sp}`, `Боковой ветер до ${sp}`, `გვერდითი ქარი ${sp}-მდე`);
     }
     return null;
   })();
 
   const elevText =
     conditions.ascentM >= 100
-      ? isEn
-        ? `Climb +${conditions.ascentM} m`
-        : `Набор высоты +${conditions.ascentM} м`
+      ? t(`Climb +${conditions.ascentM} m`, `Набор высоты +${conditions.ascentM} м`, `სიმაღლის მატება +${conditions.ascentM} მ`)
       : null;
 
   const aqiLevel = (aqi: number) => {
-    if (aqi <= 25) return isEn ? 'Good air' : 'Воздух хороший';
-    if (aqi <= 50) return isEn ? 'Fair air' : 'Воздух умеренный';
-    if (aqi <= 75) return isEn ? 'Moderate air' : 'Повышенная запылённость';
-    return isEn ? 'Poor air' : 'Плохой воздух';
+    if (aqi <= 25) return t('Good air', 'Воздух хороший', 'კარგი ჰაერი');
+    if (aqi <= 50) return t('Fair air', 'Воздух умеренный', 'საშუალო ჰაერი');
+    if (aqi <= 75) return t('Moderate air', 'Повышенная запылённость', 'მომატებული დაბინძურება');
+    return t('Poor air', 'Плохой воздух', 'ცუდი ჰაერი');
   };
 
   const shelterBeforeStorm = () => {
@@ -116,7 +116,7 @@ export function RouteInsights() {
   };
 
   return (
-    <section className="insights" aria-label={isEn ? 'Route conditions' : 'Условия по маршруту'}>
+    <section className="insights" aria-label={t('Route conditions', 'Условия по маршруту', 'მარშრუტის პირობები')}>
       {air ? (
         <div className={`insight-chip${air.europeanAqi > 50 ? ' is-warn' : ' is-good'}`}>
           <span className="insight-chip__dot" aria-hidden="true" />
@@ -137,12 +137,14 @@ export function RouteInsights() {
         <div key={pass.distanceKm} className={`insight-row${pass.freezingRisk || pass.fogRisk ? ' is-warn' : ''}`}>
           <AlertIcon size={16} />
           <span>
-            {isEn
-              ? `Mountain pass ${pass.elevationM} m${pass.placeName ? ` (${pass.placeName})` : ''}`
-              : `Горный перевал ${pass.elevationM} м${pass.placeName ? ` (${pass.placeName})` : ''}`}
+            {t(
+              `Mountain pass ${pass.elevationM} m${pass.placeName ? ` (${pass.placeName})` : ''}`,
+              `Горный перевал ${pass.elevationM} м${pass.placeName ? ` (${pass.placeName})` : ''}`,
+              `მთის უღელტეხილი ${pass.elevationM} მ${pass.placeName ? ` (${pass.placeName})` : ''}`,
+            )}
             {pass.temperatureC !== undefined ? ` · ${formatTemp(pass.temperatureC, units.temperature)}` : ''}
-            {pass.freezingRisk ? (isEn ? ' · ice risk' : ' · риск гололёда') : ''}
-            {pass.fogRisk ? (isEn ? ' · fog' : ' · туман') : ''}
+            {pass.freezingRisk ? t(' · ice risk', ' · риск гололёда', ' · მოყინვის რისკი') : ''}
+            {pass.fogRisk ? t(' · fog', ' · туман', ' · ნისლი') : ''}
           </span>
         </div>
       ))}
@@ -151,9 +153,11 @@ export function RouteInsights() {
         <div className="insight-row is-warn">
           <AlertIcon size={16} />
           <span>
-            {isEn
-              ? `Steep grades ≥ 6% (${conditions.steepGrades.length}×, max ${Math.max(...conditions.steepGrades.map((g) => g.gradePct))}%)`
-              : `Крутые уклоны ≥ 6% (${conditions.steepGrades.length} уч., до ${Math.max(...conditions.steepGrades.map((g) => g.gradePct))}%)`}
+            {t(
+              `Steep grades ≥ 6% (${conditions.steepGrades.length}×, max ${Math.max(...conditions.steepGrades.map((g) => g.gradePct))}%)`,
+              `Крутые уклоны ≥ 6% (${conditions.steepGrades.length} уч., до ${Math.max(...conditions.steepGrades.map((g) => g.gradePct))}%)`,
+              `ციცაბო დახრილობა ≥ 6% (${conditions.steepGrades.length} მონაკვეთი, მაქს. ${Math.max(...conditions.steepGrades.map((g) => g.gradePct))}%)`,
+            )}
           </span>
         </div>
       ) : null}
@@ -162,9 +166,11 @@ export function RouteInsights() {
         <div className="insight-row is-warn">
           <AlertIcon size={16} />
           <span>
-            {isEn
-              ? `EV estimate: climb & temperature may increase battery use by ~${conditions.evExtraConsumptionPct}%`
-              : `Оценка EV: подъём и температура могут увеличить расход батареи на ~${conditions.evExtraConsumptionPct}%`}
+            {t(
+              `EV estimate: climb & temperature may increase battery use by ~${conditions.evExtraConsumptionPct}%`,
+              `Оценка EV: подъём и температура могут увеличить расход батареи на ~${conditions.evExtraConsumptionPct}%`,
+              `EV შეფასება: აღმართმა და ტემპერატურამ შეიძლება ბატარეის ხარჯი ~${conditions.evExtraConsumptionPct}%-ით გაზარდოს`,
+            )}
           </span>
         </div>
       ) : null}
@@ -173,9 +179,11 @@ export function RouteInsights() {
         <button type="button" className="insight-action" onClick={shelterBeforeStorm}>
           <AlertIcon size={16} />
           <span>
-            {isEn
-              ? `Wait out bad weather before km ${Math.round(conditions.firstSevereAtM / 1000)} — find café / stop`
-              : `Переждать непогоду до ${Math.round(conditions.firstSevereAtM / 1000)} км — найти кафе / остановку`}
+            {t(
+              `Wait out bad weather before km ${Math.round(conditions.firstSevereAtM / 1000)} — find café / stop`,
+              `Переждать непогоду до ${Math.round(conditions.firstSevereAtM / 1000)} км — найти кафе / остановку`,
+              `უამინდობის გადალოდინება ${Math.round(conditions.firstSevereAtM / 1000)} კმ-მდე — კაფე / გაჩერება`,
+            )}
           </span>
         </button>
       ) : null}

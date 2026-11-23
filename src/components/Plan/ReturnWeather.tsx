@@ -47,21 +47,19 @@ export function ReturnWeather() {
   const retDay = retHour >= 7 && retHour < 20;
   const diffC = Math.round(retTemp - destPt.weather.temperature);
   const isEn = m.locale === 'en';
+  const isKa = m.locale === 'ka';
+  const t = (en: string, ru: string, ka: string) => (isKa ? ka : isEn ? en : ru);
   const deltaText =
     Math.abs(diffC) >= 3
       ? diffC < 0
-        ? isEn
-          ? `${Math.abs(diffC)}° cooler`
-          : `на ${Math.abs(diffC)}° холоднее`
-        : isEn
-          ? `${diffC}° warmer`
-          : `на ${diffC}° теплее`
+        ? t(`${Math.abs(diffC)}° cooler`, `на ${Math.abs(diffC)}° холоднее`, `${Math.abs(diffC)}°-ით გრილი`)
+        : t(`${diffC}° warmer`, `на ${diffC}° теплее`, `${diffC}°-ით თბილი`)
       : null;
 
   return (
-    <section className="retwx" aria-label={isEn ? 'Return weather' : 'Погода на обратную дорогу'}>
+    <section className="retwx" aria-label={t('Return weather', 'Погода на обратную дорогу', 'ამინდი უკანა გზაზე')}>
       <div className="retwx__head">
-        <span className="retwx__title">{isEn ? 'Return weather' : 'Обратная дорога'}</span>
+        <span className="retwx__title">{t('Return weather', 'Обратная дорога', 'უკანა გზა')}</span>
         <div className="retwx__chips" role="group">
           {OFFSETS_H.map((h) => (
             <button
@@ -71,7 +69,7 @@ export function ReturnWeather() {
               aria-pressed={hours === h}
               onClick={() => setHours(h)}
             >
-              +{h}{isEn ? 'h' : ' ч'}
+              +{h}{t('h', ' ч', ' სთ')}
             </button>
           ))}
         </div>
