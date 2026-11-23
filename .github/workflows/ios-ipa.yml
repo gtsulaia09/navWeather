@@ -11,10 +11,14 @@ on:
       - 'src/**'
       - '.github/workflows/ios-ipa.yml'
 
+concurrency:
+  group: ios-ipa-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-ipa:
     name: Build & Package iOS IPA
-    runs-on: macos-latest
+    runs-on: macos-15
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
