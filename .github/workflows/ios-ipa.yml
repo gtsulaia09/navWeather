@@ -14,7 +14,7 @@ on:
 jobs:
   build-ipa:
     name: Build & Package iOS IPA
-    runs-on: macos-14
+    runs-on: macos-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -36,9 +36,8 @@ jobs:
           mkdir -p ios/NavWeather/dist
           cp -R dist/* ios/NavWeather/dist/
 
-      - name: Select Xcode
+      - name: Verify Xcode environment
         run: |
-          sudo xcode-select -s /Applications/Xcode_15.4.app || sudo xcode-select -s /Applications/Xcode.app
           xcodebuild -version
 
       - name: Build Xcode archive (Unsigned)
