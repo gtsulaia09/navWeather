@@ -14,6 +14,7 @@ import type { SpeedLimitProvider } from './speed/SpeedLimitProvider';
 import {
   BrowserSpeechRecognition,
   BrowserSpeechSynthesis,
+  getCustomTtsProvider,
   type SpeechRecognitionProvider,
   type TextToSpeechProvider,
 } from '../voice/providers';
@@ -140,7 +141,7 @@ export function createProviders(cfg: AppConfig = config): Providers {
       minForecastHours: cfg.weather.minForecastHours,
       updateCheckMs: cfg.weather.updateCheckMinutes * 60000,
     }),
-    tts: googleVoice(),
+    tts: getCustomTtsProvider() ?? googleVoice(),
     speechRecognition: new BrowserSpeechRecognition(),
   };
 }

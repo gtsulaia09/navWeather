@@ -1,12 +1,15 @@
 /**
  * Native iOS WebKit Bridge.
  *
- * Connects the platform seams (`src/platform/*`) to the native iOS shell when running inside
- * WKWebView via `window.webkit.messageHandlers`.
+ * Connects the platform seams (`src/platform/*` and `src/voice/providers.ts`) to the
+ * native iOS shell (`ios/NavWeather/ViewController.swift`) when running inside WKWebView
+ * via `window.webkit.messageHandlers`.
  */
 import { setLocationProvider, type LocationProvider, type RawPosition, type RawPositionError } from './location';
 import { setHapticsProvider, type HapticsProvider, type HapticKind } from './haptics';
 import { setWakeLockProvider, type WakeLockProvider, type WakeLockHandle } from './wakeLock';
+import { setTtsProvider, type TextToSpeechProvider } from '../voice/providers';
+import { speakable } from '../voice/speakable';
 
 declare global {
   interface Window {
@@ -20,6 +23,7 @@ declare global {
     };
     __navweather_native_location_update?: (pos: RawPosition) => void;
     __navweather_native_location_error?: (err: RawPositionError) => void;
+    __navweather_native_tts_end?: (id: number) => void;
   }
 }
 
@@ -35,8 +39,14 @@ export function initNativeIosBridge(): boolean {
     let watchIdCounter = 1;
     const listeners = new Map<number, { success: (pos: RawPosition) => void; error?: (err: RawPositionError) => void }>();
 
+    const stopIfIdle = (id: number) => {
+      if (listeners.size === 0) {
+        handlers.nativeLocation?.postMessage({ action: 'stopWatch', id });
+      }
+    };
+
     window.__navweather_native_location_update = (pos: RawPosition) => {
-      for (const listener of listeners.values()) {
+      for (const listener of Array.from(listeners.values())) {
         try {
           listener.success(pos);
         } catch {
@@ -46,7 +56,7 @@ export function initNativeIosBridge(): boolean {
     };
 
     window.__navweather_native_location_error = (err: RawPositionError) => {
-      for (const listener of listeners.values()) {
+      for (const listener of Array.from(listeners.values())) {
         try {
           listener.error?.(err);
         } catch {
@@ -64,10 +74,12 @@ export function initNativeIosBridge(): boolean {
         listeners.set(id, {
           success: (pos) => {
             listeners.delete(id);
+            stopIfIdle(id);
             onSuccess(pos);
           },
           error: (err) => {
             listeners.delete(id);
+            stopIfIdle(id);
             onError(err);
           },
         });
@@ -81,9 +93,7 @@ export function initNativeIosBridge(): boolean {
       },
       clearWatch(id) {
         listeners.delete(id);
-        if (listeners.size === 0) {
-          handlers.nativeLocation?.postMessage({ action: 'stopWatch', id });
-        }
+        stopIfIdle(id);
       },
     };
 
@@ -123,6 +133,57 @@ export function initNativeIosBridge(): boolean {
       },
     };
     setWakeLockProvider(nativeWakeLock);
+  }
+
+  // 4. Native Text-to-Speech Provider (AVSpeechSynthesizer with background audio support)
+  if (handlers.nativeTTS) {
+    let utteranceIdCounter = 1;
+    const pendingOnEnd = new Map<number, () => void>();
+
+    const finishUtterance = (id: number) => {
+      const cb = pendingOnEnd.get(id);
+      if (!cb) return;
+      pendingOnEnd.delete(id);
+      try {
+        cb();
+      } catch {
+        /* ignore callback errors */
+      }
+    };
+
+    window.__navweather_native_tts_end = (id: number) => {
+      finishUtterance(id);
+    };
+
+    const nativeTts: TextToSpeechProvider = {
+      name: 'ios-native-avspeech',
+      supported: true,
+      canSpeak: () => true,
+      unlock: () => undefined,
+      speak(text, opts) {
+        const spoken = speakable(text, opts.lang).trim();
+        if (!spoken) {
+          opts.onEnd();
+          return;
+        }
+        const id = utteranceIdCounter++;
+        pendingOnEnd.set(id, opts.onEnd);
+        handlers.nativeTTS?.postMessage({ action: 'speak', id, text: spoken, lang: opts.lang });
+      },
+      cancel() {
+        const ids = Array.from(pendingOnEnd.keys());
+        handlers.nativeTTS?.postMessage({ action: 'cancel' });
+        for (const id of ids) {
+          finishUtterance(id);
+        }
+      },
+      preview(text, lang) {
+        this.cancel();
+        this.speak(text, { lang, onEnd: () => undefined });
+      },
+    };
+
+    setTtsProvider(nativeTts);
   }
 
   return true;

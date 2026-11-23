@@ -3,7 +3,7 @@
 ## Commands
 
 ```bash
-npm test              # unit + store-level scenarios (deterministic fake providers, no network; 91 files, 898 tests)
+npm test              # unit + store-level scenarios (deterministic fake providers, no network; 92 files, 903 tests)
 npm run typecheck     # app + worker + e2e + mobile spike
 npm run check:envs    # wrangler environments in step, zero billable bindings (ADR-019/020)
 npm run check:cost    # production bundle, CSP connect-src and .env.* guard (zero forbidden hosts, zero TURN)

@@ -11,6 +11,9 @@ on:
       - 'src/**'
       - '.github/workflows/ios-ipa.yml'
 
+permissions:
+  contents: read
+
 concurrency:
   group: ios-ipa-${{ github.ref }}
   cancel-in-progress: true
@@ -19,6 +22,7 @@ jobs:
   build-ipa:
     name: Build & Package iOS IPA
     runs-on: macos-15
+    timeout-minutes: 45
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -32,11 +36,19 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Build static open-data files (Georgia roads, search, places; Caucasus forecast) — ADR-019
+        run: |
+          npm run data:download
+          npm run data:osm
+          npm run data:roads
+          npm run data:weather -- --bbox 39,40,47,44
+
       - name: Build web application bundle
         run: npm run build
 
       - name: Stage web bundle into iOS project
         run: |
+          rm -rf ios/NavWeather/dist
           mkdir -p ios/NavWeather/dist
           cp -R dist/* ios/NavWeather/dist/
 
