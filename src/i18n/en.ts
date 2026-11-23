@@ -564,6 +564,7 @@ export const en = {
     bike: 'Bicycle',
     transit: 'Public transport',
     flight: 'Flight',
+    flightDisabled: 'Flight (temporarily unavailable)',
     transitUnavailable: 'Public transport is switched off here: no timetable service is set up. Pick another way to travel.',
     transitNone:
       'No public transport found for this trip at this time. Timetables come from operators that publish them openly, and this area may not be covered.',

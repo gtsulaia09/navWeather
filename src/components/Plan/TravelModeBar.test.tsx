@@ -59,6 +59,15 @@ describe('<TravelModeBar>', () => {
     await vi.waitFor(() => expect(screen.getByRole('radio', { name: 'Walking' })).toHaveAttribute('aria-checked', 'true'));
     await vi.waitFor(() => expect(useAppStore.getState().plan!.timed.totalTimeS / 3600).toBeGreaterThan(40));
   });
+
+  it('keeps flight temporarily disabled and unclickable', () => {
+    render(<TravelModeBar />);
+    const flight = screen.getByRole('radio', { name: 'Flight' });
+    expect(flight).toBeDisabled();
+    expect(flight).toHaveAttribute('aria-disabled', 'true');
+    flight.click();
+    expect(useAppStore.getState().travelMode).toBe('drive');
+  });
 });
 
 describe('the plan header per mode', () => {

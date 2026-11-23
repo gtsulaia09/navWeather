@@ -14,7 +14,7 @@ import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 
 export const FEEDS = [
-  { name: 'ge-georgian-railway', url: 'https://jbb.ghsq.de/gtfs/ge-georgian-railway.gtfs.zip', licence: 'ODbL-1.0' },
+  { name: 'ge-georgian-railway', url: 'https://georailway.com/gtfs/georgian-railway.zip', licence: 'ODbL-1.0' },
   { name: 'ge-tbilisi', url: 'https://jbb.ghsq.de/gtfs/ge-tbilisi.gtfs.zip', licence: 'not stated (REQUIRES REVIEW)' },
 ];
 const DIR = 'data/raw/gtfs';

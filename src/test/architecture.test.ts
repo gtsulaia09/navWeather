@@ -18,6 +18,7 @@ const CORE = import.meta.glob(
     '../utils/**/*.ts',
     '../i18n/**/*.ts',
     '../roads/**/*.ts',
+    '../transit/**/*.ts',
     '../search/format.ts',
     '../map/packs.ts',
     '../platform/surfaces.ts',

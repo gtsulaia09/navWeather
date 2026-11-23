@@ -14,6 +14,7 @@ Containers. Prices verified 2026-11-18 at developers.cloudflare.com.
 | App, map styles | static assets (Worker, Free plan) | $0 | none for requests; 20,000 files × 25 MiB per Worker version |
 | Map background | **our basemap**: static packs on the assets-only Worker `navweather-basemap` (ADR-020); OpenFreeMap only while none is deployed | $0 | none for requests; 20,000 files per Worker version (Georgia + world: 1,950) |
 | Routing (car, walk, bike) | device, over static road files (`/data/roads`) | $0 | — |
+| Public transport (bus, metro, rail, cable) | device (RAPTOR in `src/transit/raptor.ts`), over static gzipped GTFS bundle (`/data/transit`, `223 kB gz` for Tbilisi + Georgian Railway) | $0 | — |
 | Search | device, over static index files (`/data/search`) | $0 | — |
 | Forecast, air quality, heights | device, over static tiles (`/data/weather`, `/data/air`, `/data/elev`) | $0 | — |
 | Places, speed limits, cameras, borders | static tiles / bundled file | $0 | — |
@@ -41,6 +42,7 @@ and `e2e/mobile.spec.ts` fail on any network request outside the `AGENTS.md` all
 | Search index | 2,169 word files + 788 row blocks (250 rows each) | ≈ 66 MB raw, compressed by Cloudflare | one word file + a few row blocks (≈ 55 kB raw each) |
 | Forecast (whole world, land and coasts) | 5,050 tiles of 2°, ≈ 45 kB gzip each | ≈ 200 MB per run | the tiles along the route, once per model run |
 | Places tiles | 2,681 | 8.7 MB | the tiles near the route |
+| Public transport timetables (Georgia: Tbilisi + Georgian Railway) | 1 + manifest | 223 kB gzip (1.18 MB raw; 2,464 stops, 293 routes, 37,436 departures) | once per build (cached), loaded only when Transit mode is chosen |
 
 Everything inside a build folder is immutable: cached by the browser for a year and by the service worker (600 files),
 so repeat trips and searches need no download at all. Total files of one deploy (Georgia + the world's forecast):

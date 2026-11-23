@@ -18,9 +18,15 @@
   transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
 }
 @media (hover: hover) {
-  .tmode:hover {
+  .tmode:hover:not(:disabled) {
     background: var(--surface-2);
   }
+}
+.tmode:disabled,
+.tmode.is-disabled {
+  opacity: 0.32;
+  cursor: not-allowed;
+  pointer-events: none;
 }
 .tmode.is-on {
   color: var(--accent);

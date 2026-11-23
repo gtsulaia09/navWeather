@@ -24,6 +24,7 @@ import type { TravelMode } from '../types/travel';
 import { FlightEstimateProvider } from './routing/FlightEstimateProvider';
 import { LocalRoutingProvider } from './routing/LocalRoutingProvider';
 import type { RoutingProvider } from './routing/RoutingProvider';
+import { StaticTransitProvider } from './routing/StaticTransitProvider';
 import { StaticAirQualityProvider, type AirQualityProvider } from './air/AirQualityProvider';
 import { NoIncidentProvider, type IncidentProvider } from './traffic/IncidentProvider';
 import { ReportsIncidentProvider } from './traffic/ReportsIncidentProvider';
@@ -78,8 +79,8 @@ export function createProviders(cfg: AppConfig = config): Providers {
   const routingByMode: NonNullable<Providers['routingByMode']> = {
     walk: new LocalRoutingProvider(roads, 'walk', alternates),
     bike: new LocalRoutingProvider(roads, 'bike', alternates),
+    transit: new StaticTransitProvider(e.data),
     flight: new FlightEstimateProvider(),
-    // Public transport: no free, unlimited timetable router yet (ADR-019) — the mode is not offered.
   };
 
   const tiles = new PlacesTiles(e.placesTiles);
