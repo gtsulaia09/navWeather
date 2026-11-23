@@ -103,10 +103,7 @@ export function SearchPanel() {
         </button>
         <button
           className="icon-btn search__settings"
-          onClick={() => {
-            useAppStore.getState().clearRoute();
-            useExplore.getState().openDirections(false);
-          }}
+          onClick={() => useExplore.getState().exitToMap()}
           aria-label={m.ui.close}
         >
           <CloseIcon size={20} />
@@ -211,7 +208,7 @@ export function SearchPanel() {
         ) : null}
         <div className="search__actions">
           {!hasPlan ? (
-            <button type="button" className="icon-btn" onClick={() => useExplore.getState().openDirections(false)} aria-label={m.explore.back}>
+            <button type="button" className="icon-btn" onClick={() => useExplore.getState().exitToMap()} aria-label={m.explore.back}>
               <BackIcon size={20} />
             </button>
           ) : null}

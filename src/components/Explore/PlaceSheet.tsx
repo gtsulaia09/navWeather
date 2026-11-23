@@ -76,7 +76,7 @@ function PlaceHeader() {
           </p>
         ) : null}
       </div>
-      <button className="icon-btn phead__close" onClick={() => ex.closeCard()} aria-label={m.ui.close}>
+      <button className="icon-btn phead__close" onClick={() => ex.exitToMap()} aria-label={m.ui.close}>
         <CloseIcon size={20} />
       </button>
       <div className="phead__actions">

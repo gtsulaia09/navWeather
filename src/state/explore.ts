@@ -84,6 +84,8 @@ export interface ExploreState {
   pickTarget: 'origin' | 'destination' | null;
   setPickTarget(target: 'origin' | 'destination' | null): void;
   pickOnMap(coordinate: LngLat, existingPlace?: Place): Promise<void>;
+  /** Exit navigation/directions/pin card completely and return to the clean explore map. */
+  exitToMap(): void;
   dropPin(coordinate: LngLat): void;
   closeCard(): void;
   setCardSheet(s: SheetState): void;
@@ -297,6 +299,20 @@ export const useExplore = create<ExploreState>()(
           /* coordinates label stays readable */
         }
       }
+    },
+
+    exitToMap() {
+      const app = useAppStore.getState();
+      if (app.mode === 'navigating') app.stopNavigation();
+      else if (app.mode === 'simulating') app.exitSimulation();
+      app.clearRoute();
+      app.clearPoi();
+      cardAbort?.abort();
+      cardAbort = null;
+      nearbyAbort?.abort();
+      nearbyAbort = null;
+      set({ card: null, nearby: null, pickTarget: null, directionsOpen: false, query: '' });
+      syncUrl(null);
     },
 
     dropPin(coordinate) {
