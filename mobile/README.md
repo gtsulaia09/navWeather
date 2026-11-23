@@ -1,4 +1,4 @@
-# wayther Mobile — React Native (Hermes)
+# WayTher Mobile — React Native (Hermes)
 
 Shared-core mobile workspace for **iOS, Android (incl. F-Droid / direct APK), CarPlay, Android Auto, Apple Watch, and Wear OS** ([ADR-010](../docs/architecture/decisions/ADR-010-mobile-stack.md), [MOBILE_STRATEGY.md](../docs/mobile/MOBILE_STRATEGY.md)).
 

@@ -368,7 +368,7 @@ export const en = {
     offlineDetail: 'Navigation continues with the saved route. Weather is not updating.',
     mapUnavailable: "The map couldn't load. Check your connection — route and weather details still work.",
     crashTitle: 'Something went wrong',
-    crashBody: 'wayther hit an unexpected problem. Reloading usually fixes it — your settings and saved places are kept.',
+    crashBody: 'WayTher hit an unexpected problem. Reloading usually fixes it — your settings and saved places are kept.',
     reload: 'Reload',
     weatherAlongRoute: 'Weather along your route',
     weatherAhead: 'Weather ahead',
@@ -475,7 +475,7 @@ export const en = {
     findAlongRoute: 'Find along route',
     clear: 'Clear',
     attribution:
-      'Free, non-commercial, no ads. Weather & air: ECMWF IFS (CC BY 4.0), NOAA GFS and CAMS from the Open-Meteo open-data archive (CC BY 4.0), processed by wayther · Heights: Copernicus DEM · Borders: Natural Earth · Routing, search & map: OpenStreetMap contributors (ODbL) and Protomaps (OpenFreeMap fallback). No account, no stored location history.',
+      'Free, non-commercial, no ads. Weather & air: ECMWF IFS (CC BY 4.0), NOAA GFS and CAMS from the Open-Meteo open-data archive (CC BY 4.0), processed by WayTher · Heights: Copernicus DEM · Borders: Natural Earth · Routing, search & map: OpenStreetMap contributors (ODbL) and Protomaps (OpenFreeMap fallback). No account, no stored location history.',
     fixMap: 'Report a map error',
   },
 
@@ -735,7 +735,7 @@ export const en = {
     notFound: "Couldn't find your location. Type your starting point in “From” instead.",
     typeStart: 'Type your starting point in “From” instead.',
     errors: {
-      insecure: 'Location only works over a secure connection. Open wayther from its https:// address (or localhost on this computer).',
+      insecure: 'Location only works over a secure connection. Open WayTher from its https:// address (or localhost on this computer).',
       unsupported: "This browser can't provide your location. Search for your start instead.",
       denied:
         "Location is blocked for this site. Allow it in the browser's site settings (the icon at the left of the address bar). On a Mac, also turn on your browser in System Settings → Privacy & Security → Location Services.",
@@ -800,7 +800,7 @@ export const en = {
     create: 'Create link',
     creating: 'Creating link…',
     ready: 'Anyone with this link can see your location until you stop sharing.',
-    foreground: 'Keep wayther open on screen. Browsers pause location when an app is in the background or the phone is locked.',
+    foreground: 'Keep WayTher open on screen. Browsers pause location when an app is in the background or the phone is locked.',
     privacy: 'Only your latest position is kept on the server — never a history — and it is deleted when you stop or the link expires.',
     simulated: "You're running a simulation: viewers see the simulated drive, labelled as one.",
     stop: 'Stop sharing',
@@ -812,7 +812,7 @@ export const en = {
     waitingFix: 'Waiting for your location',
     ended: 'Location sharing ended',
     failed: "Couldn't create a link. Check your connection and try again.",
-    noServer: "Live sharing needs the wayther server, which isn't available here.",
+    noServer: "Live sharing needs the WayTher server, which isn't available here.",
     viewerTitle: 'Live location',
     sharedBy: (name: string) => `${name} is sharing their location`,
     sharedAnon: 'Someone is sharing their location with you',
@@ -832,7 +832,7 @@ export const en = {
     weatherAtDest: (place: string, time: string) => `${place} at ${time}`,
     follow: 'Follow',
     directions: 'Directions to here',
-    openApp: 'Open wayther',
+    openApp: 'Open WayTher',
     visibleUntil: (time: string) => `Visible until ${time}`,
   },
   arrival: {

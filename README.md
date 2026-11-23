@@ -1,4 +1,4 @@
-# wayther
+# WayTher
 
 **Know what's ahead before you get there.**
 

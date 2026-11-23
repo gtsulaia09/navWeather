@@ -33,7 +33,7 @@ export function LiveView() {
   return (
     <>
       <a className="live-brand" href="/">
-        wayther
+        WayTher
       </a>
       <BottomSheet
         state={sheet}
