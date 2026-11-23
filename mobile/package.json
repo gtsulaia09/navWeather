@@ -1,0 +1,10 @@
+{
+  "name": "navweather-mobile-spike",
+  "private": true,
+  "license": "MIT",
+  "version": "0.1.0",
+  "description": "ADR-010 React Native (Hermes) spike importing the shared navWeather TypeScript core with zero paid SDKs or closed-source dependencies.",
+  "scripts": {
+    "verify:hermes": "node scripts/verify-hermes.mjs"
+  }
+}

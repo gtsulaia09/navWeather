@@ -21,10 +21,16 @@ Containers. Prices verified 2026-11-18 at developers.cloudflare.com.
 | Data builds | GitHub Actions, public repository | $0 | unlimited minutes for public repositories |
 | Report reads | **static feed** on the assets-only Worker `navweather-reports`, rebuilt every ~10 min (`reports-feed.yml`) | $0 | none for requests; reports up to ~10 min old |
 | Live sharing, report writes | Worker + Durable Objects, Free plan, **then overflow** (ADR-020): sharing phone to phone (WebRTC, handshake via public Nostr relays), reports as signed Nostr events merged into the feed | $0 | the Worker's 100,000 requests a day; past them the overflow path — no limit of ours, relays carry no guarantee |
+| Compression (`fflate`, MIT) | Pure-JS gzip/deflate on device (Browser, Web Worker, Node, Hermes) | $0 | none (zero server calls, zero native-only browser APIs) |
+| Mobile / React Native clients (future) | Reuse same shared TS core (`src/*`) and read the exact same static `/data` files (cached on disk via `FileCacheProvider`) and `/api/v1` | $0 | same as web; zero extra backend infrastructure |
+| App store publishing (optional) | Web/PWA, Android APK + F-Droid, Wear OS sideload, Android Auto unknown-sources, iOS 7-day free Apple ID, Xcode simulators are **$0**; Apple Developer Program (\$99/yr) & Google Play (\$25 once) are **BLOCKED** until owner decides (ADR-015) | $0 today | publishing to public App Store / Google Play is the sole optional paid step |
 | Domain | `*.workers.dev` | $0 | — |
 
 The account has **no payment method**, so nothing can be charged. `npm run check:envs` (CI) fails on any binding that
-could bill (D1, R2, Containers, Queues).
+could bill (D1, R2, Containers, Queues) and on any binding at all in the two asset-only Workers (`wrangler.reports.toml`,
+`wrangler.basemap.toml`). `npm run check:cost` (CI) fails if the production bundle (`dist/`), CSP `connect-src`, or any
+`.env.*` file references any forbidden public service with limits, any paid/metered API, or any TURN server; `e2e/smoke.spec.ts`
+and `e2e/mobile.spec.ts` fail on any network request outside the `AGENTS.md` allowlist.
 
 ## 2. What a user downloads (measured 2026-11-18, Georgia)
 

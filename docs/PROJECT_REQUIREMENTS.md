@@ -27,11 +27,11 @@ on Cloudflare Workers, localhost parity). Catalogue of free replacements: [FREE_
 
 | ID | Constraint | Priority | Status |
 | --- | --- | --- | --- |
-| REQ-COST-006 | **Free for users, non-commercial:** no subscriptions, ads, paid features or in-app purchases; stated in the app | P0 | IN PROGRESS (true today; in-app statement DP-12.4) |
+| REQ-COST-006 | **Free for users, non-commercial:** no subscriptions, ads, paid features or in-app purchases; stated in the app | P0 | IMPLEMENTED (2026-11-23: stated in-app in `ui.attribution` en/ru; dedicated About screen DP-12.4) |
 | REQ-COST-009 | ~~Only hosting is paid~~ — replaced 2026-11-18 by REQ-COST-013 (ADR-019): the owner pays for nothing, hosting included | P0 | SUPERSEDED |
 | REQ-COST-010 | **No sponsors:** no sponsorship programmes, grants or credits in the plan or the critical path (ADR-015) | P0 | VERIFIED (none used) |
 | REQ-COST-011 | **Free software and open data only** for every third-party component; licence recorded in LICENSING_MATRIX before use; attribution shown; AGPL obligations met (ADR-015) | P0 | IN PROGRESS (FREE_STACK_PLAN §10; DP-6.9) |
-| REQ-COST-012 | **Always free, at any scale, in development and in production:** only (A) our own instances of free software, (B) open data files downloaded on a fixed schedule (volume independent of users, no paid tier) and (C) services with no usage limit and no paid tier (OpenFreeMap as tile fallback, browser capabilities) — plus, since ADR-020, public Nostr relays and STUN servers for overflow only (our Worker busy; encrypted or public-anyway messages; 3 relays of a configurable list; never in tests). No free tier with a limit, key with a quota, trial or public demo server anywhere — development runs the same stack locally at $0 (FREE_STACK_PLAN §1.1); checked by a bundle test and an E2E test of dev and prod builds (DEVELOPMENT_PLAN gates G2, G3) | P0 | IMPLEMENTED 2026-11-18 (no public server with limits is called anywhere; e2e fails on any host but our own and OpenFreeMap) |
+| REQ-COST-012 | **Always free, at any scale, in development and in production:** only (A) our own instances of free software, (B) open data files downloaded on a fixed schedule (volume independent of users, no paid tier) and (C) services with no usage limit and no paid tier (OpenFreeMap as tile fallback, browser capabilities) — plus, since ADR-020, public Nostr relays and STUN servers for overflow only (our Worker busy; encrypted or public-anyway messages; 3 relays of a configurable list; never in tests). No free tier with a limit, key with a quota, trial or public demo server anywhere — development runs the same stack locally at $0 (FREE_STACK_PLAN §1.1); checked by a bundle test and an E2E test of dev and prod builds (DEVELOPMENT_PLAN gates G2, G3) | P0 | VERIFIED 2026-11-23 (`npm run check:cost` guards `dist/` bundle, CSP `connect-src` and `.env.*` in CI; `e2e/smoke.spec.ts` and `e2e/mobile.spec.ts` both fail on any host outside the AGENTS.md allowlist) |
 | REQ-COST-013 | **Zero cost for the owner at any scale (ADR-019, owner, 2026-11-18):** Cloudflare Workers Free plan with no payment method (it cannot bill); everything per user is a static file under `/data` plus device code — routing (`src/roads`), search, forecasts, air quality, heights, places, Long Trip planner; the Worker serves only live sharing and driver reports (Durable Objects, Free plan). No Workers Paid, Containers, R2, D1, Queues or paid domain; `npm run check:envs` fails on any billable binding | P0 | IMPLEMENTED 2026-11-18 (Georgia: roads, search, places, heights; forecast and air quality worldwide on land) |
 | REQ-COST-015 | **Everything works at any number of users, still at $0 (ADR-020, owner, 2026-11-21):** report reads come from a static feed (assets-only Worker, rebuilt every ~10 min); reports, votes and live sharing use the Worker until its free daily limit, then overflow to the users' devices — live sharing phone to phone (WebRTC; handshake as encrypted ephemeral Nostr events; relay snapshots every 15 s behind strict NATs), reports as signed Nostr events with 16-bit proof of work merged into the feed; the map background is our own static basemap. Owner cost: $0 (optional domain ≤ $12/year) | P0 | IMPLEMENTED 2026-11-21 (localhost: local relay, local feed, Georgia basemap; production workflows `reports-feed.yml`, `basemap.yml` need the Cloudflare secrets) |
 | REQ-COST-014 | **Fast for users:** data files small and gzip-compressed (road tiles ≈ 35 kB, main roads 0.9 MB per region, forecast tiles 2° ≈ 40 kB, search shards a few kB), immutable per build folder and cached on the device (HTTP cache + service worker); routing in a Web Worker; a cached route is computed in well under a second | P0 | IMPLEMENTED 2026-11-18 (`src/roads/realData.test.ts`: Tbilisi → Batumi with alternatives < 1.5 s) |
@@ -294,16 +294,16 @@ While driving: one banner, voice first, large targets, nothing to read for long
 | --- | --- | --- | --- |
 | REQ-A11Y-001 | WCAG 2.1 AA: axe-core 0 violations in all main states, light/dark | P1 | VERIFIED (manual axe run 2026-10-02; automated in DP-11.4) |
 | REQ-A11Y-002 | Keyboard: focus traps in dialogs, Escape, focus return | P1 | VERIFIED |
-| REQ-A11Y-003 | Touch targets ≥44 px; text never relies on colour alone | P1 | IMPLEMENTED (map markers: DP-11.11; 2026-11-18: 36 px chips and segmented options get 44 px hit areas, departure bars a finger slide, header controls no longer under the sheet handle — B-26, B-33; `e2e/mobile.spec.ts`) |
+| REQ-A11Y-003 | Touch targets ≥44 px; text never relies on colour alone | P1 | VERIFIED (2026-11-23: map labels `.altlabel` and `.wmarker` have ≥44 px hit areas — DP-11.11; 36 px chips and segmented options get 44 px hit areas, departure bars a finger slide, header controls no longer under the sheet handle — B-26, B-33; `e2e/mobile.spec.ts`) |
 
 ## 18. Performance requirements
 
 | ID | Requirement | Priority | Status |
 | --- | --- | --- | --- |
-| REQ-PERF-001 | Core Web Vitals "good" on a mid-range phone: LCP ≤2.5 s, INP ≤200 ms, CLS ≤0.1 | P1 | PLANNED (DP-11.5; main JS 196 KB gz) |
-| REQ-PERF-002 | MapLibre in its own lazy chunk; app shell paints first | P1 | IMPLEMENTED |
-| REQ-PERF-003 | Position updates cost no network requests (weather re-matched locally) | P0 | IMPLEMENTED |
-| REQ-PERF-004 | Split rarely used UI (settings, share, live viewer, transit, departure planner, dev panel) out of the main chunk | P2 | PLANNED (DP-11.5) |
+| REQ-PERF-001 | Core Web Vitals "good" on a mid-range phone: LCP ≤2.5 s, INP ≤200 ms, CLS ≤0.1 | P1 | VERIFIED (2026-11-23, prod build, Chrome 4× CPU / Slow 4G: FCP/LCP 1.59 s, INP 184 ms; 6× CPU low-end: FCP/LCP 1.76 s, INP 248 ms; app entry JS 130.5 kB gz) |
+| REQ-PERF-002 | MapLibre in its own lazy chunk; app shell paints first | P1 | VERIFIED |
+| REQ-PERF-003 | Position updates cost no network requests (weather re-matched locally) | P0 | VERIFIED |
+| REQ-PERF-004 | Split rarely used UI (settings, share, live viewer, drive HUD, place card, arrival, Nostr/WebRTC overflow, Long Trip planner) out of the main chunk | P2 | VERIFIED (2026-11-23: app entry JS 720.3 kB / 240.3 kB gz → 379.2 kB / 130.5 kB gz + immutable `react` vendor chunk 69.4 kB gz; entry CSS 53.4 kB → 32.5 kB) |
 
 ## 19. Scalability requirements
 
@@ -322,7 +322,7 @@ Model: [COST_AND_SCALE](operations/COST_AND_SCALE.md); free stack: [FREE_STACK_P
 | --- | --- | --- | --- |
 | REQ-MOB-001 | Engines free of React/DOM/services/Hermes-missing APIs so they run unchanged in React Native (Hermes) | P0 | VERIFIED (2026-11-23: `src/test/architecture.test.ts` checks 78 core files — zero React/DOM/services imports, zero `DecompressionStream`/`Blob`; pure-JS `fflate` gzip; storage, location, notifications, wake lock, share, file cache, haptics, car/wrist surfaces behind `src/platform/*`) |
 | REQ-MOB-002 | Every server feature reachable via `/api/v1` with Bearer-token auth (no cookie-only flows) | P1 | IMPLEMENTED (live share uses Bearer key; reports anonymous; accounts PLANNED) |
-| REQ-MOB-003 | Decide the mobile stack via a time-boxed spike, only for free channels (PWA, APK / F-Droid, simulators); store apps blocked by fees (ADR-015) | P2 | IN PROGRESS (ADR-010) |
+| REQ-MOB-003 | Decide the mobile stack via a time-boxed spike, only for free channels (PWA, APK / F-Droid, simulators); store apps blocked by fees (ADR-015) | P2 | PARTIALLY VERIFIED (2026-11-23: ADR-010 Hermes core spike passed — 146.6 kB ES2019 bundle compiled to 151 kB Meta `hermesc` HBC v98 bytecode, `derive` median 1 ms / p95 2 ms; native Xcode/Android shells need CocoaPods/NDK/DHU) |
 | REQ-MOB-004 | Voice layer as platform-neutral instruction IDs + params, rendered by a per-platform TTS adapter | P1 | IMPLEMENTED (web) / PLANNED (mobile) |
 | REQ-MOB-005 | Location behind a `LocationProvider` interface (web `geolocation` default, injectable native provider) | P2 | VERIFIED (`src/platform/location.ts`, `src/services/location.ts`, `src/platform/platform.test.ts`) |
 | REQ-MOB-006 | Notifications behind a `NotificationProvider` interface; alerts can reach a backgrounded app where the platform allows | P2 | VERIFIED (interface + web adapter in `src/platform/notifications.ts`, `src/platform/platform.test.ts`; Web Push PLANNED DP-7.5) |
@@ -445,7 +445,7 @@ iOS, CarPlay, Android Auto and Google Play are BLOCKED by store fees (ADR-015).
 | DEBT-005 | No linter | style drift | ESLint (REQ-CI-003, DP-11.6) |
 | DEBT-007 | Observability disabled | blind in production | REQ-OBS-002, DP-3.3 |
 | DEBT-008 | Overpass called live per route (and per trip stop / borders) — **inside Georgia no longer** (our tiles, 2026-10-04); outside it as a fallback until those regions are built | violates its usage guidance at scale | more regions (DP-13.9), then `VITE_PLACES_FALLBACK=none` (DP-6.1) |
-| DEBT-009 | Main JS chunk 604 KB (196 KB gz) | LCP on slow phones | more lazy chunks (REQ-PERF-004, DP-11.5) |
+| DEBT-009 | ~~Main JS chunk 604–720 KB (196–240 KB gz)~~ — fixed 2026-11-23: split Nostr/WebRTC, Long Trip planner, inline road engine, DriveOverlay, PlaceSheet, Share, LiveApp, ArrivalSheet + immutable `react` vendor chunk → app entry 379 KB (130.5 KB gz) | — | REQ-PERF-004, DP-11.5 ✅ |
 | DEBT-010 | Weather thresholds duplicated in 7 files with different values (B-08) | inconsistent alerts vs trip risks | REQ-WX-009, DP-11.1 |
 | DEBT-011 | ~~`forecasts` map in the app store is never pruned (B-11)~~ — fixed 2026-10-04: kept only for the trip's roads | — | DP-1.9 ✅ |
 | DEBT-012 | ~~`derive` throttle never applies during real navigation (B-10)~~ — fixed 2026-10-04: ≤1/s by the fixes' own clock | — | DP-1.9 ✅ |

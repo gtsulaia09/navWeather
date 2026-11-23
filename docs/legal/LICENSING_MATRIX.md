@@ -80,10 +80,5 @@ commercial release — **PLANNED**.
 | MOTIS ([repo](https://github.com/motis-project/motis)) | MIT (verified 2026-10-04) | Transitous' engine: GTFS/NeTEx, GTFS-RT/SIRI, GBFS, OSM streets; self-hosting planned (DP-5.3, Cloudflare Containers) |
 
 ## Attribution as shipped
-- Map (top-right control): OpenFreeMap © OpenMapTiles Data from OpenStreetMap.
-- Sheets (`ui.attribution`): Weather: ECMWF IFS (CC BY 4.0) and NOAA GFS forecasts from the Open-Meteo open-data
-  archive (CC BY 4.0), processed by navWeather; where ours is missing, Open-Meteo · Routing: Valhalla on OpenStreetMap
-  data; outside our region OSRM (cars: project-osrm.org; walking, cycling: FOSSGIS servers) · Search: our index of
-  OpenStreetMap data; elsewhere Photon · Public transport: Transitous · Map data © OpenStreetMap contributors ·
-  "Report a map error" → openstreetmap.org/fixthemap.
-- Transit trips: "Timetables: Transitous and its sources" → transitous.org/sources/.
+- Map (top-right control): Protomaps © OpenStreetMap (or OpenFreeMap © OpenMapTiles Data from OpenStreetMap when falling back).
+- Sheets (`ui.attribution`, en/ru): Free, non-commercial, no ads. Weather & air: ECMWF IFS (CC BY 4.0), NOAA GFS and CAMS from the Open-Meteo open-data archive (CC BY 4.0), processed by navWeather · Heights: Copernicus DEM · Borders: Natural Earth · Routing, search & map: OpenStreetMap contributors (ODbL) and Protomaps (OpenFreeMap fallback). No account, no stored location history · "Report a map error" → openstreetmap.org/fixthemap.

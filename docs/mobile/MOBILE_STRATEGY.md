@@ -1,156 +1,120 @@
-# Mobile, CarPlay and Android Auto strategy
+# Mobile, CarPlay, Android Auto and Wearables Strategy
 
-> **Update 2026-10-04:** the PWA row "Offline map regions — impractical" is being re-evaluated: DEVELOPMENT_PLAN DP-9.8
-> plans user-initiated region downloads (PMTiles + places) and starts with ADR-018, which may amend ADR-012. Store apps
-> stay blocked by fees (ADR-015).
+> **Updated 2026-11-23 ([ADR-010](../architecture/decisions/ADR-010-mobile-stack.md),
+> [ADR-015](../architecture/decisions/ADR-015-free-software-own-hosting.md),
+> [ADR-019](../architecture/decisions/ADR-019-zero-owner-cost.md),
+> [ADR-020](../architecture/decisions/ADR-020-free-at-any-scale-overflow.md)):** the owner pays **$0** at any scale
+> (hosting, data, APIs, overflow). Store fees (Apple \$99/year, Google Play \$25 once) are the only remaining paid step
+> and are strictly optional; every target has a documented free \$0 route below.
 
-There are no native apps yet. This document prepares them so the backend and
-the core don't need a rewrite. Stack decision: [ADR-010](../architecture/decisions/ADR-010-mobile-stack.md)
-(Proposed — decided by a spike). Platform facts verified 2026-10-02 (Apple App
-Store Review Guidelines, Apple CarPlay page, Apple account-deletion page,
-Android Car App Library docs, Google Play policy pages); Apple pages that
-didn't render are marked **REQUIRES VERIFICATION**.
+## 0. Platform Matrix (2026-11-23)
+
+| Platform | What works today ($0) | What needs native React Native / OS code | Blocked by store fees? | Free $0 route |
+| --- | --- | --- | --- | --- |
+| **Web — Desktop** (Chrome, Edge, Firefox, Safari on macOS/Windows/Linux) | Full app: on-device routing, search, forecasts, air quality, elevation, Long Trip planner, own Protomaps basemap, live sharing + WebRTC/Nostr overflow, driver reports + static feed, keyboard nav, light/dark/high-contrast | — | No | Direct web / PWA on Cloudflare Workers Free (`*.workers.dev`) |
+| **Web — Mobile PWA** (iOS/iPadOS Safari incl. Home Screen, Android Chrome, Samsung Internet, Firefox Android) | Full planning + foreground turn-by-turn navigation, safe areas (notch/Dynamic Island/home indicator), fluid landscape/portrait, visual-viewport dialogs, Wake Lock, offline app shell & cached `/data` | Background navigation with screen locked, car screens, native offline region manager | No | Installable PWA on every platform |
+| **iPhone** (all sizes incl. SE 320 px, notch, Dynamic Island) | PWA verified in real iOS 27.2 Simulator Safari + Chrome safe-area E2E; shared TS core verified in Meta `hermesc` (HBC v98, 1–2 ms `derive`) | React Native shell (`CoreLocation` background mode, `AVSpeechSynthesizer`, MapLibre Native, `MMKV`, `UNUserNotificationCenter`) | **App Store & TestFlight BLOCKED** by Apple Developer Program (\$99/year, ADR-015) | Installable PWA for users; personal native builds on owner's own devices with a free Apple ID (re-signed every 7 days, limited app count) |
+| **iPad** (Split View, Stage Manager, keyboard & trackpad) | Fluid web/PWA layout verified at tablet viewports (768×1024, 1024×768); keyboard focus traps & shortcuts | Same RN iOS shell with adaptive split-view layout & pointer/keyboard support | **App Store & TestFlight BLOCKED** (\$99/year) | Installable PWA; personal 7-day free Apple ID builds |
+| **Apple Watch** (glanceable companion: next maneuver, ETA, next weather event — no map required) | Pure `CompanionSnapshot` + `WristCompanionBridge` (`src/platform/surfaces.ts`, `mobile/src/surfaces/wristBridge.ts`) | watchOS SwiftUI companion target + `WatchConnectivity` | **Distribution BLOCKED** (\$99/year Apple Developer Program) | Xcode Watch Simulator only until owner decides to pay |
+| **Apple CarPlay** (navigation templates, 1 weather alert at a time, voice-first) | Pure `CompanionSnapshot` + `CarSurfaceBridge` + `carPlayBridge.ts` enforcing single-alert rule | `CPMapTemplate` / `CPNavigationSession` native module + MapLibre Native CarPlay window | **Entitlement & distribution BLOCKED** (\$99/year Apple Developer Program + Apple CarPlay entitlement approval) | Xcode CarPlay external display simulator only until owner decides to pay |
+| **Android phones** (wide sizes/densities, low-end hardware) | PWA verified on real Android 36 Emulator Chrome 134 + 320–430 px & 6× CPU throttled benchmarks; shared core verified in Hermes (`hermesc`) | React Native shell (`FusedLocationProviderClient` + Android 14+ `FOREGROUND_SERVICE_LOCATION`, Android `TextToSpeech`, MapLibre Native, `MMKV`, `NotificationManagerCompat`) | **Google Play BLOCKED** (\$25 once, ADR-015) | **Direct signed APK + F-Droid** (100% free for open-source MIT repo) + PWA |
+| **Android tablets & foldables** | Fluid web/PWA layouts; side-docked sheet in landscape/wide viewports | Same RN Android shell with responsive window-size classes (`useWindowDimensions`) | **Google Play BLOCKED** (\$25 once) | **Direct APK + F-Droid** + PWA |
+| **Wear OS** (glanceable companion: next maneuver, ETA, next weather event — no map required) | Pure `CompanionSnapshot` + `WristCompanionBridge` (`mobile/src/surfaces/wristBridge.ts`) | Wear OS Compose target + Wearable `DataClient` | **Google Play BLOCKED** (\$25 once) | **Direct APK sideloading** via ADB (100% free) |
+| **Android Auto** (Car App Library `NavigationTemplate`, 1 weather alert at a time, voice-first) | Pure `CompanionSnapshot` + `CarSurfaceBridge` + `androidAutoBridge.ts` | `CarAppService` (`NAVIGATION` category) + `NavigationTemplate` + `NavigationManager` + MapLibre Native surface | **Play distribution BLOCKED** (\$25 once) | **Desktop Head Unit (DHU)** simulator + non-Play sideload with phone Android Auto Developer Settings → *"Unknown sources"* |
 
 ## 1. What the web can and cannot do (PWA reality)
 
 | Capability | Android Chrome (PWA) | iOS Safari (home-screen web app) |
 | --- | --- | --- |
-| Install, offline shell | yes | yes |
-| Foreground GPS navigation, screen kept on (Wake Lock) | yes | yes (Wake Lock in recent Safari) |
+| Install, offline shell & cached `/data` | yes | yes |
+| Foreground GPS navigation, screen kept on (Wake Lock) | yes | yes (Wake Lock in modern Safari) |
 | Navigation with screen locked / app in background | **no** | **no** |
-| Push notifications | yes | home-screen web apps only (WebKit, iOS 16.4+) — re-verify |
+| Push notifications | yes | home-screen web apps only (WebKit, iOS 16.4+) |
 | CarPlay / Android Auto | **no** | **no** |
 | Background location sharing | **no** | **no** |
-| Offline map regions | impractical (storage quotas, eviction) | impractical |
+| Large offline map regions | constrained by browser storage eviction | constrained |
 
-Conclusion: the PWA is a strong planning tool and an acceptable foreground
-navigator; real in-car use needs native apps.
+Conclusion: the PWA is a strong planning tool and foreground navigator on every platform at \$0; real in-car
+background navigation, CarPlay, Android Auto, and wrist companions need React Native + native OS modules.
 
-## 2. What is shared across Web / iOS / Android
+## 2. Shared codebase across Web, iOS and Android
 
 | Layer | Share? | How |
 | --- | --- | --- |
-| API types and contract | yes | `src/api/v1.ts`, protocol files → `packages/api-client` |
-| Route, weather, navigation models (`src/types`) | yes | `packages/core` |
-| Engines: timing, sampling, weather matching, grouping, alert engines, deviation, guidance, voice phrasing | yes (the main asset) | `packages/core`, run in Hermes (RN) or an embedded JS engine; or ported if ADR-010 chooses full native |
-| Validation (protocol sanitizers) | yes | shared with the Worker already |
-| i18n messages (en, ru; ka if restored) | yes | `packages/i18n` (spoken + display forms) |
-| Analytics abstraction | yes | counts-only event names |
-| UI | no | web React DOM; native/RN screens designed for each platform |
-| Map rendering | partly | same style JSON; MapLibre GL JS / MapLibre Native |
-| GPS, background, TTS, notifications, car screens | no | native modules per platform |
+| API types & contract | yes | `src/api/v1.ts`, `src/share/protocol.ts`, `src/reports/protocol.ts` → future `packages/api` |
+| Route, weather, navigation, trip & surface models (`src/types`, `src/platform/surfaces.ts`) | yes | future `packages/core` |
+| Engines: timing, sampling, weather matching, grouping, alert engines, deviation, guidance, voice phrasing, device router (`src/roads`), Long Trip planner (`src/trip`), `fflate` gzip | yes (the main asset) | runs unchanged in Hermes (`npm run spike:mobile`, verified with Meta `hermesc` HBC v98: median 1 ms / p95 2 ms) |
+| i18n messages (en, ru) | yes | `src/i18n/*` → future `packages/i18n` (spoken + display forms) |
+| UI | no | web React DOM (`src/components`); React Native screens designed per platform (`mobile/` → future `apps/mobile`) |
+| Map rendering | partly | same static Protomaps style JSON & packs (`src/map/packs.ts`); MapLibre GL JS / MapLibre Native |
+| GPS, background, TTS, notifications, wake lock, share, haptics, car & wrist surfaces | behind interfaces | `src/platform/*` and `src/voice/providers.ts` |
 
-Repository split happens only when the mobile work starts; until then the current layout stays (moving files
-without a second consumer is churn). Target layout:
+Repository split into `apps/web` + `apps/mobile` + `packages/*` happens only once the full native shell build starts
+(avoiding churn while `mobile/` imports `src/*` directly and keeps every web script, test, and Cloudflare deploy green).
 
-```
-apps/
-  web/            current Vite app (src/components, src/state, public/)
-  mobile/         native app (if ADR-010 accepts), Android via F-Droid
-packages/
-  core/           today's src/algorithms, src/intelligence, src/navigation, src/types, src/trip (no DOM)
-  api/            src/api/v1.ts, src/share/protocol.ts, src/reports/protocol.ts (+ generated OpenAPI)
-  i18n/           messages + spoken forms
-workers/
-  api/            today's worker/ (Durable Objects, routes)
-infra/            engine images (Valhalla, MOTIS, LibreWXR) — DEVELOPMENT_PLAN stage 2
-pipelines/        open-data builds (OSM, places, weather cells, tiles) — stage 4
-database/
-  migrations/     D1 SQL
-```
+### 2a. Platform seams in today's code (2026-11-23)
 
-### 2a. Platform seams in today's code (2026-11-18)
+All shared core folders are enforced platform-free (zero React, DOM, `services/*`, or Hermes-missing Web APIs like
+`DecompressionStream`/`Blob`) by `src/test/architecture.test.ts` (78 core files).
 
-What the web app reaches through an interface already, and what a native app (React Native or fully native,
-ADR-010) must supply itself. The shared folders are kept platform-free by `src/test/architecture.test.ts`.
-
-| Need | Web today | Seam | Native replacement |
+| Need | Web implementation today | Seam interface | React Native replacement |
 | --- | --- | --- | --- |
-| Routing, search, weather, places, elevation, air | static files + on-device engines | `services/providers.ts` (`Providers`) | same engines (Hermes), files from app storage / HTTP |
-| Road engine off the UI thread | Web Worker (`roads/client.ts`, `roads/worker.ts`) | `createRoadClient` (inline fallback) | a JS worker thread (e.g. react-native-worklets / a JSI module) or native port |
-| Settings, saved places, live-share key, "continue the drive" | localStorage / sessionStorage | `platform/storage.ts` (`setStorage`) | MMKV (synchronous) or AsyncStorage behind the same interface |
-| Device language | `navigator.language` | `i18n/systemLanguage.ts` (falls back to `Intl`) | works as is in Hermes; or pass the OS locale |
-| GPS while navigating | `navigator.geolocation` (`services/location.ts`) | `locationWatcher` | Core Location / Fused Location + background mode (§3, §4) |
-| Voice prompts, speech recognition | Web Speech API (`voice/providers.ts`) | `tts`, `speechRecognition` providers | AVSpeechSynthesizer / Android TextToSpeech, SFSpeechRecognizer / SpeechRecognizer |
-| Screen kept on while driving | Wake Lock (`hooks/useWakeLock.ts`) | hook (UI layer) | `isIdleTimerDisabled` / `FLAG_KEEP_SCREEN_ON` |
-| gzip data files | `DecompressionStream` (`utils/gzip.ts`) | function | a JS inflater (fflate) or native zlib |
-| Offline shell, cached data | service worker (`public/sw.js`) | — | app bundle + file cache |
-| Map | MapLibre GL JS (`components/Map`) | `MapProvider` (style URL) | MapLibre Native, same style JSON |
-| Sharing a link, copying | Web Share / Clipboard (`share/links.ts`) | UI layer | native share sheet |
-| Keyboard over dialogs, safe areas | visual viewport (`hooks/useVisibleViewport.ts`), `env(safe-area-inset-*)` | UI layer | `KeyboardAvoidingView`, `react-native-safe-area-context` |
-| Push notifications, biometrics, camera | not used | — | APNs / FCM, LocalAuthentication / BiometricPrompt, camera — only if a feature needs them, each with its permission prompt |
+| Routing, search, weather, places, elevation, air | static files (`/data`) + on-device engines | `services/providers.ts` (`Providers`) | same TS engines in Hermes; files from `FileCacheProvider` / HTTP |
+| Road engine off UI thread | Web Worker (`roads/client.ts`, `roads/worker.ts`) | `RoadClient` (`createRoadClient`, lazy inline fallback) | `react-native-worklets` / JSI worker thread |
+| Key-value storage | `localStorage` / `sessionStorage` | `platform/storage.ts` (`KeyValueStore`, `setStorage`) | `react-native-mmkv` (sync) |
+| Offline data file cache | Cache Storage API + memory LRU | `platform/fileCache.ts` (`FileCacheProvider`, `setFileCacheProvider`) | native disk cache (`react-native-fs` / filesystem) |
+| Device location (REQ-MOB-005) | `navigator.geolocation` | `platform/location.ts` (`LocationProvider`, `setLocationProvider`) | Core Location (iOS) / `FusedLocationProviderClient` + FGS (Android) |
+| Notifications (REQ-MOB-006) | Web Notification API | `platform/notifications.ts` (`NotificationProvider`, `setNotificationProvider`) | `UNUserNotificationCenter` / `NotificationManagerCompat` |
+| Voice prompts & recognition | Web Speech API | `voice/providers.ts` (`TextToSpeechProvider`, `SpeechRecognitionProvider`) | `AVSpeechSynthesizer` / Android `TextToSpeech`, native speech recognition |
+| Keep screen awake | Screen Wake Lock API | `platform/wakeLock.ts` (`WakeLockProvider`, `setWakeLockProvider`) | `UIApplication.isIdleTimerDisabled` / `FLAG_KEEP_SCREEN_ON` |
+| gzip / deflate-raw data files | `fflate` pure JS (MIT) | `utils/gzip.ts` (`gunzip`, `inflateRaw`) | **works as-is in Hermes** (zero `DecompressionStream`) |
+| Device language | `navigator.language` → `Intl` → `en` | `i18n/systemLanguage.ts` | **works as-is in Hermes** |
+| Share sheet & clipboard | Web Share / Clipboard API | `platform/share.ts` (`ShareProvider`, `setShareProvider`) | RN `Share.share` / native Clipboard |
+| Haptics | `navigator.vibrate` (no-op fallback) | `platform/haptics.ts` (`HapticsProvider`, `setHapticsProvider`) | `UIImpactFeedbackGenerator` / Android `VibrationEffect` |
+| Map | MapLibre GL JS (`PackMapProvider`) | `services/map/MapProvider.ts` (style JSON) | MapLibre Native using same Protomaps style JSON |
+| Car surfaces (CarPlay / Android Auto) | no-op default | `platform/surfaces.ts` (`CarSurfaceBridge`, `buildCompanionSnapshot`) | `mobile/src/surfaces/carPlayBridge.ts`, `androidAutoBridge.ts` |
+| Wrist companions (Watch / Wear OS) | no-op default | `platform/surfaces.ts` (`WristCompanionBridge`, `buildCompanionSnapshot`) | `mobile/src/surfaces/wristBridge.ts` |
 
-Known coupling left for the repository split: a few engine files import **types only** from `services/*`
-(`RawPlace`, `SpeedLimitWay`, `Incident`, `SpeedCamera`, `PlannedRoute`); they move to `types/` with the split.
-
-## 3. iOS
-
-| Item | Class | Notes |
-| --- | --- | --- |
-| Apple Developer Program membership | REQUIRED | — |
-| Location purpose strings (`NSLocationWhenInUseUsageDescription`; "Always" only if needed) | REQUIRED | navigation needs When-In-Use + background mode, not Always |
-| `UIBackgroundModes: location` for active navigation | REQUIRED | 2.5.4: background services only "for their intended purposes" — location is one |
-| 5.1.5 location consent before collecting/transmitting | REQUIRED | system prompt + our explanation screen (exists on web: location primer) |
-| Privacy manifest `PrivacyInfo.xcprivacy` + App Store privacy labels | REQUIRED | details **REQUIRE VERIFICATION** at build time |
-| 4.2 minimum functionality (not a repackaged website) | REQUIRED | native navigation, CarPlay, offline justify it |
-| Account deletion in-app (5.1.1(v)) | REQUIRED if accounts | delete "the entire account record, along with associated personal data"; may take time if the user is told |
-| Sign in with Apple | OPTIONAL | only required if a third-party login (Google…) is offered (4.8); our own passkey/email system is exempt |
-| Push notifications (APNs) | OPTIONAL | departure reminders ("rain on your usual route") — opt-in |
-| Live Activities / widgets | FUTURE | ETA + next weather on Lock Screen; also shown in CarPlay |
-| CarPlay navigation entitlement | FUTURE | §5 |
-| Default navigation app (EU, iOS 18.4+) | FUTURE | user setting reported by press; developer requirements **REQUIRE VERIFICATION** |
-
-## 4. Android
+## 3. iOS / iPadOS requirements (when store publishing is unblocked)
 
 | Item | Class | Notes |
 | --- | --- | --- |
-| Play Console account, Data safety form | REQUIRED | precise vs approximate location (≥3 km² = approximate) |
-| `ACCESS_FINE_LOCATION` + foreground service type `location` (`FOREGROUND_SERVICE_LOCATION`, target 14+) | REQUIRED | declare FGS type in Play Console (Policy → App content); FGS can't start from background without background permission |
-| Background location (`ACCESS_BACKGROUND_LOCATION`) | OPTIONAL — avoid | foreground service during navigation is enough; if requested: prominent disclosure, declaration form, ≤30 s video; turn-by-turn qualifies, passive tracking does not |
-| Notification permission (Android 13+) | REQUIRED for the navigation FGS notification | — |
-| Account deletion in-app + web link | REQUIRED if accounts | — |
-| TextToSpeech, audio focus ducking | REQUIRED | voice adapter |
-| Android Auto | FUTURE | §6 |
+| Apple Developer Program (\$99/year) | REQUIRED for App Store / TestFlight / CarPlay / watchOS | Owner decision point (ADR-015). Free Apple ID allows 7-day personal device builds. |
+| `NSLocationWhenInUseUsageDescription` + `UIBackgroundModes: location` | REQUIRED | Navigation needs When-In-Use + background location mode (not Always). |
+| App Store 5.1.5 location consent & `PrivacyInfo.xcprivacy` | REQUIRED | Location primer already implemented; verify privacy manifest at native build time. |
+| App Store 4.2 minimum functionality | REQUIRED | Native background navigation, offline packs, CarPlay justify native app. |
+| Account deletion in-app (5.1.1(v)) | REQUIRED only if accounts ever ship | Anonymous-first today (no accounts). |
+| Dynamic Type, safe areas, iPad Split View / Stage Manager / keyboard | REQUIRED | Fluid layouts & safe areas enforced on web already; carry into RN screens. |
 
-## 5. CarPlay (future, Phase 6)
-- **Entitlement:** navigation apps must request the CarPlay entitlement from
-  Apple ("Request CarPlay app entitlement… contact form"); approval is not
-  guaranteed. Navigation apps can show guidance in the instrument cluster/HUD
-  on supported cars.
-- **UI:** CarPlay framework templates — the map is drawn by the app into the
-  CarPlay window base view; trip previews, maneuvers and alerts use Apple's
-  templates (`CPMapTemplate`, navigation session APIs). No arbitrary UI;
-  limited list depth/text while driving. Exact template rules: Apple's CarPlay
-  Developer Guide — **REQUIRES VERIFICATION** at design time.
-- **Map rendering:** MapLibre Native rendering into the CarPlay window.
-- **Voice:** AVSpeechSynthesizer via the shared instruction IDs; audio session
-  ducks other audio.
-- **Background:** CarPlay navigation runs with the phone locked using the
-  location background mode.
-- **Weather in CarPlay:** one alert at a time as a maneuver-style banner;
-  route-weather timeline only in trip preview (never while moving).
-- Normal iOS UI code does **not** become CarPlay automatically.
+## 4. Android requirements (APK / F-Droid free; Play optional)
 
-## 6. Android Auto (future, Phase 7)
-- Car App Library; `CarAppService` with category
-  `androidx.car.app.category.NAVIGATION`; permission
-  `androidx.car.app.NAVIGATION_TEMPLATES` (navigation apps only).
-- Templates: `NavigationTemplate` (active guidance + travel estimates),
-  `MapWithContentTemplate`; the app draws the map on the provided surface.
-- `NavigationManager.navigationStarted() / updateTrip() / navigationEnded()`
-  so the host can manage multiple navigation apps and cluster data.
-- Must meet the car app quality guidelines (driver distraction limits).
-- Same weather-alert rule as CarPlay: one banner, voice first.
+| Item | Class | Notes |
+| --- | --- | --- |
+| Open-source build for **F-Droid** / direct APK | FREE (\$0) | MIT repo, zero proprietary/closed SDKs, zero Google Play Services dependency required for core routing/weather (use OS `LocationManager` fallback alongside Fused when GMS absent). |
+| `ACCESS_FINE_LOCATION` + `FOREGROUND_SERVICE_LOCATION` (Android 14+) | REQUIRED | Active navigation runs as a foreground service with ongoing notification; avoids `ACCESS_BACKGROUND_LOCATION`. |
+| `POST_NOTIFICATIONS` (Android 13+) | REQUIRED | Needed for navigation FGS notification and weather alerts. |
+| Audio focus ducking + Android `TextToSpeech` | REQUIRED | Implemented behind `TextToSpeechProvider`. |
+| Play Console account (\$25 once) | OPTIONAL | Owner decision point (ADR-015); only needed for Google Play & Play-distributed Android Auto. |
+
+## 5. CarPlay
+- **Entitlement:** navigation apps must request Apple's CarPlay navigation entitlement (requires paid Apple Developer Program).
+- **UI:** `CPMapTemplate` + `CPNavigationSession` (map drawn into CarPlay base view via MapLibre Native); trip preview shows route weather summary, active driving shows **at most ONE weather alert banner at a time**, voice-first (`mobile/src/surfaces/carPlayBridge.ts`).
+- **Free testing:** Xcode CarPlay external display simulator.
+
+## 6. Android Auto
+- **Library:** Android Car App Library, `CarAppService` with `androidx.car.app.category.NAVIGATION`, `NavigationTemplate`, `NavigationManager.navigationStarted() / updateTrip() / navigationEnded()`, MapLibre Native surface.
+- **Weather rule:** identical to CarPlay — one alert banner at a time, voice-first (`mobile/src/surfaces/androidAutoBridge.ts`).
+- **Free testing / sideloading:** Android Auto Desktop Head Unit (DHU) and non-Play APK with phone Android Auto Developer Settings → *"Unknown sources"*.
 
 ## 7. Offline (native)
-Downloadable regional PMTiles (same builds as the web fallback), on-device
-Valhalla tiles for re-routing, cached forecasts for the planned trip (stale
-labels). Never promise offline forecasts.
+Same static `/data` files (roads, search, places, weather, air, elevation, Protomaps basemap packs) cached on disk
+behind `FileCacheProvider`, with explicit stale labels when offline (ADR-012). Never promise offline live forecasts.
 
 ## 8. API readiness checklist for mobile
 - [x] Versioned `/api/v1`, additive-only changes (ADR-009).
-- [x] JSON errors, no cookie dependence for anonymous endpoints.
-- [ ] Bearer-token auth + refresh rotation (ADR-008).
-- [ ] Minimum-supported-client check (`GET /api/v1/health` can return
-      `minClient` per platform — additive).
+- [x] JSON errors, no cookie dependence for anonymous endpoints (Bearer key for live sharing).
+- [x] Zero-DOM shared core verified in Hermes (`npm run spike:mobile`, `src/test/architecture.test.ts`).
+- [x] Platform seams implemented (`src/platform/*`).
+- [ ] Bearer-token user auth + refresh rotation (only if optional accounts ship, ADR-008).
+- [ ] Minimum-supported-client hint in `GET /api/v1/health` (`minClient` per platform — additive).
 - [ ] Generated OpenAPI file for native clients.
