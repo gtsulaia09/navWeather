@@ -11,6 +11,8 @@
  */
 import { committedPow, tagValue, type EventTemplate, type NostrEvent } from '../p2p/nostr.ts';
 import { approxDistanceM, applyVote, DEDUPE_M, REPORT_TTL_MIN, sanitizeReport, type PublicReport, type ReportKind, type Vote } from './protocol.ts';
+import { cellOf } from './feedIndex.ts';
+export { cellOf, cellsForBoxes, isFeedIndex, type FeedCell, type FeedIndex } from './feedIndex.ts';
 
 /** Nostr kind of an overflow report or vote (regular: relays store it until its NIP-40 expiry). */
 export const REPORT_EVENT_KIND = 4207;
@@ -22,38 +24,9 @@ export const MAX_REPORTS_PER_KEY_PER_DAY = 30;
 /** How far back the builder reads relays: the longest report lifetime, three times over. */
 export const FEED_LOOKBACK_S = 3 * 12 * 3600;
 
-export const cellOf = (lat: number, lon: number): string => `${Math.floor(lat)}_${Math.floor(lon)}`;
-
-/** Cells (1°×1°) a set of boxes touches. */
-export function cellsForBoxes(boxes: [number, number, number, number][]): string[] {
-  const out = new Set<string>();
-  for (const [w, s, e, n] of boxes) {
-    for (let lat = Math.floor(s); lat <= Math.floor(n); lat++) for (let lon = Math.floor(w); lon <= Math.floor(e); lon++) out.add(`${lat}_${lon}`);
-  }
-  return [...out];
-}
-
 /** Quarter-degree area tag ("g") so relays — and the builder — can filter by area without parsing content. */
 export function areaTag(lat: number, lon: number): string {
   return `${Math.floor(lat * 4)}_${Math.floor(lon * 4)}`;
-}
-
-export interface FeedIndex {
-  v: 1;
-  build: string;
-  generatedAt: number;
-  cells: string[];
-}
-
-export interface FeedCell {
-  v: 1;
-  generatedAt: number;
-  reports: PublicReport[];
-}
-
-export function isFeedIndex(x: unknown): x is FeedIndex {
-  const o = x as FeedIndex;
-  return !!o && o.v === 1 && typeof o.build === 'string' && /^[\w-]{1,40}$/.test(o.build) && Number.isFinite(o.generatedAt) && Array.isArray(o.cells);
 }
 
 /** The Nostr event of an overflow report (to be signed with proof of work). */

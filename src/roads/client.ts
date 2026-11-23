@@ -1,4 +1,5 @@
-import { RoadEngine, RoadEngineError, type EngineRequest, type RoadEngineErrorCode, type RoadSource } from './engine';
+import { RoadEngineError, type RoadEngineErrorCode } from './errors';
+import type { EngineRequest, RoadEngine, RoadSource } from './engine';
 import type { RoadsIndex } from './format';
 import type { OsrmLikeRoute } from './guidance';
 
@@ -31,15 +32,16 @@ function abortError(): DOMException {
   return new DOMException('Aborted', 'AbortError');
 }
 
-/** The engine in this thread. */
+/** The engine in this thread (loaded lazily so browsers with Web Workers don't bundle a second copy). */
 export class InlineRoadClient implements RoadClient {
-  private readonly engine: RoadEngine;
-  constructor(source: RoadSource) {
-    this.engine = new RoadEngine(source);
-  }
+  private enginePromise: Promise<RoadEngine> | null = null;
+  constructor(private readonly source: RoadSource) {}
   async route(req: EngineRequest, signal?: AbortSignal): Promise<OsrmLikeRoute[]> {
     if (signal?.aborted) throw abortError();
-    const out = await this.engine.route(req);
+    this.enginePromise ??= import('./engine').then((m) => new m.RoadEngine(this.source));
+    const engine = await this.enginePromise;
+    if (signal?.aborted) throw abortError();
+    const out = await engine.route(req);
     if (signal?.aborted) throw abortError();
     return out;
   }

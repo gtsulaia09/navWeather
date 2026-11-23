@@ -1,6 +1,5 @@
 import { apiPaths } from '../../api/v1';
-import { cellsForBoxes, isFeedIndex, type FeedCell, type FeedIndex } from '../../reports/feed';
-import { publishOverflowReport, publishOverflowVote } from '../../reports/overflow';
+import { cellsForBoxes, isFeedIndex, type FeedCell, type FeedIndex } from '../../reports/feedIndex';
 import { MAX_BBOX_AREA, type PublicReport, type ReportKind, type Vote } from '../../reports/protocol';
 import type { LngLat } from '../../types/geo';
 import type { Route } from '../../types/route';
@@ -253,6 +252,7 @@ export class ReportsIncidentProvider implements IncidentProvider {
     } catch (e) {
       if (!this.overflowAllowed(e)) throw e;
       try {
+        const { publishOverflowReport } = await import('../../reports/overflow');
         out = await publishOverflowReport(kind, lat, lon, { relays: this.relays, signal });
       } catch (e2) {
         if (isAbortError(e2)) throw e2;
@@ -267,7 +267,11 @@ export class ReportsIncidentProvider implements IncidentProvider {
 
   async vote(reportId: string, vote: Vote, signal?: AbortSignal): Promise<{ active: boolean }> {
     if (vote === 'gone') this.gone.add(reportId);
-    const viaRelays = () => publishOverflowVote(reportId, vote, { relays: this.relays, signal }).then(() => ({ active: vote !== 'gone' }));
+    const viaRelays = async () => {
+      const { publishOverflowVote } = await import('../../reports/overflow');
+      await publishOverflowVote(reportId, vote, { relays: this.relays, signal });
+      return { active: vote !== 'gone' };
+    };
     if (this.source.get(reportId) === 'n' && this.relays.length) return viaRelays();
     try {
       const res = await fetchJson<{ active?: unknown }>(`${this.base}/${encodeURIComponent(reportId)}/vote`, {

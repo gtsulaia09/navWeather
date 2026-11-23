@@ -16,6 +16,7 @@
     "preview:worker": "npm run build && wrangler dev --port 8787 --ip 127.0.0.1",
     "typecheck": "tsc -b --noEmit && tsc -p worker && tsc -p e2e",
     "check:envs": "node scripts/check-wrangler-envs.mjs",
+    "check:cost": "node --experimental-strip-types --no-warnings scripts/check-cost.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:live": "LIVE_API_TESTS=1 vitest run src/integration/live.test.ts",

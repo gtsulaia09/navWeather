@@ -346,13 +346,7 @@ export class RelayPool {
   }
 }
 
-/**
- * Relay list from config: comma- or space-separated ws(s) URLs; an entry starting with "/" is a path on the page's
- * own origin (the dev server proxies `/nostr` to the local relay — see `resolveRelayUrl`).
- */
-export function parseRelayList(raw: string): string[] {
-  return [...new Set(raw.split(/[\s,]+/).map((s) => s.trim()).filter((s) => /^wss?:\/\/[^\s]+$/.test(s) || /^\/[\w/-]*$/.test(s)))];
-}
+export { parseRelayList } from './relays.ts';
 
 /** A same-origin relay path ("/nostr") as a ws(s) URL for this page; full URLs unchanged. */
 export function resolveRelayUrl(entry: string, loc: { protocol: string; host: string } | undefined = typeof location === 'undefined' ? undefined : location): string {

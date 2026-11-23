@@ -39,7 +39,12 @@ export interface PlannerDeps {
   maxPlaceQueries?: number;
 }
 
-export class TripPlanError extends Error {}
+export class TripPlanError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'TripPlanError';
+  }
+}
 
 function categoriesFor(kinds: StopKind[], hotelKm: number): { category: PlaceCategory; radiusKm: number }[] {
   const out: { category: PlaceCategory; radiusKm: number }[] = [];

@@ -26,7 +26,7 @@ import type { RoutingProvider } from './routing/RoutingProvider';
 import { StaticAirQualityProvider, type AirQualityProvider } from './air/AirQualityProvider';
 import { NoIncidentProvider, type IncidentProvider } from './traffic/IncidentProvider';
 import { ReportsIncidentProvider } from './traffic/ReportsIncidentProvider';
-import { parseRelayList } from '../p2p/nostr';
+import { parseRelayList } from '../p2p/relays';
 import { NoTrafficProvider, type TrafficProvider } from './traffic/TrafficProvider';
 import { StaticWeatherProvider } from './weather/StaticWeatherProvider';
 import type { WeatherProvider } from './weather/WeatherProvider';

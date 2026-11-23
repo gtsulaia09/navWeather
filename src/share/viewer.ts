@@ -5,7 +5,7 @@ import { getProviders } from '../services/providers';
 import type { LngLat } from '../types/geo';
 import type { WeatherAtTime } from '../types/weather';
 import { haversineM } from '../utils/distance';
-import { mergeSnapshot, PeerViewer } from './peer';
+import type { PeerViewer } from './peer';
 import { peerOptions } from './peerConfig';
 import type { ServerMessage, ShareSnapshot } from './protocol';
 
@@ -102,25 +102,36 @@ function onVisible() {
   }
 }
 
+let peerLoading = false;
+
 /** Join the share's phone-to-phone room (ADR-020); harmless next to the Worker path. */
 function startPeer(id: string, sid: number) {
-  if (peerViewer || sid !== session || !peerOptions().relays.length) return;
-  const pv = new PeerViewer(id, peerOptions(), {
-    onSnapshot: (s) => {
-      if (sid !== session || useViewer.getState().id !== id) return;
-      const cur = useViewer.getState().snapshot;
-      // Both paths may answer for a while: keep whichever position is newer.
-      if (cur?.pos && s.pos && cur.pos.t > s.pos.t) return;
-      onSnapshot(id, sid, mergeSnapshot(cur, s));
-    },
-    onEnded: () => {
-      if (sid !== session) return;
-      useViewer.setState({ status: 'ended' });
-      closeAll();
-    },
-  });
-  peerViewer = pv;
-  void pv.start();
+  if (peerViewer || peerLoading || sid !== session || !peerOptions().relays.length) return;
+  peerLoading = true;
+  void import('./peer')
+    .then(({ mergeSnapshot, PeerViewer }) => {
+      peerLoading = false;
+      if (peerViewer || sid !== session || useViewer.getState().id !== id) return;
+      const pv = new PeerViewer(id, peerOptions(), {
+        onSnapshot: (s) => {
+          if (sid !== session || useViewer.getState().id !== id) return;
+          const cur = useViewer.getState().snapshot;
+          // Both paths may answer for a while: keep whichever position is newer.
+          if (cur?.pos && s.pos && cur.pos.t > s.pos.t) return;
+          onSnapshot(id, sid, mergeSnapshot(cur, s));
+        },
+        onEnded: () => {
+          if (sid !== session) return;
+          useViewer.setState({ status: 'ended' });
+          closeAll();
+        },
+      });
+      peerViewer = pv;
+      void pv.start();
+    })
+    .catch(() => {
+      peerLoading = false;
+    });
   // A link with nobody sharing behind it: say so after a minute instead of waiting forever.
   peerTimer = setTimeout(() => {
     if (sid === session && !useViewer.getState().snapshot && useViewer.getState().status === 'connecting') useViewer.setState({ status: 'notfound' });
@@ -128,6 +139,7 @@ function startPeer(id: string, sid: number) {
 }
 
 function closeAll() {
+  peerLoading = false;
   peerViewer?.close();
   peerViewer = null;
   if (peerTimer) clearTimeout(peerTimer);

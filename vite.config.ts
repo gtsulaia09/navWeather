@@ -2,8 +2,7 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { defineConfig, loadEnv, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
-import { parseRelayList } from './src/p2p/nostr';
-import { DEFAULT_RELAYS } from './src/p2p/relays';
+import { DEFAULT_RELAYS, parseRelayList } from './src/p2p/relays';
 
 /**
  * The CSP's connect-src lists exactly the hosts this build talks to (ADR-020): its own origin, the reports feed and
@@ -49,8 +48,11 @@ export default defineConfig(({ mode }) => ({
     chunkSizeWarningLimit: 1100,
     rollupOptions: {
       output: {
-        // MapLibre is large; keep it in its own chunk so the app shell paints first.
-        manualChunks: { maplibre: ['maplibre-gl'] },
+        // Keep MapLibre and React vendor code in their own immutable chunks so the app shell paints fast and caches well.
+        manualChunks: {
+          react: ['react', 'react-dom', 'react-dom/client', 'zustand'],
+          maplibre: ['maplibre-gl'],
+        },
       },
     },
   },

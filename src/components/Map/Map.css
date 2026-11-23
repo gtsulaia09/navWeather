@@ -110,6 +110,7 @@
 
 /* Alternative route labels ("+12 min · Mostly dry") */
 .altlabel {
+  position: relative;
   padding: 5px 9px;
   border-radius: 8px;
   background: var(--surface);
@@ -119,6 +120,12 @@
   font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
+}
+/* Invisible hit area so map labels keep a ≥44px touch target (REQ-A11Y-003, DP-11.11). */
+.altlabel::before {
+  content: '';
+  position: absolute;
+  inset: -8px -4px;
 }
 .altlabel:focus-visible {
   color: var(--accent);

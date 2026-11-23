@@ -29,16 +29,8 @@ export interface EngineRequest {
   language?: string;
 }
 
-/** Why routing failed, so the app can say it plainly. */
-export type RoadEngineErrorCode = 'not-covered' | 'no-road-nearby' | 'no-route' | 'data-unavailable';
-export class RoadEngineError extends Error {
-  readonly code: RoadEngineErrorCode;
-  constructor(message: string, code: RoadEngineErrorCode) {
-    super(message);
-    this.name = 'RoadEngineError';
-    this.code = code;
-  }
-}
+import { RoadEngineError } from './errors';
+export { RoadEngineError, type RoadEngineErrorCode } from './errors';
 
 /** Where the files come from: fetch on the device, the file system in tests and pipelines. */
 export interface RoadSource {

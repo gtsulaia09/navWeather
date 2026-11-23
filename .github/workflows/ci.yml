@@ -31,6 +31,8 @@ jobs:
         run: npm test
       - name: Production build
         run: npm run build
+      - name: Zero-cost and allowed-host bundle guard (G2/G3)
+        run: npm run check:cost
       - name: Worker smoke tests (local wrangler, /api/v1 and legacy /api)
         env:
           WRANGLER_SEND_METRICS: 'false'

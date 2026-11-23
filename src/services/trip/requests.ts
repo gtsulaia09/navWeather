@@ -18,11 +18,9 @@ import type {
 } from '../../trip/types';
 import { ProviderError } from '../http';
 import { PlacesTiles } from '../places/tiles';
-import { createTripPlan, findStopPlaces, TripPlanError } from '../../trip/planning/planner';
-import { sanitizeStopPlacesRequest, sanitizeTripRequest } from '../../trip/protocol';
-import { TileTripPlaces } from './tilePlaces';
+import type { TileTripPlaces } from './tilePlaces';
 import type { BordersResponse } from '../../trip/borders';
-import { countriesAlong, decodeCountries, type CountriesFile, type CountryIndex } from '../../trip/countries';
+import type { CountriesFile, CountryIndex } from '../../trip/countries';
 
 /**
  * The long-trip planner on the device (ADR-013, ADR-019): turn the app's route, forecasts and settlements into a
@@ -140,13 +138,14 @@ export function buildTripRequest(input: TripRequestInput): TripPlanRequest {
  */
 export async function fetchTripPlan(req: TripPlanRequest, signal?: AbortSignal): Promise<TripPlan> {
   const now = Date.now();
+  const { sanitizeTripRequest } = await import('../../trip/protocol');
   const clean = sanitizeTripRequest(JSON.parse(JSON.stringify(req)), now);
   if (!clean) throw new ProviderError('This trip cannot be planned', 'invalid-response', 'Trip planner');
   if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
   try {
     return await backend.plan(clean, now);
   } catch (e) {
-    if (e instanceof TripPlanError) throw new ProviderError('This trip cannot be planned', 'invalid-response', 'Trip planner');
+    if (e instanceof Error && e.name === 'TripPlanError') throw new ProviderError('This trip cannot be planned', 'invalid-response', 'Trip planner');
     throw e;
   }
 }
@@ -159,8 +158,12 @@ export interface TripBackend {
   places(req: StopPlacesRequest, signal?: AbortSignal): Promise<StopPlaces[]>;
 }
 const deviceBackend: TripBackend = {
-  plan: (req, nowMs) => createTripPlan(req, { places: null, nowMs }),
-  places: (req, signal) => {
+  plan: async (req, nowMs) => {
+    const { createTripPlan } = await import('../../trip/planning/planner');
+    return createTripPlan(req, { places: null, nowMs });
+  },
+  places: async (req, signal) => {
+    const [{ findStopPlaces }, { TileTripPlaces }] = await Promise.all([import('../../trip/planning/planner'), import('./tilePlaces')]);
     stopPlaceTiles ??= new TileTripPlaces(new PlacesTiles(config.endpoints.placesTiles), null);
     return findStopPlaces(req, stopPlaceTiles, signal);
   },
@@ -193,6 +196,7 @@ export async function fetchStopPlaces(
     preferences,
     locale,
   };
+  const { sanitizeStopPlacesRequest } = await import('../../trip/protocol');
   const req = sanitizeStopPlacesRequest(JSON.parse(JSON.stringify(raw)), Date.now());
   if (!req) throw new ProviderError('Places around this stop are not available', 'invalid-response', 'Trip planner');
   return backend.places(req, signal);
@@ -206,6 +210,7 @@ let countryIndex: Promise<CountryIndex> | null = null;
  * (DP-4.5): no request leaves the device and it works offline. The data (≈0.2 MB gzip) loads on first use.
  */
 export async function findBorders(timed: TimedRoute, locale: string): Promise<BordersResponse> {
+  const { countriesAlong, decodeCountries } = await import('../../trip/countries');
   countryIndex ??= import('../../trip/data/countries-v1.json').then((m) => decodeCountries((m.default ?? m) as CountriesFile));
   const index = await countryIndex.catch((e) => {
     countryIndex = null; // a failed chunk load may succeed later

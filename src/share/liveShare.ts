@@ -7,7 +7,7 @@ import type { LngLat } from '../types/geo';
 import { bearingDelta, haversineM } from '../utils/distance';
 import { simplifyLine } from '../utils/simplify';
 import { liveUrl } from './links';
-import { newShareId, PeerSender } from './peer';
+import type { PeerSender } from './peer';
 import { peerOptions } from './peerConfig';
 import { MAX_ROUTE_POINTS, MAX_SHARE_MINUTES, MIN_SHARE_MINUTES, type ShareSnapshot, type ShareTrip, type ShareUpdate } from './protocol';
 import { deviceStorage } from '../platform/storage';
@@ -172,6 +172,8 @@ export const useLiveShare = create<LiveShareState>()((set, get) => ({
 /** Start a share that runs phone to phone from the beginning; false when no relay took the announcement. */
 async function startPeerShare(minutes: number, name: string, ctrl: AbortController): Promise<boolean> {
   if (!peerOptions().relays.length) return false;
+  const { newShareId, PeerSender } = await import('./peer');
+  if (startAbort !== ctrl || useLiveShare.getState().status !== 'starting') return false;
   const now = Date.now();
   const mins = Math.min(MAX_SHARE_MINUTES, Math.max(MIN_SHARE_MINUTES, Math.round(minutes)));
   const s: Stored = { id: newShareId(), key: '', expiresAt: now + mins * 60_000, name, peer: true, startedAt: now };
@@ -190,6 +192,8 @@ async function startPeerShare(minutes: number, name: string, ctrl: AbortControll
 async function switchToPeer(): Promise<boolean> {
   const s = current;
   if (!s || s.peer || !peerOptions().relays.length) return false;
+  const { PeerSender } = await import('./peer');
+  if (current !== s) return false;
   const p = new PeerSender(s.id, peerOptions());
   if (!(await p.start()) || current !== s) {
     p.close();
@@ -215,8 +219,12 @@ function activate(s: Stored) {
   save(current);
   if (s.peer && !peer) {
     // A phone-to-phone share resumed after a reload: rejoin its room.
-    peer = new PeerSender(s.id, peerOptions());
-    void peer.start();
+    const expected = current;
+    void import('./peer').then(({ PeerSender }) => {
+      if (current !== expected || peer) return;
+      peer = new PeerSender(s.id, peerOptions());
+      void peer.start();
+    });
   }
   useLiveShare.setState({ status: 'active', id: s.id, url: liveUrl(s.id, location.origin, !!s.peer), expiresAt: s.expiresAt, name: s.name, failing: false, lastSentAt: null });
   if (timer) clearInterval(timer);

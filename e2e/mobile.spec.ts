@@ -13,11 +13,26 @@ import { expect, test, type Page } from '@playwright/test';
  */
 
 const TBILISI = { latitude: 41.6936, longitude: 44.8014, accuracy: 8 };
+/** Allowed external hosts (AGENTS.md): OpenFreeMap tile fallback only in tests (no public Nostr relays in tests). */
+const ALLOWED_HOSTS = new Set(['tiles.openfreemap.org']);
+const foreignByTest = new WeakMap<object, string[]>();
 
-test.beforeEach(async ({ context }) => {
+test.beforeEach(async ({ context, page }) => {
+  const foreign: string[] = [];
+  foreignByTest.set(page, foreign);
+  context.on('request', (r) => {
+    const u = new URL(r.url());
+    if (u.protocol === 'data:' || u.protocol === 'blob:') return;
+    const base = new URL(page.url() === 'about:blank' ? (process.env.BASE_URL ?? 'http://localhost:5173') : page.url());
+    if (u.host !== base.host && !ALLOWED_HOSTS.has(u.host)) foreign.push(`${u.host}${u.pathname}`);
+  });
   await context.route(/tiles\.openfreemap\.org/, (r) => r.abort());
   await context.grantPermissions(['geolocation']);
   await context.setGeolocation(TBILISI);
+});
+
+test.afterEach(async ({ page }) => {
+  expect(foreignByTest.get(page) ?? [], 'mobile e2e must not call any host outside the AGENTS.md allowlist').toEqual([]);
 });
 
 /** Elements of the app that stick out of the viewport sideways (scrolling strips excepted). */

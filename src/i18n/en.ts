@@ -468,7 +468,7 @@ export const en = {
     findAlongRoute: 'Find along route',
     clear: 'Clear',
     attribution:
-      'Weather: ECMWF IFS (CC BY 4.0) and NOAA GFS forecasts from the Open-Meteo open-data archive (CC BY 4.0), processed by navWeather; where ours is missing, Open-Meteo · Routing: Valhalla on OpenStreetMap data; outside our region OSRM (cars: project-osrm.org; walking, cycling: FOSSGIS servers) · Search: our index of OpenStreetMap data; elsewhere Photon · Public transport: Transitous · Map data © OpenStreetMap contributors. No account, no stored location history.',
+      'Free, non-commercial, no ads. Weather & air: ECMWF IFS (CC BY 4.0), NOAA GFS and CAMS from the Open-Meteo open-data archive (CC BY 4.0), processed by navWeather · Heights: Copernicus DEM · Borders: Natural Earth · Routing, search & map: OpenStreetMap contributors (ODbL) and Protomaps (OpenFreeMap fallback). No account, no stored location history.',
     fixMap: 'Report a map error',
   },
 

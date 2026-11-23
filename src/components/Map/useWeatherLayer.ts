@@ -105,6 +105,7 @@ export function useWeatherLayer(mapRef: RefObject<MLMap | null>, styleVersion: n
     };
 
     const onMove = () => {
+      if (useExplore.getState().layer === 'off') return;
       window.clearTimeout(timer);
       timer = window.setTimeout(refresh, 600);
     };

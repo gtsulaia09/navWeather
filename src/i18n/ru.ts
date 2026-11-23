@@ -461,7 +461,7 @@ export const ru: Messages = {
     findAlongRoute: 'Найти по маршруту',
     clear: 'Очистить',
     attribution:
-      'Погода: прогнозы ECMWF IFS (CC BY 4.0) и NOAA GFS из открытого архива Open-Meteo (CC BY 4.0), обработанные navWeather; где нашего прогноза нет — Open-Meteo · Маршруты: Valhalla на данных OpenStreetMap; вне нашего региона OSRM (авто: project-osrm.org; пешком, велосипед: серверы FOSSGIS) · Поиск: наш индекс данных OpenStreetMap; в остальных местах Photon · Общественный транспорт: Transitous · Данные карты © участники OpenStreetMap. Без аккаунта, история поездок не хранится.',
+      'Бесплатно, некоммерчески, без рекламы. Погода и воздух: ECMWF IFS (CC BY 4.0), NOAA GFS и CAMS из открытого архива Open-Meteo (CC BY 4.0), обработанные navWeather · Высоты: Copernicus DEM · Границы: Natural Earth · Маршруты, поиск и карта: участники OpenStreetMap (ODbL) и Protomaps (резерв OpenFreeMap). Без аккаунта, история поездок не хранится.',
     fixMap: 'Сообщить об ошибке на карте',
   },
 

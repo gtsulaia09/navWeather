@@ -1,27 +1,14 @@
-import { lazy, Suspense, useEffect, useRef } from 'react';
-import { AlertBanner } from './components/Drive/AlertBanner';
-import { RerouteOffer } from './components/Drive/RerouteOffer';
-import { ReportDialog, ReportPrompt } from './components/Drive/Reports';
-import { ArrivalSheet } from './components/Drive/ArrivalSheet';
-import { DriveSheet } from './components/Drive/DriveSheet';
-import { ManeuverBanner } from './components/Drive/ManeuverBanner';
-import { HazardSign } from './components/Drive/HazardSign';
-import { SpeedSign } from './components/Drive/SpeedSign';
+import { lazy, Suspense, useEffect } from 'react';
 import { ErrorBoundary } from './components/Common/ErrorBoundary';
 import { MapWeatherChip } from './components/Explore/MapWeatherChip';
 import { NearbySheet } from './components/Explore/Nearby';
-import { PlaceSheet } from './components/Explore/PlaceSheet';
-import { LiveView } from './components/Live/LiveView';
-import { LocateButton } from './components/Map/LocateButton';
 import { LayerTimeline } from './components/Map/WeatherLayerControls';
-import { LiveShareDialog, SharePlaceDialog, ShareStatus } from './components/Share/Share';
 import { LocationPrimer, NavPrompt, Notice } from './components/Notice/Notice';
 import { PlanSheet } from './components/Plan/PlanSheet';
 import { SearchPanel } from './components/Search/SearchPanel';
 import { VoiceControls } from './components/Voice/VoiceControls';
 import { useAppTimers } from './hooks/useAppTimers';
 import { useApplyTheme } from './hooks/useEffectiveTheme';
-import { useElementSize } from './hooks/useElementSize';
 import { useNetworkStatus } from './hooks/useNetworkStatus';
 import { useVisibleViewport } from './hooks/useVisibleViewport';
 import { useSimulationLoop } from './hooks/useSimulationLoop';
@@ -29,18 +16,25 @@ import { useWakeLock } from './hooks/useWakeLock';
 import { parseLiveLink, parsePlaceUrl } from './share/links';
 import { resumeLiveShare, useLiveShare } from './share/liveShare';
 import { initTrip } from './state/trip';
-import { useViewer } from './share/viewer';
 import { locationWatcher, useExplore } from './state/explore';
 import { useLayoutStore } from './state/layout';
-import { useMessages } from './state/settings';
+import { useMessages, useSettings } from './state/settings';
 import { useAppStore } from './state/store';
-import './components/Drive/Drive.css';
 import './App.css';
 
 // MapLibre is the heaviest dependency — load it after the shell paints.
 const RouteMap = lazy(() => import('./components/Map/RouteMap'));
-// Settings and its sections load the first time they are opened.
-const SettingsDialog = lazy(() => import('./components/Settings/SettingsDialog').then((mod) => ({ default: mod.SettingsDialog })));
+// Mode-specific and rarely-used UI split out of the main chunk (REQ-PERF-004, DEBT-009).
+const loadSettings = () => import('./components/Settings/SettingsDialog').then((mod) => ({ default: mod.SettingsDialog }));
+const loadDriveOverlay = () => import('./components/Drive/DriveOverlay');
+const SettingsDialog = lazy(loadSettings);
+const DriveOverlay = lazy(loadDriveOverlay);
+const LiveApp = lazy(() => import('./components/Live/LiveApp'));
+const PlaceSheet = lazy(() => import('./components/Explore/PlaceSheet').then((mod) => ({ default: mod.PlaceSheet })));
+const ArrivalSheet = lazy(() => import('./components/Drive/ArrivalSheet').then((mod) => ({ default: mod.ArrivalSheet })));
+const SharePlaceDialog = lazy(() => import('./components/Share/Share').then((mod) => ({ default: mod.SharePlaceDialog })));
+const LiveShareDialog = lazy(() => import('./components/Share/Share').then((mod) => ({ default: mod.LiveShareDialog })));
+const ShareStatus = lazy(() => import('./components/Share/Share').then((mod) => ({ default: mod.ShareStatus })));
 // Development diagnostics; the import is dropped from production builds.
 const DevPanel = import.meta.env.DEV ? lazy(() => import('./dev/DevPanel')) : null;
 
@@ -49,7 +43,17 @@ const live = typeof location !== 'undefined' ? parseLiveLink(location.pathname) 
 
 export default function App() {
   // Last line of defence: an unexpected error shows a way back instead of a blank page.
-  return <ErrorBoundary fallback={<CrashScreen />}>{live ? <LiveApp id={live.id} peer={live.peer} /> : <MainApp />}</ErrorBoundary>;
+  return (
+    <ErrorBoundary fallback={<CrashScreen />}>
+      {live ? (
+        <Suspense fallback={<div className="map-placeholder" aria-hidden="true" />}>
+          <LiveApp id={live.id} peer={live.peer} useInsetVars={useInsetVars} useLocationSync={useLocationSync} />
+        </Suspense>
+      ) : (
+        <MainApp />
+      )}
+    </ErrorBoundary>
+  );
 }
 
 function CrashScreen() {
@@ -76,11 +80,15 @@ function MainApp() {
   useDisplayPointNaming();
   useInsetVars();
   useVisibleViewport();
+  useIdleChunkWarmup();
   const driving = useAppStore((s) => s.mode !== 'planning');
-  const sharing = useLiveShare((s) => s.status === 'active');
+  const shareStatus = useLiveShare((s) => s.status);
+  const shareDialogOpen = useLiveShare((s) => s.dialogOpen);
+  const sharing = shareStatus === 'active';
   useWakeLock(driving || sharing);
   const hasCard = useExplore((s) => s.card !== null);
   const hasNearby = useExplore((s) => s.nearby !== null);
+  const hasSharePlace = useExplore((s) => s.sharePlace !== null);
   const arrived = useAppStore((s) => s.arrival !== null);
   const hasPlan = useAppStore((s) => s.plan !== null);
   const settingsOpen = useAppStore((s) => s.settingsOpen);
@@ -93,19 +101,34 @@ function MainApp() {
           <RouteMap />
         </Suspense>
       </ErrorBoundary>
-      {driving && !arrived ? <DriveTop /> : arrived ? null : <SearchPanel />}
-      {driving && !arrived ? (
-        <section className="drive-signs" aria-label={m.ui.roadSigns}>
-          <HazardSign />
-          <SpeedSign />
-        </section>
+      {!driving && !arrived ? <SearchPanel /> : null}
+      {driving ? (
+        <Suspense fallback={null}>
+          <DriveOverlay />
+        </Suspense>
       ) : null}
       <VoiceControls />
       {!driving ? <MapWeatherChip /> : null}
       {!driving && !arrived ? <LayerTimeline /> : null}
-      <ShareStatus />
+      {shareStatus === 'active' || shareStatus === 'paused' ? (
+        <Suspense fallback={null}>
+          <ShareStatus />
+        </Suspense>
+      ) : null}
       <Notice />
-      {arrived ? <ArrivalSheet /> : driving ? <DriveSheet /> : hasCard ? <PlaceSheet /> : hasNearby && !hasPlan ? <NearbySheet /> : <PlanSheet />}
+      {arrived ? (
+        <Suspense fallback={null}>
+          <ArrivalSheet />
+        </Suspense>
+      ) : driving ? null : hasCard ? (
+        <Suspense fallback={null}>
+          <PlaceSheet />
+        </Suspense>
+      ) : hasNearby && !hasPlan ? (
+        <NearbySheet />
+      ) : (
+        <PlanSheet />
+      )}
       {settingsOpen ? (
         <Suspense fallback={null}>
           <SettingsDialog />
@@ -113,9 +136,16 @@ function MainApp() {
       ) : null}
       <LocationPrimer />
       <NavPrompt />
-      <SharePlaceDialog />
-      <LiveShareDialog />
-      <ReportDialog />
+      {hasSharePlace ? (
+        <Suspense fallback={null}>
+          <SharePlaceDialog />
+        </Suspense>
+      ) : null}
+      {shareDialogOpen ? (
+        <Suspense fallback={null}>
+          <LiveShareDialog />
+        </Suspense>
+      ) : null}
       {DevPanel ? (
         <Suspense fallback={null}>
           <DevPanel />
@@ -125,33 +155,22 @@ function MainApp() {
   );
 }
 
-/** Someone else's live location (read-only). */
-function LiveApp({ id, peer }: { id: string; peer: boolean }) {
-  useAppTimers();
-  useNetworkStatus();
-  useApplyTheme();
-  useInsetVars();
-  useVisibleViewport();
-  useLocationSync();
-  const m = useMessages();
+/** Pre-warm essential lazy UI chunks once the shell is idle so offline opening never fails (B-12). */
+function useIdleChunkWarmup() {
   useEffect(() => {
-    useViewer.getState().start(id, { peer });
-    return () => useViewer.getState().stop();
-  }, [id, peer]);
-  return (
-    <div className="app">
-      <ErrorBoundary fallback={<div className="map-placeholder map-placeholder--error">{m.ui.mapUnavailable}</div>}>
-        <Suspense fallback={<div className="map-placeholder" aria-hidden="true" />}>
-          <RouteMap viewer />
-        </Suspense>
-      </ErrorBoundary>
-      <div className="voice">
-        <LocateButton />
-      </div>
-      <Notice />
-      <LiveView />
-    </div>
-  );
+    if (typeof window === 'undefined' || !navigator.onLine || useSettings.getState().batterySaver) return;
+    const warm = () => {
+      void loadSettings().catch(() => undefined);
+      void loadDriveOverlay().catch(() => undefined);
+    };
+    const w = window as Window & { requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number; cancelIdleCallback?: (id: number) => void };
+    if (typeof w.requestIdleCallback === 'function') {
+      const id = w.requestIdleCallback(warm, { timeout: 5000 });
+      return () => w.cancelIdleCallback?.(id);
+    }
+    const t = window.setTimeout(warm, 4000);
+    return () => window.clearTimeout(t);
+  }, []);
 }
 
 /**
@@ -160,7 +179,11 @@ function LiveApp({ id, peer }: { id: string; peer: boolean }) {
  */
 function useLocationSync() {
   useEffect(() => {
+    locationWatcher.setBatterySaver(useSettings.getState().batterySaver);
     const unsubs = [
+      useSettings.subscribe((s, prev) => {
+        if (s.batterySaver !== prev.batterySaver) locationWatcher.setBatterySaver(s.batterySaver);
+      }),
       useAppStore.subscribe(
         (s) => s.mode === 'navigating',
         (on) => (on ? locationWatcher.acquire('navigate') : locationWatcher.release('navigate')),
@@ -191,20 +214,6 @@ function useOnLoad() {
     if (place) useExplore.getState().selectPlace(place, 'link');
     resumeLiveShare();
   }, []);
-}
-
-function DriveTop() {
-  const ref = useRef<HTMLDivElement>(null);
-  const setInsets = useLayoutStore((s) => s.setInsets);
-  useElementSize(ref, (r) => setInsets({ top: Math.round(r.bottom) }));
-  return (
-    <div className="drive-top" ref={ref}>
-      <ManeuverBanner />
-      <AlertBanner />
-      <RerouteOffer />
-      <ReportPrompt />
-    </div>
-  );
 }
 
 /** Expose overlay insets to CSS (floating controls sit just above the sheet). */
