@@ -445,9 +445,23 @@ export default function RouteMap({ viewer = false }: { viewer?: boolean }) {
     if (!map || !styleVersion) return;
     const onClick = (e: MapLayerMouseEvent) => {
       const id = e.features?.[0]?.properties?.id;
-      const all = [...(useAppStore.getState().poi?.results ?? []), ...(useExplore.getState().nearby?.results ?? [])];
+      const app = useAppStore.getState();
+      const ex = useExplore.getState();
+      const all = [...(app.poi?.results ?? []), ...(ex.nearby?.results ?? [])];
       const hit = all.find((r) => r.poi.id === id);
-      if (hit && useAppStore.getState().mode === 'planning') useExplore.getState().openPoi(hit.poi);
+      if (!hit || app.mode !== 'planning') return;
+      if (ex.directionsOpen && (ex.pickTarget !== null || !app.plan)) {
+        const name = hit.poi.name ?? hit.poi.brand ?? hit.poi.category;
+        void ex.pickOnMap(hit.poi.coordinate, {
+          id: hit.poi.id,
+          name,
+          label: name,
+          coordinate: hit.poi.coordinate,
+          kind: hit.poi.category,
+        });
+      } else {
+        ex.openPoi(hit.poi);
+      }
     };
     const enter = () => (map.getCanvas().style.cursor = 'pointer');
     const leave = () => (map.getCanvas().style.cursor = '');

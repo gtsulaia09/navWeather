@@ -18,6 +18,7 @@ interface Props {
   onSelect(place: Place): void;
   onSubmit(): void;
   onUseCurrentLocation?: () => void;
+  onPickOnMap?: () => void;
   near?: LngLat;
   autoFocus?: boolean;
   /** Offer saved places and recent destinations while the field is empty. */
@@ -28,7 +29,7 @@ interface Props {
 
 /** Autocomplete input following the WAI-ARIA combobox pattern. */
 export function PlaceInput(props: Props) {
-  const { label, value, place, placeholder, icon, onChangeText, onSelect, onSubmit, onUseCurrentLocation, near } = props;
+  const { label, value, place, placeholder, icon, onChangeText, onSelect, onSubmit, onUseCurrentLocation, onPickOnMap, near } = props;
   const m = useMessages();
   const id = useId();
   const listId = `${id}-list`;
@@ -75,10 +76,17 @@ export function PlaceInput(props: Props) {
 
   const empty = open && !place && value.trim().length === 0;
   const showCurrent = !!onUseCurrentLocation && empty;
+  const showMapPick = !!onPickOnMap && empty;
   useSavedPlaces((st) => st.saved.length + st.recents.length); // re-render when saved places change
   const quick = props.quick && empty ? quickPlaces() : [];
-  const options: ({ kind: 'place'; place: Place } | { kind: 'current' } | { kind: 'quick'; place: Place; slot: SavedSlot | 'recent' })[] = [
+  const options: (
+    | { kind: 'place'; place: Place }
+    | { kind: 'current' }
+    | { kind: 'map' }
+    | { kind: 'quick'; place: Place; slot: SavedSlot | 'recent' }
+  )[] = [
     ...(showCurrent ? [{ kind: 'current' as const }] : []),
+    ...(showMapPick ? [{ kind: 'map' as const }] : []),
     ...quick.map((q) => ({ kind: 'quick' as const, place: q.place, slot: q.slot })),
     ...items.map((p) => ({ kind: 'place' as const, place: p })),
   ];
@@ -88,6 +96,7 @@ export function PlaceInput(props: Props) {
     const o = options[i];
     if (!o) return;
     if (o.kind === 'current') onUseCurrentLocation?.();
+    else if (o.kind === 'map') onPickOnMap?.();
     else onSelect(o.place);
     setOpen(false);
     setItems([]);
@@ -159,7 +168,7 @@ export function PlaceInput(props: Props) {
         <ul className="suggestions" id={listId} role="listbox" aria-label={m.ui.suggestions(label)}>
           {options.map((o, i) => (
             <li
-              key={o.kind === 'current' ? 'current' : `${o.kind}:${o.place.id}`}
+              key={o.kind === 'current' ? 'current' : o.kind === 'map' ? 'map' : `${o.kind}:${o.place.id}`}
               id={`${listId}-${i}`}
               role="option"
               aria-selected={i === active}
@@ -174,6 +183,13 @@ export function PlaceInput(props: Props) {
                 <>
                   <LocateIcon size={18} className="suggestion__icon suggestion__icon--accent" />
                   <span className="suggestion__name">{m.ui.currentLocation}</span>
+                </>
+              ) : o.kind === 'map' ? (
+                <>
+                  <PinIcon size={18} className="suggestion__icon suggestion__icon--accent" />
+                  <span className="suggestion__name">
+                    {m.locale === 'ka' ? 'რუკაზე არჩევა' : m.locale === 'ru' ? 'Выбрать на карте' : 'Choose on map'}
+                  </span>
                 </>
               ) : o.kind === 'quick' ? (
                 <>

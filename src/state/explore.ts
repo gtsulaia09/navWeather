@@ -80,6 +80,10 @@ export interface ExploreState {
   selectPlace(place: Place, source: PlaceCard['source']): void;
   /** Load the open card's weather, air quality and drive time again (after a failure). */
   retryCard(): void;
+  /** Which directions field is currently waiting for a map click ('origin' | 'destination' | null). */
+  pickTarget: 'origin' | 'destination' | null;
+  setPickTarget(target: 'origin' | 'destination' | null): void;
+  pickOnMap(coordinate: LngLat, existingPlace?: Place): Promise<void>;
   dropPin(coordinate: LngLat): void;
   closeCard(): void;
   setCardSheet(s: SheetState): void;
@@ -141,6 +145,7 @@ export const useExplore = create<ExploreState>()(
     locateSeq: 0,
     locationError: null,
     directionsOpen: false,
+    pickTarget: null,
     query: '',
     card: null,
     cardSheet: 'default',
@@ -237,6 +242,61 @@ export const useExplore = create<ExploreState>()(
     retryCard() {
       const card = get().card;
       if (card) get().selectPlace(card.place, card.source);
+    },
+
+    setPickTarget(pickTarget) {
+      set({ pickTarget });
+    },
+
+    async pickOnMap(coordinate, existingPlace) {
+      const m = currentMessages();
+      const label = coordsLabel(coordinate);
+      const initialPlace: Place = existingPlace ?? {
+        id: `pin:${label}`,
+        name: label,
+        label,
+        coordinate,
+        kind: 'pin',
+      };
+      const app = useAppStore.getState();
+      const target = get().pickTarget;
+      const hasOrigin = !!(app.origin.place || app.origin.text.trim());
+      const hasDest = !!(app.destination.place || app.destination.text.trim());
+
+      // Decide which field gets the picked pin: explicit pickTarget first, else destination (or origin if destination is already set and origin is empty).
+      const slot: 'origin' | 'destination' =
+        target ?? (!hasOrigin && hasDest && !get().myLocation ? 'origin' : 'destination');
+
+      if (slot === 'origin') {
+        app.setOriginPlace(initialPlace);
+      } else {
+        app.setDestinationPlace(initialPlace);
+        if (!hasOrigin && (get().myLocation || latestFix(10 * 60_000))) {
+          get().useMyLocationAsOrigin(false);
+        }
+      }
+      set({ pickTarget: null, directionsOpen: true, card: null });
+
+      // If both origin and destination are now set, build the route right away!
+      const after = useAppStore.getState();
+      if ((after.origin.place || after.origin.text.trim()) && (after.destination.place || after.destination.text.trim())) {
+        void after.calculateRoute();
+      }
+
+      // Resolve a human-readable street/place name in the background when dropped on bare map.
+      if (!existingPlace) {
+        try {
+          const named = await getProviders().reverseGeocoding.reverse?.(coordinate, { language: m.locale });
+          if (named) {
+            const cur = useAppStore.getState();
+            const updated: Place = { ...initialPlace, name: named.name, label: named.label };
+            if (slot === 'origin' && cur.origin.place?.id === initialPlace.id) cur.setOriginPlace(updated);
+            if (slot === 'destination' && cur.destination.place?.id === initialPlace.id) cur.setDestinationPlace(updated);
+          }
+        } catch {
+          /* coordinates label stays readable */
+        }
+      }
     },
 
     dropPin(coordinate) {

@@ -26,6 +26,7 @@ export function SearchPanel() {
   const mode = useAppStore((s) => s.mode);
   const travelMode = useAppStore((s) => s.travelMode);
   const directionsOpen = useExplore((s) => s.directionsOpen);
+  const pickTarget = useExplore((s) => s.pickTarget);
   const query = useExplore((s) => s.query);
   const near = useExplore((s) => s.myLocation?.coordinate);
   const searching = useExplore((s) => s.searching);
@@ -137,6 +138,7 @@ export function SearchPanel() {
               onSelect={(p) => useAppStore.getState().setOriginPlace(p)}
               onSubmit={submit}
               onUseCurrentLocation={useCurrent}
+              onPickOnMap={() => useExplore.getState().setPickTarget('origin')}
               quick
               autoFocus={!hasPlan && typeof window !== 'undefined' && window.innerWidth >= 900}
             />
@@ -168,6 +170,7 @@ export function SearchPanel() {
               onChangeText={(t) => useAppStore.getState().setDestinationText(t)}
               onSelect={(p) => useAppStore.getState().setDestinationPlace(p)}
               onSubmit={submit}
+              onPickOnMap={() => useExplore.getState().setPickTarget('destination')}
               quick
             />
           </div>
@@ -175,6 +178,26 @@ export function SearchPanel() {
             <SwapIcon size={18} />
           </button>
         </div>
+        {pickTarget ? (
+          <p className="search__pick-hint" role="status">
+            <span>
+              {m.locale === 'ka'
+                ? pickTarget === 'origin'
+                  ? 'დააწკაპუნეთ რუკაზე საწყისი წერტილის ასარჩევად'
+                  : 'დააწკაპუნეთ რუკაზე დანიშნულების წერტილის ასარჩევად'
+                : m.locale === 'ru'
+                  ? pickTarget === 'origin'
+                    ? 'Нажмите на карту, чтобы выбрать точку отправления'
+                    : 'Нажмите на карту, чтобы выбрать точку назначения'
+                  : pickTarget === 'origin'
+                    ? 'Click on the map to pick a starting point'
+                    : 'Click on the map to pick a destination'}
+            </span>
+            <button type="button" className="linkbtn" onClick={() => useExplore.getState().setPickTarget(null)}>
+              {m.ui.close}
+            </button>
+          </p>
+        ) : null}
         {routeError ? (
           <p className="search__error" role="alert">
             <AlertIcon size={16} />
