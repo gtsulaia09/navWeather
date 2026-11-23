@@ -16,6 +16,18 @@ import { expect, test, type Request } from '@playwright/test';
 const STRICT = process.env.E2E_STRICT === '1';
 /** The only other host the app may reach: the map background (OpenFreeMap, no limits). */
 const ALLOWED_HOSTS = ['tiles.openfreemap.org'];
+/** Minimal valid MapLibre style so map layers and markers still mount when tiles are stubbed on CI (no basemap build). */
+const BLANK_STYLE = JSON.stringify({
+  version: 8,
+  sources: {},
+  layers: [{ id: 'background', type: 'background', paint: { 'background-color': '#eceef1' } }],
+});
+const stubOpenFreeMap = (ctx: import('@playwright/test').BrowserContext) =>
+  ctx.route(/tiles\.openfreemap\.org/, (r) =>
+    /\/styles\//.test(r.request().url())
+      ? r.fulfill({ status: 200, contentType: 'application/json', body: BLANK_STYLE })
+      : r.abort(),
+  );
 // Where the example road starts (Tbilisi, our geocoder's city point).
 const TBILISI = { latitude: 41.6936, longitude: 44.8014, accuracy: 8 };
 
@@ -28,7 +40,7 @@ test('search → road with weather → simulated drive → live share → driver
     if (!own && !ALLOWED_HOSTS.includes(u.host)) foreign.push(`${u.host}${u.pathname}`);
   };
   context.on('request', watch);
-  if (process.env.E2E_MAP !== '1') await context.route(/tiles\.openfreemap\.org/, (r) => r.abort());
+  if (process.env.E2E_MAP !== '1') await stubOpenFreeMap(context);
   await context.grantPermissions(['geolocation']);
   await context.setGeolocation(TBILISI);
 
@@ -131,7 +143,7 @@ test('locate button shows a visible warning when geolocation permission is denie
     permissions: [],
   });
   const page = await ctx.newPage();
-  if (process.env.E2E_MAP !== '1') await ctx.route(/tiles\.openfreemap\.org/, (r) => r.abort());
+  if (process.env.E2E_MAP !== '1') await stubOpenFreeMap(ctx);
   await page.goto('/');
   await page.getByRole('button', { name: 'Show my location' }).click();
   await expect(page.locator('.notice')).toBeVisible();

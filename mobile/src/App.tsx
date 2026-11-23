@@ -27,3 +27,15 @@ export function useNavWeatherMobileCore(): MobilePreviewState {
   }, []);
   return data;
 }
+
+/**
+ * Root React Native entry component (`mobile/index.js`).
+ * Returns `null` in headless/typecheck contexts; replace with React Native `<SafeAreaView>` + `<MapLibreGL.MapView>`
+ * once `mobile/node_modules` is installed (see `mobile/README.md`).
+ */
+export function App(): null {
+  useNavWeatherMobileCore();
+  return null;
+}
+
+export default App;

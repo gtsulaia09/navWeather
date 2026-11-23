@@ -47,6 +47,15 @@ for (const scheme of ['light', 'dark'] as const) {
 
     test('explore, directions, settings, and Georgian locale pass WCAG checks', async ({ page }) => {
       await page.route('**/data/basemap/**', (r) => r.abort());
+      await page.route(/tiles\.openfreemap\.org/, (r) =>
+        /\/styles\//.test(r.request().url())
+          ? r.fulfill({
+              status: 200,
+              contentType: 'application/json',
+              body: '{"version":8,"sources":{},"layers":[{"id":"background","type":"background","paint":{"background-color":"#eceef1"}}]}',
+            })
+          : r.abort(),
+      );
       await page.goto('/', { waitUntil: 'domcontentloaded' });
       await page.waitForSelector('.fab--locate', { timeout: 15_000 });
 

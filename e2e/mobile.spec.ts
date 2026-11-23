@@ -17,6 +17,12 @@ const TBILISI = { latitude: 41.6936, longitude: 44.8014, accuracy: 8 };
 const ALLOWED_HOSTS = new Set(['tiles.openfreemap.org']);
 const foreignByTest = new WeakMap<object, string[]>();
 
+const BLANK_STYLE = JSON.stringify({
+  version: 8,
+  sources: {},
+  layers: [{ id: 'background', type: 'background', paint: { 'background-color': '#eceef1' } }],
+});
+
 test.beforeEach(async ({ context, page }) => {
   const foreign: string[] = [];
   foreignByTest.set(page, foreign);
@@ -26,7 +32,11 @@ test.beforeEach(async ({ context, page }) => {
     const base = new URL(page.url() === 'about:blank' ? (process.env.BASE_URL ?? 'http://localhost:5173') : page.url());
     if (u.host !== base.host && !ALLOWED_HOSTS.has(u.host)) foreign.push(`${u.host}${u.pathname}`);
   });
-  await context.route(/tiles\.openfreemap\.org/, (r) => r.abort());
+  await context.route(/tiles\.openfreemap\.org/, (r) =>
+    /\/styles\//.test(r.request().url())
+      ? r.fulfill({ status: 200, contentType: 'application/json', body: BLANK_STYLE })
+      : r.abort(),
+  );
   await context.grantPermissions(['geolocation']);
   await context.setGeolocation(TBILISI);
 });
