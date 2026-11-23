@@ -20,6 +20,9 @@ import { DataSources } from './DataSources';
 import { DepartureChart, DepartureTip } from './DeparturePlanner';
 import { ElevationProfile } from './ElevationProfile';
 import { DepartureSelector } from './DepartureSelector';
+import { HomeQuickPanel } from './HomeQuickPanel';
+import { ReturnWeather } from './ReturnWeather';
+import { RouteInsights } from './RouteInsights';
 import { RouteOptions } from './RouteOptions';
 import { TRANSIT_SOURCES_URL, TransitOptions, TransitSteps } from './TransitTrip';
 import { TravelModeBar } from './TravelModeBar';
@@ -81,8 +84,10 @@ export function PlanSheet() {
           {transit ? <TransitOptions /> : <RouteOptions />}
           <PlacesPanel />
           <WeatherHeadline />
+          <RouteInsights />
           <DepartureTip />
           <WeatherStrip />
+          <ReturnWeather />
         </>
       }
       extra={
@@ -128,6 +133,7 @@ function Intro() {
       <button className="btn btn-quiet" onClick={tryDemo}>
         {m.ui.tryDemo}
       </button>
+      <HomeQuickPanel />
     </div>
   );
 }

@@ -255,6 +255,8 @@ export function SettingsDialog() {
 
       <TripSettings />
 
+      <OfflineCacheSettings />
+
       <SavedPlacesSettings />
 
       <p className="set-note set-privacy">{S.privacy}</p>
@@ -264,6 +266,92 @@ export function SettingsDialog() {
         </button>
       </div>
     </Dialog>
+  );
+}
+
+/** Offline data & cache manager (roads, search, transit, weather, Service Worker caches). */
+function OfflineCacheSettings() {
+  const m = useMessages();
+  const isEn = m.locale === 'en';
+  const isKa = m.locale === 'ka';
+  const t = (en: string, ru: string, ka: string) => (isKa ? ka : isEn ? en : ru);
+  const weatherUpdatedAt = useAppStore((s) => s.weatherUpdatedAt);
+  const [cacheInfo, setCacheInfo] = useState<{ files: number; mb: string | null } | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const inspect = async () => {
+    let files = 0;
+    let mb: string | null = null;
+    try {
+      if (typeof caches !== 'undefined') {
+        const names = await caches.keys();
+        for (const n of names) {
+          const c = await caches.open(n);
+          files += (await c.keys()).length;
+        }
+      }
+      if (typeof navigator !== 'undefined' && navigator.storage?.estimate) {
+        const est = await navigator.storage.estimate();
+        if (est.usage !== undefined) mb = (est.usage / 1e6).toFixed(1);
+      }
+    } catch {
+      /* ignore storage estimate errors */
+    }
+    setCacheInfo({ files, mb });
+  };
+
+  useEffect(() => {
+    void inspect();
+  }, []);
+
+  const clearCaches = async () => {
+    setBusy(true);
+    try {
+      if (typeof caches !== 'undefined') {
+        const names = await caches.keys();
+        await Promise.all(names.map((n) => caches.delete(n)));
+      }
+      await inspect();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const refreshForecast = async () => {
+    setBusy(true);
+    try {
+      await useAppStore.getState().loadWeather({ force: true, reason: 'manual' });
+      await inspect();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Section title={t('Offline data & cache', 'Офлайн-данные и кэш', 'ოფლაინ მონაცემები და ქეში')}>
+      <div className="set-row set-row--note">
+        <p className="set-note tabular">
+          {cacheInfo
+            ? t(
+                `Cached on device: ${cacheInfo.files} files${cacheInfo.mb ? ` (~${cacheInfo.mb} MB)` : ''}`,
+                `Сохранено на устройстве: ${cacheInfo.files} файлов${cacheInfo.mb ? ` (~${cacheInfo.mb} МБ)` : ''}`,
+                `შენახულია მოწყობილობაში: ${cacheInfo.files} ფაილი${cacheInfo.mb ? ` (~${cacheInfo.mb} მბ)` : ''}`,
+              )
+            : t('Checking device storage…', 'Проверка хранилища…', 'მეხსიერების შემოწმება…')}
+          {weatherUpdatedAt
+            ? ` · ${t('Forecast updated', 'Прогноз обновлён', 'პროგნოზი განახლდა')}: ${new Date(weatherUpdatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+            : ''}
+        </p>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button type="button" className="btn btn-quiet" disabled={busy} onClick={() => void refreshForecast()}>
+            {t('Refresh forecast', 'Обновить прогноз', 'პროგნოზის განახლება')}
+          </button>
+          <button type="button" className="btn btn-quiet" disabled={busy} onClick={() => void clearCaches()}>
+            {t('Clear cache', 'Очистить кэш', 'ქეშის გასუფთავება')}
+          </button>
+        </div>
+      </div>
+    </Section>
   );
 }
 
