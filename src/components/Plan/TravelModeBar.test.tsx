@@ -91,10 +91,9 @@ describe('the plan header per mode', () => {
 });
 
 describe('public transport', () => {
-  it('shows the trips found: times, the lines to take, each step — a plan, with the timetables credited', async () => {
+  it('shows the trips found: times, the lines to take, each step — immediately visible without clicking the sheet grabber', async () => {
     useAppStore.getState().setTravelMode('transit');
     await plan();
-    useAppStore.getState().setSheet('expanded'); // the steps and data sources are in the pulled-up sheet
     render(<PlanSheet />);
     const options = screen.getAllByRole('radio').filter((r) => r.className.includes('ropt'));
     expect(options).toHaveLength(2);
