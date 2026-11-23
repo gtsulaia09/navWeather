@@ -309,6 +309,8 @@ export const en = {
     searchAlong: 'Along your route',
     none: 'Nothing found along the next part of your route.',
     addStop: 'Add stop',
+    showAll: (n: number) => `Show all ${n} along route`,
+    showLess: 'Show fewer',
     searching: 'Searching along your route…',
     unavailable: 'Places are unavailable right now.',
   },

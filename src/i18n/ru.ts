@@ -302,6 +302,8 @@ export const ru: Messages = {
     searchAlong: 'По маршруту',
     none: 'На ближайшем участке маршрута ничего не найдено.',
     addStop: 'Добавить остановку',
+    showAll: (n: number) => `Показать все ${n} по маршруту`,
+    showLess: 'Свернуть',
     searching: 'Поиск по маршруту…',
     unavailable: 'Поиск мест сейчас недоступен.',
   },

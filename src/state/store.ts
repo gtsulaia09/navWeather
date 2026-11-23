@@ -1270,8 +1270,9 @@ export const useAppStore = create<AppState>()(
       const providers = routeProviders();
       if (!s.plan || !providers.poi) return [];
       set({ poi: { category, status: 'loading', results: [] } });
-      const fromM = opts.aroundM !== undefined ? Math.max(0, opts.aroundM - 5000) : (s.progress?.distanceAlongM ?? 0);
-      const aheadM = opts.aroundM !== undefined ? 10_000 : 60_000;
+      const planningFull = s.mode === 'planning' && opts.aroundM === undefined;
+      const fromM = opts.aroundM !== undefined ? Math.max(0, opts.aroundM - 5000) : planningFull ? 0 : (s.progress?.distanceAlongM ?? 0);
+      const aheadM = opts.aroundM !== undefined ? 10_000 : planningFull ? s.plan.timed.totalDistM : 80_000;
       try {
         const results = await searchAlongRoute({
           places: providers.poi,
@@ -1280,6 +1281,8 @@ export const useAppStore = create<AppState>()(
           category,
           fromM,
           aheadM,
+          maxResults: planningFull ? 24 : 12,
+          spreadAlongRoute: planningFull,
           signal: opts.signal ?? planTasks?.signal,
           language: currentMessages().locale,
         });

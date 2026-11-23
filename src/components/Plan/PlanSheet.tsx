@@ -79,6 +79,7 @@ export function PlanSheet() {
         <>
           <LongTripDashboard />
           {transit ? <TransitOptions /> : <RouteOptions />}
+          <PlacesPanel />
           <WeatherHeadline />
           <DepartureTip />
           <WeatherStrip />
@@ -98,7 +99,6 @@ export function PlanSheet() {
           <PointDetails />
           <TimeScrubber />
           <AlongTheWay />
-          <PlacesPanel />
           <DataSources />
           <Attribution />
         </div>
