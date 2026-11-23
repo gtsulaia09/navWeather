@@ -58,6 +58,7 @@ decision/lawyer) · **NOT SUITABLE** (for production/commercial use as currently
 | Material Icons paths (travel-mode and transit glyphs) | Apache-2.0 | credited in `Icons.tsx` |
 | @photostructure/tz-lookup | CC0-1.0 | time zone of a forecast point (shared/client) |
 | fflate | MIT | pure-JS gzip and raw deflate decompression (`src/utils/gzip.ts`, `src/map/packProtocol.ts`) — works in browsers, Web Workers, Node, and React Native Hermes (where `DecompressionStream` is absent) |
+| @fontsource-variable/noto-sans-georgian | SIL OFL 1.1 | self-hosted Georgian subset only (`unicode-range` in `src/styles/tokens.css`, ~41 kB woff2); zero external font requests |
 
 Build-time only (pipelines; never bundled into the app or the Worker):
 

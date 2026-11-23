@@ -4,10 +4,22 @@
  * Colours use light-dark(): the system preference applies by default; the
  * app sets [data-theme] from settings or from day/night while driving.
  */
+/* Self-hosted Georgian subset only (SIL OFL 1.1, ~41 kB): loaded by the browser
+   only when Georgian characters appear on screen; Latin/Cyrillic stay on system UI font. */
+@font-face {
+  font-family: 'Noto Sans Georgian Variable';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url('@fontsource-variable/noto-sans-georgian/files/noto-sans-georgian-georgian-wght-normal.woff2') format('woff2');
+  unicode-range: U+0589, U+10A0-10FF, U+1C90-1CBA, U+1CBD-1CBF, U+205A, U+2D00-2D2F, U+2E31;
+  size-adjust: 95%;
+}
+
 :root {
   color-scheme: light dark;
-  --font: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', 'Segoe UI', Roboto, 'Noto Sans Georgian', system-ui, sans-serif;
-  --font-display: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', 'Segoe UI', Roboto, 'Noto Sans Georgian', system-ui, sans-serif;
+  --font: 'Noto Sans Georgian Variable', -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', 'Segoe UI', Roboto, 'Noto Sans Georgian', system-ui, sans-serif;
+  --font-display: 'Noto Sans Georgian Variable', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', 'Segoe UI', Roboto, 'Noto Sans Georgian', system-ui, sans-serif;
 
   --bg: light-dark(#eceef1, #0e1013);
   --surface: light-dark(#ffffff, #16181c);
