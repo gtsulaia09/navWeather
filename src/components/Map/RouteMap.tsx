@@ -26,6 +26,7 @@ import { add3dBuildings, addRouteLayers, EMPTY_FC, fillMissingStyleImages, lineF
 import { useExploreLayer } from './useExploreLayer';
 import { useLiveLayer } from './useLiveLayer';
 import { useWeatherLayer } from './useWeatherLayer';
+import '../Explore/Explore.css';
 import './Map.css';
 
 setWorkerUrl(maplibreWorkerUrl);
@@ -253,6 +254,7 @@ export default function RouteMap({ viewer = false }: { viewer?: boolean }) {
       for (const id of ['route', 'route-weather', 'endpoints', 'focus', 'pois', 'cameras', 'hazards', 'incidents', 'alternatives', 'transit', 'transit-stops']) {
         setData(map, id, EMPTY_FC);
       }
+      if (container.current) container.current.dataset.routeVisible = '0';
       return;
     }
     const g = timed.route.geometry;
@@ -276,6 +278,12 @@ export default function RouteMap({ viewer = false }: { viewer?: boolean }) {
       features: [pointFeature(g[0], { role: 'origin' }), pointFeature(g[g.length - 1], { role: 'destination' })],
     });
     map.setPaintProperty('route-line', 'line-gradient', routeGradient(0));
+    if (container.current) {
+      const layers = map.getStyle().layers ?? [];
+      const routeIdx = layers.findIndex((l) => l.id === 'route-line');
+      const lastFillIdx = layers.reduce((acc, l, idx) => (l.type === 'fill' && l.id !== 'me-accuracy' ? idx : acc), -1);
+      container.current.dataset.routeVisible = !trip && g.length >= 2 && routeIdx > lastFillIdx ? '1' : '0';
+    }
   }, [timed, styleVersion]);
 
   const routeId = timed?.route.id;

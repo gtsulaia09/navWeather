@@ -79,6 +79,12 @@ export function useExploreLayer(mapRef: RefObject<MLMap | null>, styleVersion: n
     };
 
     render();
+    // If locate already resolved before the basemap finished loading, fly now (B-47).
+    const initialExplore = useExplore.getState();
+    if (initialExplore.followMe && initialExplore.myLocation && (opts.viewer || useAppStore.getState().mode === 'planning')) {
+      flyPending = false;
+      camera(initialExplore.myLocation.coordinate, true);
+    }
     const unsubFix = useExplore.subscribe(
       (s) => s.myLocation,
       (fix) => {

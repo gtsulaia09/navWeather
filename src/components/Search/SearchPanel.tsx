@@ -8,6 +8,7 @@ import { BackIcon, CloseIcon, DirectionsIcon, EditIcon, SettingsIcon, SwapIcon }
 import { NearbyChips } from '../Explore/Nearby';
 import { TravelModeBar } from '../Plan/TravelModeBar';
 import { PlaceInput } from './PlaceInput';
+import '../Explore/Explore.css';
 import './Search.css';
 
 export function SearchPanel() {
@@ -124,50 +125,52 @@ export function SearchPanel() {
       >
         <TravelModeBar />
         <div className="search__fields">
-          <PlaceInput
-            inputRef={firstField}
-            label={m.ui.from}
-            icon="origin"
-            placeholder={m.ui.fromPlaceholder}
-            value={origin.text}
-            place={origin.place}
-            onChangeText={(t) => useAppStore.getState().setOriginText(t)}
-            onSelect={(p) => useAppStore.getState().setOriginPlace(p)}
-            onSubmit={submit}
-            onUseCurrentLocation={useCurrent}
-            quick
-            autoFocus={!hasPlan && typeof window !== 'undefined' && window.innerWidth >= 900}
-          />
-          {waypoints.map((w, i) => (
-            <div className="search__stop" key={i}>
-              <PlaceInput
-                label={`${m.ui.stopPlaceholder} ${i + 1}`}
-                icon="stop"
-                placeholder={m.ui.stopPlaceholder}
-                value={w.text}
-                place={w.place}
-                near={origin.place?.kind === 'here' ? near : origin.place?.coordinate}
-                onChangeText={(t) => useAppStore.getState().setWaypointText(i, t)}
-                onSelect={(p) => useAppStore.getState().setWaypointPlace(i, p)}
-                onSubmit={submit}
-              />
-              <button type="button" className="icon-btn" onClick={() => useAppStore.getState().removeWaypoint(i)} aria-label={m.ui.removeStop}>
-                <CloseIcon size={16} />
-              </button>
-            </div>
-          ))}
-          <PlaceInput
-            label={m.ui.to}
-            icon="destination"
-            placeholder={m.ui.toPlaceholder}
-            value={destination.text}
-            place={destination.place}
-            near={origin.place?.kind === 'here' ? near : origin.place?.coordinate}
-            onChangeText={(t) => useAppStore.getState().setDestinationText(t)}
-            onSelect={(p) => useAppStore.getState().setDestinationPlace(p)}
-            onSubmit={submit}
-            quick
-          />
+          <div className="search__inputs">
+            <PlaceInput
+              inputRef={firstField}
+              label={m.ui.from}
+              icon="origin"
+              placeholder={m.ui.fromPlaceholder}
+              value={origin.text}
+              place={origin.place}
+              onChangeText={(t) => useAppStore.getState().setOriginText(t)}
+              onSelect={(p) => useAppStore.getState().setOriginPlace(p)}
+              onSubmit={submit}
+              onUseCurrentLocation={useCurrent}
+              quick
+              autoFocus={!hasPlan && typeof window !== 'undefined' && window.innerWidth >= 900}
+            />
+            {waypoints.map((w, i) => (
+              <div className="search__stop" key={i}>
+                <PlaceInput
+                  label={`${m.ui.stopPlaceholder} ${i + 1}`}
+                  icon="stop"
+                  placeholder={m.ui.stopPlaceholder}
+                  value={w.text}
+                  place={w.place}
+                  near={origin.place?.kind === 'here' ? near : origin.place?.coordinate}
+                  onChangeText={(t) => useAppStore.getState().setWaypointText(i, t)}
+                  onSelect={(p) => useAppStore.getState().setWaypointPlace(i, p)}
+                  onSubmit={submit}
+                />
+                <button type="button" className="icon-btn" onClick={() => useAppStore.getState().removeWaypoint(i)} aria-label={m.ui.removeStop}>
+                  <CloseIcon size={16} />
+                </button>
+              </div>
+            ))}
+            <PlaceInput
+              label={m.ui.to}
+              icon="destination"
+              placeholder={m.ui.toPlaceholder}
+              value={destination.text}
+              place={destination.place}
+              near={origin.place?.kind === 'here' ? near : origin.place?.coordinate}
+              onChangeText={(t) => useAppStore.getState().setDestinationText(t)}
+              onSelect={(p) => useAppStore.getState().setDestinationPlace(p)}
+              onSubmit={submit}
+              quick
+            />
+          </div>
           <button type="button" className="icon-btn search__swap" onClick={() => useAppStore.getState().swapPlaces()} aria-label={m.ui.swap}>
             <SwapIcon size={18} />
           </button>

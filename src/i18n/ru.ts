@@ -132,6 +132,8 @@ export const ru: Messages = {
     },
     summary: {
       unavailable: 'Данные о погоде временно недоступны',
+      dataMissing: 'Данные прогноза здесь пока недоступны',
+      dataStale: 'Данные прогноза устарели',
       storms: (near?: string) => `Возможны грозы${near ? ` около ${near}` : ''}`,
       snow: (near?: string) => `Возможен снег${near ? ` около ${near}` : ''}`,
       freezing: (near?: string) => `Возможен ледяной дождь${near ? ` около ${near}` : ''}`,
@@ -431,6 +433,9 @@ export const ru: Messages = {
     unableRoute: 'Не удалось построить маршрут',
     noRoadRoute: 'Не удалось построить маршрут — между этими местами нет дороги',
     notCoveredYet: 'Маршруты здесь пока недоступны — наши данные о дорогах пока охватывают только Грузию',
+    dataMissing: 'Данные карт и дорог здесь пока недоступны',
+    devRunDataAll: 'выполните npm run data:all для сборки локальных данных',
+    devRunDataWeather: 'выполните npm run data:weather для обновления локального прогноза',
     busyService: 'бесплатный сервис перегружен, попробуйте чуть позже',
     checkConnection: 'проверьте подключение',
     samePlace: 'Начало и конец маршрута совпадают',

@@ -46,14 +46,34 @@ export function fillMissingStyleImages(map: MLMap) {
   });
 }
 
+/**
+ * Find the first symbol (label) layer that sits above all non-symbol basemap layers (earth, water, roads, buildings).
+ * Our two-tier Protomaps style places world labels (`w-*`) underneath regional land (`r-earth`), so taking the very
+ * first `symbol` layer would bury route lines and the accuracy circle under `r-earth` at zoom ≥ 7 (B-44).
+ */
+export function firstTopLabelLayerId(layers: readonly { id: string; type: string }[] | undefined): string | undefined {
+  if (!layers?.length) return undefined;
+  let lastNonSymbol = -1;
+  for (let i = layers.length - 1; i >= 0; i--) {
+    if (layers[i].type !== 'symbol') {
+      lastNonSymbol = i;
+      break;
+    }
+  }
+  for (let i = lastNonSymbol + 1; i < layers.length; i++) {
+    if (layers[i].type === 'symbol') return layers[i].id;
+  }
+  return undefined;
+}
+
 /** Route + weather layers, inserted below the basemap's labels so place names stay readable. */
 export function addRouteLayers(map: MLMap) {
   const route = cssVar('--route', '#0a6cff');
   const casing = cssVar('--route-casing', '#ffffff');
-  const danger = cssVar('--danger', '#c62828');
+  const danger = cssVar('--danger-fill', '#c62828');
   const surface = cssVar('--surface', '#ffffff');
 
-  const beforeId = map.getStyle().layers?.find((l) => l.type === 'symbol')?.id;
+  const beforeId = firstTopLabelLayerId(map.getStyle().layers);
   // lineMetrics → line-progress, so the driven part is a gradient stop, not a re-uploaded line.
   if (!map.getSource('route')) map.addSource('route', { type: 'geojson', data: EMPTY_FC, lineMetrics: true });
   for (const id of ['route-weather', 'endpoints', 'focus', 'pois', 'me-accuracy', 'cameras', 'hazards', 'incidents', 'alternatives', 'transit', 'transit-stops']) {
@@ -361,7 +381,7 @@ export function add3dBuildings(map: MLMap) {
   const flat = (layers.find((l) => isBuildings(l) && l.id.startsWith('r-')) ?? layers.find(isBuildings)) as maplibregl.FillLayerSpecification | undefined;
   if (!flat || typeof flat.source !== 'string') return;
   const sourceLayer = flat['source-layer']!;
-  const before = map.getLayer('me-accuracy') ? 'me-accuracy' : layers.find((l) => l.type === 'symbol')?.id;
+  const before = map.getLayer('me-accuracy') ? 'me-accuracy' : firstTopLabelLayerId(layers);
   map.addLayer(
     {
       id: 'building-3d',

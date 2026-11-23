@@ -42,7 +42,7 @@ export function createPackProtocol(opts: PackProtocolOptions) {
     return index;
   }
 
-  function loadPack(build: string, rz: number, rx: number, ry: number, signal?: AbortSignal) {
+  function loadPack(build: string, rz: number, rx: number, ry: number) {
     const key = `${rz}/${rx}/${ry}`;
     let p = packs.get(key);
     if (p) {
@@ -50,7 +50,9 @@ export function createPackProtocol(opts: PackProtocolOptions) {
       packs.set(key, p);
       return p;
     }
-    p = fetch(`${base}/${packPath(build, rz, rx, ry)}`, { signal })
+    // Never tie the shared cached pack download to one tile's AbortSignal: MapLibre cancelling one tile mid-zoom
+    // would otherwise abort the pack for all 85 sibling tiles in the same pack (B-49).
+    p = fetch(`${base}/${packPath(build, rz, rx, ry)}`)
       .then(async (res) => {
         if (!res.ok) throw new Error(`pack ${res.status}`);
         const buf = await res.arrayBuffer();
@@ -71,10 +73,12 @@ export function createPackProtocol(opts: PackProtocolOptions) {
   }
 
   async function tile(z: number, x: number, y: number, signal?: AbortSignal): Promise<ArrayBuffer> {
+    if (signal?.aborted) return EMPTY;
     const idx = await loadIndex();
     const where = packOf(z, x, y);
     if (!idx || !where || !idx.have.get(String(where.rz))?.has(`${where.rx}/${where.ry}`)) return EMPTY;
-    const pack = await loadPack(idx.value.build, where.rz, where.rx, where.ry, signal);
+    const pack = await loadPack(idx.value.build, where.rz, where.rx, where.ry);
+    if (signal?.aborted) return EMPTY;
     const entry = pack?.dir.get(`${z}/${x}/${y}`);
     if (!pack || !entry) return EMPTY;
     return gunzip(new Uint8Array(pack.buf, entry[0], entry[1]));

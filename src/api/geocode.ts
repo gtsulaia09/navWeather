@@ -41,14 +41,18 @@ export function parseNear(v: string | null): LngLat | null {
   return Math.abs(lon) <= 180 && Math.abs(lat) <= 90 ? [lon, lat] : null;
 }
 
-/** Rank: text match first, then importance, then closeness to `near`; a name starting with the query wins. */
+/** Rank: exact name match first, then prefix match & importance, then closeness to `near` (B-45). */
 export function rerank(rows: GeoRow[], q: string, near: LngLat | null, lang: 'en' | 'ru', limit: number): Place[] {
   const head = q.trim().toLowerCase();
   const scored = rows.map((r) => {
     const name = lang === 'ru' ? r.name_ru : r.name_en;
-    let score = -r.s + r.rank * 0.15;
-    if (name.toLowerCase().startsWith(head) || r.name_en.toLowerCase().startsWith(head) || r.name_ru.toLowerCase().startsWith(head)) score += 3;
-    if (near) score -= Math.min(4, haversineM(near, [r.lon, r.lat]) / 50_000);
+    const names = [name.toLowerCase(), r.name_en.toLowerCase(), r.name_ru.toLowerCase()];
+    const exact = names.some((n) => n === head);
+    const prefix = !exact && names.some((n) => n.startsWith(head));
+    let score = -r.s + r.rank * 0.2;
+    if (exact) score += 7;
+    else if (prefix) score += 3;
+    if (near) score -= Math.min(3.5, haversineM(near, [r.lon, r.lat]) / 60_000);
     return { r, name, score };
   });
   scored.sort((a, b) => b.score - a.score);

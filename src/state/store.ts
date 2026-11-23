@@ -34,6 +34,7 @@ import { getProviders, providersForMode } from '../services/providers';
 import {
   applyLatePlaces,
   describeError,
+  describeWeatherError,
   enrichRoute,
   fetchSampleForecasts,
   forecastLookupFn,
@@ -841,10 +842,11 @@ export const useAppStore = create<AppState>()(
         for (const [k, f] of lookup.forecasts) forecasts.set(k, f);
         const prevPoints = get().derived.points;
         const hasData = lookup.forecasts.size > 0;
+        const weatherMsg = lookup.error ? describeWeatherError(lookup.error, m) : null;
         set({
           forecasts,
           weatherStatus: lookup.error && !hasData ? 'error' : 'ready',
-          weatherError: lookup.error ? m.weather.summary.unavailable : null,
+          weatherError: weatherMsg,
           weatherStale: lookup.staleKeys.size > 0,
           weatherUpdatedAt: oldestFetch(get().plan!.samples, forecasts),
         });
@@ -858,7 +860,7 @@ export const useAppStore = create<AppState>()(
         if (reason === 'manual') {
           get().showNotice(
             lookup.error ? 'warning' : 'success',
-            lookup.error ? m.weather.summary.unavailable : changedIds.length ? m.ui.forecastUpdated(changes) : m.ui.forecastUpToDate,
+            weatherMsg ?? (changedIds.length ? m.ui.forecastUpdated(changes) : m.ui.forecastUpToDate),
           );
         }
 
@@ -886,7 +888,7 @@ export const useAppStore = create<AppState>()(
         if (isAbortError(e)) return;
         set({
           weatherStatus: get().forecasts.size ? 'ready' : 'error',
-          weatherError: m.weather.summary.unavailable,
+          weatherError: describeWeatherError(e, m),
           weatherStale: get().forecasts.size > 0,
         });
       } finally {

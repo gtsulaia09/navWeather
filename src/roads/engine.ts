@@ -66,6 +66,7 @@ export class RoadEngine {
       this.indexAt = Date.now();
       this.indexP = this.source.index().catch((e) => {
         this.indexP = null;
+        if (e instanceof RoadEngineError) throw e;
         throw new RoadEngineError(`Road data unavailable: ${e instanceof Error ? e.message : e}`, 'data-unavailable');
       });
     }

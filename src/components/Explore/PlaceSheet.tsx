@@ -173,7 +173,7 @@ function PlaceWeather() {
   if (!f || !now) {
     return (
       <div className="pw-status pw-status--error">
-        <p>{m.explore.unavailable}</p>
+        <p>{card.weather.error ?? m.explore.unavailable}</p>
         <button className="btn btn-quiet" onClick={() => useExplore.getState().retryCard()}>
           {m.ui.retry}
         </button>

@@ -8,6 +8,13 @@
   pointer-events: none;
   padding: 0 12px;
 }
+@media (min-width: 900px) {
+  /* Centre over the visible map beside the desktop side panel rather than colliding with the search card. */
+  .notice-wrap {
+    left: var(--inset-left, 0px);
+    top: 16px !important;
+  }
+}
 .notice {
   display: inline-flex;
   align-items: center;

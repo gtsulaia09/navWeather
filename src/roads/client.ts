@@ -17,6 +17,10 @@ export function fetchSource(base: string): RoadSource {
   return {
     async index(): Promise<RoadsIndex> {
       const res = await fetch(`${root}/roads.json`, { cache: 'no-cache' });
+      const ct = res.headers.get('content-type') ?? '';
+      if (res.status === 404 || (res.ok && ct.includes('text/html'))) {
+        throw new RoadEngineError('roads.json not built yet', 'data-missing');
+      }
       if (!res.ok) throw new Error(`roads.json: HTTP ${res.status}`);
       return (await res.json()) as RoadsIndex;
     },

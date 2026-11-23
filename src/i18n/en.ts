@@ -135,6 +135,8 @@ export const en = {
     },
     summary: {
       unavailable: 'Weather data temporarily unavailable',
+      dataMissing: 'Forecast data is not available here yet',
+      dataStale: 'Forecast data is out of date',
       storms: (near?: string) => `Thunderstorms possible${near ? ` near ${near}` : ''}`,
       snow: (near?: string) => `Snow possible${near ? ` near ${near}` : ''}`,
       freezing: (near?: string) => `Freezing rain possible${near ? ` near ${near}` : ''}`,
@@ -438,6 +440,9 @@ export const en = {
     unableRoute: 'Unable to calculate route',
     noRoadRoute: 'Unable to calculate route — no drivable road connects these places',
     notCoveredYet: 'Routes aren\'t available here yet — our road data covers Georgia for now',
+    dataMissing: 'Map and road data are not available here yet',
+    devRunDataAll: 'run npm run data:all to build local data',
+    devRunDataWeather: 'run npm run data:weather to refresh local forecasts',
     busyService: 'the free service is busy, try again in a moment',
     checkConnection: 'check your connection',
     samePlace: 'Start and destination are the same place',

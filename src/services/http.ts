@@ -8,7 +8,11 @@ export type ProviderErrorKind =
   | 'not-found'
   | 'no-route'
   /** Outside the regions our static data cover (ADR-019): "not available here yet". */
-  | 'not-covered';
+  | 'not-covered'
+  /** Static data files have not been built/deployed yet (404 / HTML fallback). */
+  | 'data-missing'
+  /** Static forecast files are older than MAX_RUN_AGE_H and need a fresh data build. */
+  | 'data-stale';
 
 export class ProviderError extends Error {
   constructor(

@@ -136,6 +136,10 @@ export class StaticGeocodingProvider implements GeocodingProvider, AutocompleteP
   }
 
   async geocode(query: string, options: GeocodeOptions = {}): Promise<Place | null> {
+    const q = query.trim().slice(0, 100);
+    if (q.length < 2) return null;
+    const idx = await this.index(options.signal);
+    if (!idx) throw new ProviderError('Search index not built yet', 'data-missing', PROVIDER);
     return (await this.suggest(query, { ...options, limit: 1 }))[0] ?? null;
   }
 

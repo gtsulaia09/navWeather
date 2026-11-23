@@ -256,6 +256,11 @@ button.me-dot::after {
 }
 
 /* Locate button (map, right column) */
+.fab--locate.is-pending {
+  color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: var(--shadow-float), 0 0 0 2px var(--accent);
+}
 .fab--locate.is-on {
   color: var(--accent);
 }
