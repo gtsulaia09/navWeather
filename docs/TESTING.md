@@ -3,18 +3,16 @@
 ## Commands
 
 ```bash
-npm test              # unit + store-level scenarios (deterministic fake providers, no network)
-npm run typecheck     # app + worker
-npm run test:live     # opt-in smoke test against the real public APIs (Tbilisi → Batumi)
-npm run dev           # app + local relay (or `npm run dev:api` for the relay only), then in another terminal:
-npm run test:share    # end-to-end checks of the live-sharing relay
-npm run test:reports  # end-to-end checks of the driver-reports relay
-npm run test:trips    # Long Trip planner, places and borders on the Worker
-npm run test:geocode  # our geocoder on the Worker (skips the search checks when the index isn't loaded)
-npm run test:route    # our routing engine through the Worker (skips without an engine: npm run engines:up)
-npm run test:weather  # our forecast through the Worker (skips the forecast checks without tiles: npm run data:weather)
-npm run e2e           # the app in Chrome: search → road with weather → simulated drive → live share → driver report
-                      #   + e2e/mobile.spec.ts: phone/tablet layouts (touch, portrait and landscape)
+npm test              # unit + store-level scenarios (deterministic fake providers, no network; 95 files, 920 tests)
+npm run typecheck     # app + worker + e2e + mobile spike
+npm run check:envs    # wrangler environments in step, zero billable bindings (ADR-019/020)
+npm run check:cost    # production bundle, CSP connect-src and .env.* guard (zero forbidden hosts, zero TURN)
+npm run spike:mobile  # ADR-010 Hermes core bundle + zero-DOM VM latency benchmark (median 1 ms / p95 2 ms)
+npm run test:live     # opt-in smoke test against real endpoints (Tbilisi → Batumi)
+npm run dev           # app + local Worker + local Nostr relay, then in another terminal:
+npm run test:share    # end-to-end checks of the live-sharing relay (run with API=/api too)
+npm run test:reports  # end-to-end checks of the driver-reports relay (run with API=/api too)
+npm run e2e           # Playwright in Chrome: smoke.spec.ts + mobile.spec.ts (both enforce AGENTS.md host allowlist)
 ```
 
 **Mobile browser test** (`e2e/mobile.spec.ts`, 2026-11 mobile audit): the same Chrome, emulating phones and a tablet
@@ -36,12 +34,17 @@ UI folders, and for browser globals (`window`, `document`, `localStorage`, `navi
 
 **Browser test** (`e2e/smoke.spec.ts`, Playwright, DP-2.6): drives the installed Google Chrome headless (`channel:
 'chrome'` — nothing to download). `BASE_URL` picks the target: `http://localhost:5173` (`npm run dev`, the default),
-`http://127.0.0.1:8787` (`npm run build` + `npm run dev:api` — what CI uses), or the preview Worker (never
-production: the test shares and reports). `E2E_STRICT=1` — with our data, forecast and router running — also fails
-on any request to the public services with usage limits (OSRM, FOSSGIS, Photon, Nominatim, Overpass, the Open-Meteo
-forecast API). The basemap is skipped (`E2E_MAP=1` keeps it): in headless Chrome every map frame waits on a GPU
-process without a display and the page stalls for a minute. The CI job `e2e` builds Georgia's data, a Caucasus
-forecast and Valhalla on the runner and runs it strictly.
+`http://127.0.0.1:8787` (`npm run build` + `npm run preview:worker` via `scripts/preview-worker.mjs` — what CI uses),
+or the preview Worker (never production: the test shares and reports). Covers pressing "my location" with mocked
+geolocation (verifying active `aria-pressed="true"` and visible blue `.me-dot` dimensions/fill), denied geolocation
+notice, typing `Tbilisi` → `Batumi` (verifying `"Batumi, Georgia"` ranks #1, submit works with suggestions open, route
+line layers render above basemap fills via `data-route-visible="1"`, distance/duration/ETA and real arrival-time
+temperatures appear), simulated drive, live sharing and driver reports. `E2E_STRICT=1` — with our data, forecast and
+router running — also fails on any request to the public services with usage limits (OSRM, FOSSGIS, Photon, Nominatim,
+Overpass, the Open-Meteo forecast API). Both `http://localhost:5173` and `http://127.0.0.1:8787` (`preview:worker`)
+pass 15/15 strict E2E tests (`smoke.spec.ts` + `mobile.spec.ts`). The basemap is skipped (`E2E_MAP=1` keeps it): in
+headless Chrome every map frame waits on a GPU process without a display and the page stalls for a minute. The CI job
+`e2e` builds Georgia's data, a Caucasus forecast and runs it strictly.
 
 ## What is covered
 
@@ -113,27 +116,15 @@ automation of this check is DEVELOPMENT_PLAN DP-11.4.
   844×390, 932×430, desktop 1280×800, 1440×900, 1920×1080 — explore, suggestions, place card, route, expanded
   route, settings, simulated drive, share dialog, live viewer (171 states): checked for page overflow, controls
   off screen or covered by another element, sheets cut off, small touch targets, inputs under 16 px (iOS zoom).
-- **Low-end profile** (production build, Chrome with 6× CPU slowdown and 1.6 Mbit/s / 150 ms network, 360×800):
-  search usable after ~1.9 s, first paint ~1.8 s; a 357 km route with alternatives in 6–8 s (network-bound). Main
-  thread blocked while the route loads: **1.1 s (worst task 630 ms) before → 0.37 s (worst 142 ms) after** the
-  road-comparison grid index (`utils/proximity.ts`; one comparison 43 ms → 0.3–0.6 ms unthrottled, same results);
-  the simulated drive has no long tasks once running; JS heap returns to ~22 MB after exiting the drive (no growth).
-  Measured with `PerformanceObserver` (long tasks, event timing) and a CPU profile, not on a phone.
-- **Real Android Chrome 134** (Android Studio emulator, Pixel-class 411×810 CSS px, DPR 2.625, the system keyboard):
-  the keyboard covers 360 px and Chrome keeps the page height (only the visual viewport shrinks) — measured; the
-  search suggestions stay above it; the share and settings dialogs shrink to the visible area and keep the field
-  being typed in on screen; a dialog opened by touch does not raise the keyboard; a tap on the top edge of a card's
-  ✕ closes it; the app loads from the computer's network address (`http://<LAN IP>:5173`).
-- **iOS Simulator, Safari (iOS 27.2, iPhone 18 Pro, 2026-11-19)** — real WebKit, real taps, the on-screen keyboard,
-  portrait and landscape; page state read through a temporary probe script. Page 402×714 CSS px in portrait,
-  874×292 in landscape (Safari's bars), safe areas 62/62/20 in landscape. Found and fixed B-37…B-41: landscape map
-  buttons hidden (safe area broke side-panel detection), landscape button column under the turn banner, long-press
-  text selection over the app, a hard focus rectangle in search, ResizeObserver loop warnings. Checked fine: search
-  and suggestions with the keyboard, place card, sheet swipe and inner scroll, press-and-hold on the map, route,
-  simulated drive, share dialog above the keyboard (no keyboard on open), pinch on the UI (no page zoom). Seen once,
-  not reproduced: a freeze after "Simulate drive" (B-42, open).
-- **Not run on:** a physical phone, Samsung Internet, Firefox for Android; the home-screen (installed) web app on
-  iOS is covered only by safe-area emulation in `e2e/mobile.spec.ts`.
+- **Low-end & mid-range profiles (2026-11-23 before/after, production build, Chrome 360×800, Slow 4G 1.6 Mbit/s / 150 ms, 12-min simulated drive at 60×):**
+  - Bundle size: app entry JS **720.3 kB (240.3 kB gz) → 379.2 kB (130.5 kB gz)** (+ immutable `react` vendor chunk 223.1 kB / 69.4 kB gz); entry CSS **53.4 kB (11.1 kB gz) → 32.5 kB (7.5 kB gz)**.
+  - **4× CPU slowdown:** search ready **1,836 ms → 1,607 ms**, FCP/LCP **1,588 ms**, route **7,975 ms → 6,777 ms**, route long tasks **1,014 ms → 662 ms** (8 → 6), drive long tasks **728 ms → 596 ms** (7 → 5), max interaction event (INP) **216 ms → 184 ms** (within ≤ 200 ms budget), heap after exit **57.2 MB → 26.6 MB** (pre-drive 28.6 MB).
+  - **6× CPU slowdown:** FCP/LCP **1,944 ms → 1,756 ms**, search ready **1,984 ms → 1,800 ms**, pause latency **473 ms → 397 ms**, max interaction event (INP) **304 ms → 248 ms**, drive long tasks **968 ms → 855 ms** (8 → 6).
+- **Real Android Chrome 134** (Android Studio emulator `Medium_Phone_API_36.1`, 411×813 CSS px, DPR 2.625): verified 2026-11-18 (keyboard visual viewport, dialogs, top-edge ✕ tap) and re-verified 2026-11-23 on the production build (own Protomaps static basemap rendered, zero horizontal overflow, Web Worker routing triggered).
+- **Real iOS Simulator Safari (iOS 27.2, iPhone 18 Pro, 402×714 CSS px, DPR 3):** verified 2026-11-19 (B-37…B-41) and re-verified 2026-11-23 on the production build (`preview:worker` with own Protomaps static basemap) — full Tbilisi → Batumi route + 8 s simulated drive at 60× ran at **251 frames (~31 fps), 0 freezes (B-42 fixed), 166 ms pause response, 0 horizontal overflow**; start screen and category chips / place card re-verified after B-43 and Part 2 visual polish.
+- **Desktop Safari (`safaridriver`):** Safari 26.6.2 requires the user to enable "Allow remote automation" in Safari Settings (not altered automatically; WebKit rendering verified via iOS 27.2 Simulator Safari).
+- **Real Meta Hermes bytecode compiler (`hermesc` 250829098.0.19, HBC v98, 2026-11-23):** shared TS core (`mobile/src/hermes-core-entry.ts`, 146.6 kB ES2019 `platform: 'neutral'`, 0 browser polyfills, `fflate` gzip) compiled to 151 kB `.hbc` with 0 errors and ran 50 full `derive` iterations in a zero-DOM ES2020 sandbox at **median 1 ms / p95 2 ms**.
+- **Not run on:** physical iPhone / Android handsets, Samsung Internet, Firefox for Android, live CarPlay external display / Android Auto DHU (CocoaPods, Android NDK, and SDK Manager `extras/google/auto` not installed on this host).
 
 ## Manual / browser checks performed
 

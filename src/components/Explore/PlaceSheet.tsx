@@ -76,7 +76,7 @@ function PlaceHeader() {
           </p>
         ) : null}
       </div>
-      <button className="icon-btn phead__close" onClick={() => ex.closeCard()} aria-label={m.ui.close}>
+      <button className="icon-btn phead__close" onClick={() => ex.exitToMap()} aria-label={m.ui.close}>
         <CloseIcon size={20} />
       </button>
       <div className="phead__actions">
@@ -173,7 +173,7 @@ function PlaceWeather() {
   if (!f || !now) {
     return (
       <div className="pw-status pw-status--error">
-        <p>{m.explore.unavailable}</p>
+        <p>{card.weather.error ?? m.explore.unavailable}</p>
         <button className="btn btn-quiet" onClick={() => useExplore.getState().retryCard()}>
           {m.ui.retry}
         </button>
@@ -188,7 +188,14 @@ function PlaceWeather() {
         <span className="pw-now__temp tabular">{formatTemp(now.temperature, units.temperature)}</span>
         <span className="pw-now__text">
           <span className="pw-now__cond">{conditionText(now, m)}</span>
-          <span className="pw-now__detail">{detailLine(now, m, units)}</span>
+          <span className="pw-now__detail">
+            {detailParts(now, m, units).map((part, i) => (
+              <span key={i} className="nowrap">
+                {i > 0 ? ' · ' : ''}
+                {part}
+              </span>
+            ))}
+          </span>
         </span>
       </section>
       {card.air !== null ? (
@@ -238,14 +245,14 @@ function PlaceWeather() {
   );
 }
 
-function detailLine(w: WeatherAtTime, m: ReturnType<typeof useMessages>, units: ReturnType<typeof useSettings.getState>['units']): string {
+function detailParts(w: WeatherAtTime, m: ReturnType<typeof useMessages>, units: ReturnType<typeof useSettings.getState>['units']): string[] {
   const parts: string[] = [];
   if (w.feelsLike !== undefined && Math.round(w.feelsLike) !== Math.round(w.temperature)) parts.push(m.explore.feels(formatTemp(w.feelsLike, units.temperature)));
   if (w.windSpeed !== undefined) parts.push(`${m.detail.wind} ${formatSpeed(w.windSpeed, units.wind, m)}`);
   if (w.precipitationProbability !== undefined && w.precipitationProbability >= 10) {
     parts.push(m.explore.rainChance(`${Math.round(w.precipitationProbability / 5) * 5}%`));
   }
-  return parts.join(' · ');
+  return parts;
 }
 
 function PlaceDays() {

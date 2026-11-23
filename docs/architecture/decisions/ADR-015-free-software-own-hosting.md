@@ -59,8 +59,14 @@ Option 3:
 7. **Non-commercial forever** — this also keeps NC-licensed data (e.g. EOX Sentinel-2 cloudless 2018+) usable.
 8. **AGPL obligations accepted:** modified AGPL software (Open-Meteo, LibreWXR) is offered with its source; simplest with
    a public repository (owner decision D1).
-9. **Native store apps:** Apple's yearly fee and Google Play's fee are not hosting → iOS, CarPlay and Android Auto stay
-   BLOCKED; Android via F-Droid/APK is free.
+9. **Native store apps (owner decision point):** Apple Developer Program (\$99/year — needed for App Store, TestFlight,
+   the CarPlay entitlement, and distributing watchOS apps) and Google Play (\$25 once) are paid store fees, so public
+   store distribution of iOS, CarPlay, watchOS, and Google Play / Android Auto stays **BLOCKED** until the owner
+   decides to pay. Free routes are prepared and supported without paying: web/PWA on every platform; Android APK +
+   F-Droid; Wear OS sideloading; Android Auto for non-Play apps with the phone's developer "Unknown sources" setting
+   and Desktop Head Unit (DHU); personal iOS builds on the owner's own devices with a free Apple ID (re-signed every 7
+   days, limited app count); CarPlay and watchOS in Xcode simulators. Publishing to a store is kept as the only
+   remaining paid step and is optional.
 
 ## Reason
 It satisfies all owner rules at once: no money to any third party, no dependency on sponsors, and capacity that grows

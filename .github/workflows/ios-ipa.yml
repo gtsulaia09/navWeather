@@ -1,0 +1,84 @@
+name: Build iOS IPA
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/navweather-dev
+      - main
+    paths:
+      - 'ios/**'
+      - 'src/**'
+      - '.github/workflows/ios-ipa.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-ipa-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-ipa:
+    name: Build & Package iOS IPA
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build static open-data files (Georgia roads, search, places, transit; Caucasus forecast) — ADR-019
+        run: |
+          npm run data:download
+          npm run data:osm
+          npm run data:roads
+          npm run data:transit
+          npm run data:weather -- --bbox 39,40,47,44
+
+      - name: Build web application bundle
+        run: npm run build
+
+      - name: Stage web bundle into iOS project
+        run: |
+          rm -rf ios/NavWeather/dist
+          mkdir -p ios/NavWeather/dist
+          cp -R dist/* ios/NavWeather/dist/
+
+      - name: Verify Xcode environment
+        run: |
+          xcodebuild -version
+
+      - name: Build Xcode archive (Unsigned)
+        run: |
+          xcodebuild archive \
+            -project ios/NavWeather.xcodeproj \
+            -scheme NavWeather \
+            -configuration Release \
+            -destination "generic/platform=iOS" \
+            -archivePath ios/build/NavWeather.xcarchive \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""
+
+      - name: Package into IPA
+        run: |
+          mkdir -p ios/build/Payload
+          cp -R ios/build/NavWeather.xcarchive/Products/Applications/NavWeather.app ios/build/Payload/
+          cd ios/build
+          zip -r NavWeather.ipa Payload
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NavWeather-iOS-IPA
+          path: ios/build/NavWeather.ipa
+          retention-days: 14

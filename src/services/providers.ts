@@ -5,7 +5,7 @@ import { StaticElevationProvider } from './elevation/StaticElevationProvider';
 import type { AutocompleteProvider, GeocodingProvider } from './geocoding/GeocodingProvider';
 import { StaticGeocodingProvider } from './geocoding/StaticGeocodingProvider';
 import { TileReverseGeocoder } from './geocoding/TileReverseGeocoder';
-import { StyleUrlMapProvider, type MapProvider } from './map/MapProvider';
+import { PackMapProvider, StyleUrlMapProvider, type MapProvider } from './map/MapProvider';
 import type { PlacesProvider } from './places/PlacesProvider';
 import type { PoiProvider } from './places/PoiProvider';
 import { PlacesTiles } from './places/tiles';
@@ -14,6 +14,7 @@ import type { SpeedLimitProvider } from './speed/SpeedLimitProvider';
 import {
   BrowserSpeechRecognition,
   BrowserSpeechSynthesis,
+  getCustomTtsProvider,
   type SpeechRecognitionProvider,
   type TextToSpeechProvider,
 } from '../voice/providers';
@@ -23,9 +24,11 @@ import type { TravelMode } from '../types/travel';
 import { FlightEstimateProvider } from './routing/FlightEstimateProvider';
 import { LocalRoutingProvider } from './routing/LocalRoutingProvider';
 import type { RoutingProvider } from './routing/RoutingProvider';
+import { StaticTransitProvider } from './routing/StaticTransitProvider';
 import { StaticAirQualityProvider, type AirQualityProvider } from './air/AirQualityProvider';
 import { NoIncidentProvider, type IncidentProvider } from './traffic/IncidentProvider';
 import { ReportsIncidentProvider } from './traffic/ReportsIncidentProvider';
+import { parseRelayList } from '../p2p/relays';
 import { NoTrafficProvider, type TrafficProvider } from './traffic/TrafficProvider';
 import { StaticWeatherProvider } from './weather/StaticWeatherProvider';
 import type { WeatherProvider } from './weather/WeatherProvider';
@@ -73,11 +76,12 @@ export function createProviders(cfg: AppConfig = config): Providers {
   const roads = createRoadClient(e.data);
   const alternates = Math.min(2, cfg.routing.maxRoutes - 1);
   const routing: RoutingProvider = new LocalRoutingProvider(roads, 'drive', alternates);
+  const walkRouter = new LocalRoutingProvider(roads, 'walk', alternates);
   const routingByMode: NonNullable<Providers['routingByMode']> = {
-    walk: new LocalRoutingProvider(roads, 'walk', alternates),
+    walk: walkRouter,
     bike: new LocalRoutingProvider(roads, 'bike', alternates),
+    transit: new StaticTransitProvider(e.data, walkRouter),
     flight: new FlightEstimateProvider(),
-    // Public transport: no free, unlimited timetable router yet (ADR-019) — the mode is not offered.
   };
 
   const tiles = new PlacesTiles(e.placesTiles);
@@ -95,9 +99,11 @@ export function createProviders(cfg: AppConfig = config): Providers {
   const places: PlacesProvider | null = p.places === 'tiles' ? new TilePlacesProvider(tiles, lang, null) : p.places === 'none' ? null : unknown('places', p.places);
 
   const map: MapProvider =
-    p.map === 'openfreemap' || p.map === 'style-url'
-      ? new StyleUrlMapProvider(p.map, e.mapStyleLight, e.mapStyleDark)
-      : unknown('map', p.map);
+    p.map === 'packs'
+      ? new PackMapProvider(e.basemap, lang, { light: e.mapStyleLight, dark: e.mapStyleDark })
+      : p.map === 'openfreemap' || p.map === 'style-url'
+        ? new StyleUrlMapProvider(p.map, e.mapStyleLight, e.mapStyleDark)
+        : unknown('map', p.map);
 
   const poi: PoiProvider | null = p.poi === 'tiles' ? new TilePoiProvider(tiles, lang, null) : p.poi === 'none' ? null : unknown('poi', p.poi);
   const speedLimits: SpeedLimitProvider | null =
@@ -107,7 +113,7 @@ export function createProviders(cfg: AppConfig = config): Providers {
   // Driver reports go through the app's own relay (worker/reports.ts); official feeds can plug in here.
   const incidents: IncidentProvider =
     p.incidents === 'reports'
-      ? new ReportsIncidentProvider(e.reports)
+      ? new ReportsIncidentProvider(e.reports, { feedUrl: e.reportsFeed, relays: parseRelayList(e.nostrRelays) })
       : p.incidents === 'none'
         ? new NoIncidentProvider()
         : unknown('incident', p.incidents);
@@ -137,7 +143,7 @@ export function createProviders(cfg: AppConfig = config): Providers {
       minForecastHours: cfg.weather.minForecastHours,
       updateCheckMs: cfg.weather.updateCheckMinutes * 60000,
     }),
-    tts: googleVoice(),
+    tts: getCustomTtsProvider() ?? googleVoice(),
     speechRecognition: new BrowserSpeechRecognition(),
   };
 }

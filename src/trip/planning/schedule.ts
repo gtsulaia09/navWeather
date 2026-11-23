@@ -79,7 +79,19 @@ interface Candidate {
 }
 
 export function buildSchedule(input: ScheduleInput): Schedule {
-  const { profile, pace, vehicle } = input;
+  const { profile, vehicle } = input;
+  // Commercial truck tachograph / EU-AETR rest rules: >=45 min break (at most every 4.5 h),
+  // <=9 h daily driving, >=11 h overnight rest.
+  const pace: PacePreset =
+    vehicle.kind === 'truck'
+      ? {
+          ...input.pace,
+          restEveryS: Math.min(input.pace.restEveryS, 4.5 * 3600),
+          restS: Math.max(input.pace.restS, 45 * 60),
+          dailyDriveS: Math.min(input.pace.dailyDriveS, 9 * 3600),
+          minOvernightS: Math.max(input.pace.minOvernightS, 11 * 3600),
+        }
+      : input.pace;
   const ev = vehicle.powertrain === 'ev';
   const fullRangeM = vehicle.fullRangeKm ? vehicle.fullRangeKm * 1000 : undefined;
   // Range bookkeeping from the last fill: where it was, and how far that range reaches.

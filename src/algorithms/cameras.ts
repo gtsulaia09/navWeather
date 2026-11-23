@@ -1,5 +1,4 @@
-import type { SpeedCamera } from '../services/speed/SpeedLimitProvider';
-import type { TimedRoute } from '../types/route';
+import type { SpeedCamera, TimedRoute } from '../types/route';
 import { createRouteProjector } from './placesAlongRoute';
 
 export interface RouteCamera extends SpeedCamera {

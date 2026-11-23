@@ -18,6 +18,18 @@ export interface TextToSpeechProvider {
   preview?(text: string, lang: string, choice: string): void;
 }
 
+let customTtsProvider: TextToSpeechProvider | null = null;
+
+/** Inject a native TTS adapter (e.g. iOS AVSpeechSynthesizer or React Native TTS); pass null to restore browser speech. */
+export function setTtsProvider(provider: TextToSpeechProvider | null): void {
+  customTtsProvider = provider;
+}
+
+/** Custom TTS provider injected by a native shell, or null when using the browser default. */
+export function getCustomTtsProvider(): TextToSpeechProvider | null {
+  return customTtsProvider;
+}
+
 export interface SpeechRecognitionSession {
   stop(): void;
 }

@@ -59,6 +59,15 @@ describe('<TravelModeBar>', () => {
     await vi.waitFor(() => expect(screen.getByRole('radio', { name: 'Walking' })).toHaveAttribute('aria-checked', 'true'));
     await vi.waitFor(() => expect(useAppStore.getState().plan!.timed.totalTimeS / 3600).toBeGreaterThan(40));
   });
+
+  it('keeps flight temporarily disabled and unclickable', () => {
+    render(<TravelModeBar />);
+    const flight = screen.getByRole('radio', { name: 'Flight' });
+    expect(flight).toBeDisabled();
+    expect(flight).toHaveAttribute('aria-disabled', 'true');
+    flight.click();
+    expect(useAppStore.getState().travelMode).toBe('drive');
+  });
 });
 
 describe('the plan header per mode', () => {
@@ -82,10 +91,9 @@ describe('the plan header per mode', () => {
 });
 
 describe('public transport', () => {
-  it('shows the trips found: times, the lines to take, each step — a plan, with the timetables credited', async () => {
+  it('shows the trips found: times, the lines to take, each step — immediately visible without clicking the sheet grabber', async () => {
     useAppStore.getState().setTravelMode('transit');
     await plan();
-    useAppStore.getState().setSheet('expanded'); // the steps and data sources are in the pulled-up sheet
     render(<PlanSheet />);
     const options = screen.getAllByRole('radio').filter((r) => r.className.includes('ropt'));
     expect(options).toHaveLength(2);

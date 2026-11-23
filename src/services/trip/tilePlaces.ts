@@ -1,8 +1,8 @@
 import type { LngLat } from '../../types/geo';
 import { haversineM } from '../../utils/distance';
-import { PlacesTiles, type TileLayer, type TilePoint } from '../../services/places/tiles';
-import type { PlaceCategory } from '../types';
-import { parseOverpass, type PlaceQuery, type RawPlace, type TripPlacesSource } from './places';
+import { PlacesTiles, type TileLayer, type TilePoint } from '../places/tiles';
+import type { PlaceCategory } from '../../trip/types';
+import { parseOverpass, type PlaceQuery, type RawPlace, type TripPlacesSource } from '../../trip/stops/places';
 
 /** Our tile layers for each Long Trip stop category (the same OSM features the Overpass query asked for). */
 const LAYERS: Record<PlaceCategory, TileLayer[]> = {
@@ -15,7 +15,7 @@ const LAYERS: Record<PlaceCategory, TileLayer[]> = {
 
 /**
  * Places around a Long Trip stop from OUR tiles (DP-6.5): no Overpass and no edge cache inside the region the tiles
- * cover (B-22). Elsewhere the `fallback` source (Overpass, until the region is built) answers, or nothing.
+ * cover (B-22). Elsewhere the `fallback` source answers, or nothing.
  */
 export class TileTripPlaces implements TripPlacesSource {
   constructor(

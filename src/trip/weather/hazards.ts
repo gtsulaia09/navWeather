@@ -1,3 +1,4 @@
+import { HAZARD_THRESHOLDS } from '../../algorithms/hazardThresholds';
 import type { HazardKind, TripWeatherSample } from '../types';
 
 /**
@@ -39,21 +40,19 @@ export interface HourValues {
 }
 
 /**
- * One forecast hour → the most severe hazard code. Same thresholds as the
- * alert engine: heavy = HEAVY_RAIN/THUNDERSTORM or ≥4 mm/h; fog = FOG or
- * visibility < 1 km; wind = gusts ≥ 70 km/h; freezing = ≤ 0.5 °C with
- * precipitation.
+ * One forecast hour → the most severe hazard code. Uses unified thresholds
+ * from `src/algorithms/hazardThresholds.ts` (B-08).
  */
 export function hazardCode(v: HourValues): number {
   const c = v.condition;
   if (c === null && v.precipitation === null && v.temperature === null) return -1;
   const wet = (v.precipitation ?? 0) > 0.1 || c === 'RAIN' || c === 'HEAVY_RAIN' || c === 'SNOW' || c === 'SLEET' || c === 'THUNDERSTORM';
   if (c === 'THUNDERSTORM') return 4;
-  if (wet && v.temperature !== null && v.temperature <= 0.5 && c !== 'SNOW') return 7;
+  if (wet && v.temperature !== null && v.temperature <= HAZARD_THRESHOLDS.freezingWetC && c !== 'SNOW') return 7;
   if (c === 'SNOW' || c === 'SLEET') return 3;
-  if (c === 'HEAVY_RAIN' || (v.precipitation ?? 0) >= 4) return 2;
-  if (c === 'FOG' || (v.visibility !== null && v.visibility < 1000)) return 5;
-  if ((v.windGusts ?? 0) >= 70) return 6;
-  if (c === 'RAIN' || (v.precipitation ?? 0) >= 0.3) return 1;
+  if (c === 'HEAVY_RAIN' || (v.precipitation ?? 0) >= HAZARD_THRESHOLDS.heavyPrecipMmH) return 2;
+  if (c === 'FOG' || (v.visibility !== null && v.visibility < HAZARD_THRESHOLDS.fogVisibilityM)) return 5;
+  if ((v.windGusts ?? 0) >= HAZARD_THRESHOLDS.windGustKmh) return 6;
+  if (c === 'RAIN' || (v.precipitation ?? 0) >= HAZARD_THRESHOLDS.rainPrecipMmH) return 1;
   return 0;
 }

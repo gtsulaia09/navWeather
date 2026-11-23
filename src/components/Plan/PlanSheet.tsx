@@ -11,7 +11,7 @@ function sameDay(ms: number, tz: string): boolean {
 }
 import { BottomSheet } from '../BottomSheet/BottomSheet';
 import { EventIcon } from '../Common/EventIcon';
-import { NavigateIcon, PlayIcon, RefreshIcon } from '../Icons/Icons';
+import { AlertIcon, NavigateIcon, PlayIcon, RefreshIcon } from '../Icons/Icons';
 import { PlacesPanel } from '../Places/PlacesPanel';
 import { TimeScrubber } from '../TimeScrubber/TimeScrubber';
 import { WeatherIcon } from '../WeatherIcon/WeatherIcon';
@@ -20,6 +20,9 @@ import { DataSources } from './DataSources';
 import { DepartureChart, DepartureTip } from './DeparturePlanner';
 import { ElevationProfile } from './ElevationProfile';
 import { DepartureSelector } from './DepartureSelector';
+import { HomeQuickPanel } from './HomeQuickPanel';
+import { ReturnWeather } from './ReturnWeather';
+import { RouteInsights } from './RouteInsights';
 import { RouteOptions } from './RouteOptions';
 import { TRANSIT_SOURCES_URL, TransitOptions, TransitSteps } from './TransitTrip';
 import { TravelModeBar } from './TravelModeBar';
@@ -79,9 +82,12 @@ export function PlanSheet() {
         <>
           <LongTripDashboard />
           {transit ? <TransitOptions /> : <RouteOptions />}
+          <PlacesPanel />
           <WeatherHeadline />
+          <RouteInsights />
           <DepartureTip />
           <WeatherStrip />
+          <ReturnWeather />
         </>
       }
       extra={
@@ -98,7 +104,6 @@ export function PlanSheet() {
           <PointDetails />
           <TimeScrubber />
           <AlongTheWay />
-          <PlacesPanel />
           <DataSources />
           <Attribution />
         </div>
@@ -128,6 +133,7 @@ function Intro() {
       <button className="btn btn-quiet" onClick={tryDemo}>
         {m.ui.tryDemo}
       </button>
+      <HomeQuickPanel />
     </div>
   );
 }
@@ -161,8 +167,10 @@ function RouteHeader() {
               </a>
             </p>
           ) : null}
-          <DepartureSelector />
-          <LongTripBanner />
+          <div className="rhead__links">
+            <DepartureSelector />
+            <LongTripBanner />
+          </div>
         </div>
         {navigable ? (
           <div className="rhead__actions">
@@ -202,9 +210,13 @@ function WeatherHeadline() {
     : '';
   const lead = summary?.highlights[0];
   return (
-    <section className="whead">
+    <section className={`whead${noData && !loading ? ' whead--empty' : ''}`}>
       <div className="whead__row">
-        {lead && !noData ? <WeatherIcon condition={summary!.headlineCondition ?? lead.condition} isDay={lead.isDay} size={32} /> : null}
+        {lead && !noData ? (
+          <WeatherIcon condition={summary!.headlineCondition ?? lead.condition} isDay={lead.isDay} size={32} />
+        ) : noData && !loading ? (
+          <AlertIcon size={20} className="whead__icon" />
+        ) : null}
         <div className="whead__text">
           <h3 className="whead__headline">
             {noData ? (loading ? m.ui.stage.weather : (error ?? m.weather.summary.unavailable)) : summary!.headline}

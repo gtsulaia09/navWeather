@@ -69,6 +69,8 @@ function toProviderError(e: unknown): ProviderError {
       case 'no-road-nearby':
       case 'no-route':
         return new ProviderError(e.message, 'no-route', 'Routing');
+      case 'data-missing':
+        return new ProviderError(e.message, 'data-missing', 'Routing');
       case 'data-unavailable':
         return new ProviderError(e.message, 'network', 'Routing');
     }

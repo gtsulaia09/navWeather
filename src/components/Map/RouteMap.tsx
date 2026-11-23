@@ -1,4 +1,4 @@
-import { AttributionControl, Map as MLMap, Marker, setWorkerUrl, type MapLayerMouseEvent } from 'maplibre-gl';
+import { addProtocol, AttributionControl, Map as MLMap, Marker, setWorkerUrl, type MapLayerMouseEvent } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 // MapLibre 6 resolves its worker relative to its own module URL, which breaks
 // once bundled — let Vite build the worker and hand MapLibre the final URL.
@@ -26,6 +26,7 @@ import { add3dBuildings, addRouteLayers, EMPTY_FC, fillMissingStyleImages, lineF
 import { useExploreLayer } from './useExploreLayer';
 import { useLiveLayer } from './useLiveLayer';
 import { useWeatherLayer } from './useWeatherLayer';
+import '../Explore/Explore.css';
 import './Map.css';
 
 setWorkerUrl(maplibreWorkerUrl);
@@ -97,9 +98,12 @@ export default function RouteMap({ viewer = false }: { viewer?: boolean }) {
 
   const padding = useMemo(() => {
     const h = typeof window !== 'undefined' ? window.innerHeight : 800;
+    const w = typeof window !== 'undefined' ? window.innerWidth : 1280;
     const top = insets.top + 8;
     const bottom = Math.min(insets.bottom + 8, Math.max(0, h - top - 160));
-    return { top, bottom, left: insets.left + 16, right: 16 };
+    // Keep routes and endpoints clear of the right-hand floating map controls (52 px + margin).
+    const right = w >= 600 ? 76 : 20;
+    return { top, bottom, left: insets.left + 16, right };
   }, [insets.top, insets.bottom, insets.left]);
   const paddingRef = useRef(padding);
   paddingRef.current = padding;
@@ -107,6 +111,9 @@ export default function RouteMap({ viewer = false }: { viewer?: boolean }) {
   // ---- Create the map once ------------------------------------------------
   useEffect(() => {
     if (!container.current) return;
+    // Our own basemap (ADR-020) loads through a custom URL scheme: register it before the style is requested.
+    const proto = getProviders().map.protocol;
+    if (proto) addProtocol(proto.name, proto.load as Parameters<typeof addProtocol>[1]);
     let map: MLMap;
     try {
       map = new MLMap({
@@ -145,6 +152,8 @@ export default function RouteMap({ viewer = false }: { viewer?: boolean }) {
     map.on('rotatestart', stopFollow);
     map.on('move', () => scheduleDeclutter());
     map.on('moveend', () => {
+      // MapWeatherChip isn't shown while driving; avoid 30–60×/s zustand updates during camera follow (B-42).
+      if (useAppStore.getState().mode !== 'planning') return;
       const c = map.getCenter();
       useExplore.getState().setView({ center: [c.lng, c.lat], zoom: map.getZoom() });
     });
@@ -248,6 +257,7 @@ export default function RouteMap({ viewer = false }: { viewer?: boolean }) {
       for (const id of ['route', 'route-weather', 'endpoints', 'focus', 'pois', 'cameras', 'hazards', 'incidents', 'alternatives', 'transit', 'transit-stops']) {
         setData(map, id, EMPTY_FC);
       }
+      if (container.current) container.current.dataset.routeVisible = '0';
       return;
     }
     const g = timed.route.geometry;
@@ -271,6 +281,12 @@ export default function RouteMap({ viewer = false }: { viewer?: boolean }) {
       features: [pointFeature(g[0], { role: 'origin' }), pointFeature(g[g.length - 1], { role: 'destination' })],
     });
     map.setPaintProperty('route-line', 'line-gradient', routeGradient(0));
+    if (container.current) {
+      const layers = map.getStyle().layers ?? [];
+      const routeIdx = layers.findIndex((l) => l.id === 'route-line');
+      const lastFillIdx = layers.reduce((acc, l, idx) => (l.type === 'fill' && l.id !== 'me-accuracy' ? idx : acc), -1);
+      container.current.dataset.routeVisible = !trip && g.length >= 2 && routeIdx > lastFillIdx ? '1' : '0';
+    }
   }, [timed, styleVersion]);
 
   const routeId = timed?.route.id;
@@ -378,7 +394,7 @@ export default function RouteMap({ viewer = false }: { viewer?: boolean }) {
     if (!map || !styleVersion) return;
     setData(map, 'cameras', {
       type: 'FeatureCollection',
-      features: camerasOn ? cameras.map((c) => pointFeature(c.coordinate, { id: c.id })) : [],
+      features: camerasOn ? cameras.map((c) => pointFeature(c.coordinate, { id: c.id, kmh: c.kmh ?? 0 })) : [],
     });
   }, [cameras, camerasOn, styleVersion]);
 
@@ -413,7 +429,7 @@ export default function RouteMap({ viewer = false }: { viewer?: boolean }) {
     const list = poi?.results.map((r) => r.poi) ?? (timed ? [] : (nearby?.results.map((r) => r.poi) ?? []));
     setData(map, 'pois', {
       type: 'FeatureCollection',
-      features: list.map((p) => pointFeature(p.coordinate, { id: p.id })),
+      features: list.map((p) => pointFeature(p.coordinate, { id: p.id, category: p.category, name: p.name ?? p.brand ?? '' })),
     });
     if (!timed && nearby?.status === 'ready' && nearby.results.length) {
       const pts = nearby.results.slice(0, 12).map((r) => r.poi.coordinate).concat([nearby.center]);
@@ -429,9 +445,23 @@ export default function RouteMap({ viewer = false }: { viewer?: boolean }) {
     if (!map || !styleVersion) return;
     const onClick = (e: MapLayerMouseEvent) => {
       const id = e.features?.[0]?.properties?.id;
-      const all = [...(useAppStore.getState().poi?.results ?? []), ...(useExplore.getState().nearby?.results ?? [])];
+      const app = useAppStore.getState();
+      const ex = useExplore.getState();
+      const all = [...(app.poi?.results ?? []), ...(ex.nearby?.results ?? [])];
       const hit = all.find((r) => r.poi.id === id);
-      if (hit && useAppStore.getState().mode === 'planning') useExplore.getState().openPoi(hit.poi);
+      if (!hit || app.mode !== 'planning') return;
+      if (ex.directionsOpen && (ex.pickTarget !== null || !app.plan)) {
+        const name = hit.poi.name ?? hit.poi.brand ?? hit.poi.category;
+        void ex.pickOnMap(hit.poi.coordinate, {
+          id: hit.poi.id,
+          name,
+          label: name,
+          coordinate: hit.poi.coordinate,
+          kind: hit.poi.category,
+        });
+      } else {
+        ex.openPoi(hit.poi);
+      }
     };
     const enter = () => (map.getCanvas().style.cursor = 'pointer');
     const leave = () => (map.getCanvas().style.cursor = '');
@@ -470,9 +500,14 @@ export default function RouteMap({ viewer = false }: { viewer?: boolean }) {
 
   // ---- Weather markers (React portals into MapLibre markers) ----------------
   const declutterRaf = useRef(0);
+  const lastDeclutter = useRef(0);
   const scheduleDeclutter = useCallback(() => {
+    const now = performance.now();
+    // While the navigation camera moves continuously, decluttering at ~4 Hz is plenty and avoids per-frame layout work.
+    if (useAppStore.getState().mode !== 'planning' && now - lastDeclutter.current < 250) return;
     cancelAnimationFrame(declutterRaf.current);
     declutterRaf.current = requestAnimationFrame(() => {
+      lastDeclutter.current = performance.now();
       const map = mapRef.current;
       if (!map) return;
       const s = useAppStore.getState();
@@ -493,6 +528,7 @@ export default function RouteMap({ viewer = false }: { viewer?: boolean }) {
       }
     });
   }, []);
+  useEffect(() => () => cancelAnimationFrame(declutterRaf.current), []);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -616,8 +652,14 @@ export default function RouteMap({ viewer = false }: { viewer?: boolean }) {
     }
     const v = s.vehicle;
     if (v) {
-      transitioning.current = true;
-      map.once('moveend', () => (transitioning.current = false));
+      const saver = useSettings.getState().batterySaver;
+      const instant = reduced || saver;
+      transitioning.current = !instant;
+      const done = () => {
+        transitioning.current = false;
+      };
+      const safety = instant ? 0 : window.setTimeout(done, 1500);
+      if (!instant) map.once('moveend', done);
       // Straight to street level, like a phone's navigation app: the road you're on and the next turn.
       const g = s.guidance;
       const simFast = mode === 'simulating' && s.sim.speed > 10;
@@ -625,9 +667,14 @@ export default function RouteMap({ viewer = false }: { viewer?: boolean }) {
         center: v.coordinate,
         zoom: navigationZoom(g?.next ? g.distanceToNextM : null, v.speedMps ?? 0) - (simFast ? 1 : 0),
         bearing: v.headingDeg ?? 0,
-        pitch: reduced ? 0 : 45,
-        duration: reduced ? 0 : 1200,
+        pitch: instant ? 0 : 45,
+        duration: instant ? 0 : 1200,
       });
+      return () => {
+        window.clearTimeout(safety);
+        map.off('moveend', done);
+        transitioning.current = false;
+      };
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode]);
@@ -684,8 +731,13 @@ export default function RouteMap({ viewer = false }: { viewer?: boolean }) {
     const map = mapRef.current;
     if (!map) return;
     const sync = () => {
-      setBearing(Math.round(map.getBearing()));
-      setTilted(map.getPitch() > 1);
+      const nextTilted = map.getPitch() > 1;
+      setTilted((prev) => (prev === nextTilted ? prev : nextTilted));
+      // While the navigation camera steers the map, the compass is hidden: avoid React re-renders on every frame (B-42).
+      const st = useAppStore.getState();
+      if (st.mode !== 'planning' && st.followVehicle) return;
+      const nextBearing = Math.round(map.getBearing());
+      setBearing((prev) => (prev === nextBearing ? prev : nextBearing));
     };
     sync();
     map.on('rotate', sync);
@@ -694,7 +746,7 @@ export default function RouteMap({ viewer = false }: { viewer?: boolean }) {
       map.off('rotate', sync);
       map.off('pitch', sync);
     };
-  }, [styleVersion]);
+  }, [styleVersion, navigating, follow]);
   const showCompass = (bearing !== 0 || tilted) && (!navigating || !follow);
 
   // 3D buildings only while the map is tilted (and not in battery saver).

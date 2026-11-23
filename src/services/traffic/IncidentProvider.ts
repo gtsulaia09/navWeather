@@ -1,31 +1,8 @@
 import type { ReportKind, Vote } from '../../reports/protocol';
 import type { LngLat } from '../../types/geo';
-import type { Route } from '../../types/route';
+import type { Incident, IncidentKind, Route } from '../../types/route';
 
-export type IncidentKind = 'accident' | 'closure' | 'roadworks' | 'congestion' | 'hazard' | 'weather';
-
-/**
- * A road incident from a provider (official feed or user reports), already
- * normalized. `verified` separates confirmed data from unconfirmed reports —
- * reports are never presented as fact.
- */
-export interface Incident {
-  id: string;
-  kind: IncidentKind;
-  coordinate: LngLat;
-  severity: 'critical' | 'high' | 'medium' | 'low';
-  verified: boolean;
-  /** Provider / feed name, shown as the source. */
-  source: string;
-  reportedAt: number;
-  /** UTC ms; unknown when omitted. Expired incidents are dropped. */
-  expiresAt?: number;
-  description?: string;
-  /** Driver reports: the relay's id (to answer "still there?"). */
-  reportId?: string;
-  /** Driver reports: how many other drivers said it is still there. */
-  confirmations?: number;
-}
+export type { Incident, IncidentKind };
 
 export interface IncidentProvider {
   readonly name: string;

@@ -107,6 +107,12 @@ export class Reports extends DurableObject {
       return json({ reports: rows.map(toPublic), now });
     }
 
+    // Every active report, for the static feed (ADR-020): one request every ~10 minutes instead of one per phone.
+    if (url.pathname === '/export' && request.method === 'GET') {
+      const rows = this.sql.exec<Row>('SELECT * FROM reports WHERE expires_at > ? ORDER BY created_at DESC LIMIT ?', now, MAX_ACTIVE).toArray();
+      return json({ reports: rows.map(toPublic), now });
+    }
+
     if (url.pathname === '/create' && request.method === 'POST') {
       const input = sanitizeReport(await readJson(request, MAX_REPORT_BODY));
       if (!input) return json({ error: 'bad-request' }, 400);

@@ -100,7 +100,8 @@ export class StaticWeatherProvider implements WeatherProvider {
     if (typeof q === 'string') throw new ProviderError(q, 'invalid-response', PROVIDER);
     const fetchedAt = Date.now();
     const index = await this.index(req.signal);
-    if (!index || !StaticWeatherProvider.fresh(index)) return req.locations.map((l) => noForecast(l, fetchedAt));
+    if (!index) throw new ProviderError('Forecast data not available yet', 'data-missing', PROVIDER);
+    if (!StaticWeatherProvider.fresh(index)) throw new ProviderError('Forecast data is out of date', 'data-stale', PROVIDER);
 
     // Heights for points the app gave none (map centre, a place card).
     let points = q.points;

@@ -1,0 +1,18 @@
+# The static driver-reports feed (ADR-020): a Worker with static assets only — no code, no bindings, Free plan, so it
+# can never bill and its requests are free and unlimited. Rebuilt every ~10 minutes by
+# .github/workflows/reports-feed.yml (pipelines/reports/build.mjs → dist-reports/), deployed with
+#   npx wrangler deploy -c wrangler.reports.toml --env production
+# The app reads it from another origin (VITE_REPORTS_FEED_URL; CORS in dist-reports/_headers).
+name = "navweather-reports-dev"
+compatibility_date = "2026-09-01"
+
+[assets]
+directory = "./dist-reports"
+# A missing file is a plain 404 (the app then reads the Worker list), never an app page.
+not_found_handling = "none"
+
+[env.preview]
+name = "navweather-reports-preview"
+
+[env.production]
+name = "navweather-reports"

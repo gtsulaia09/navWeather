@@ -7,9 +7,15 @@ export function LocateButton() {
   const m = useMessages();
   const locate = useExplore((s) => s.locate);
   const follow = useExplore((s) => s.followMe);
-  const cls = `fab fab--locate${locate === 'on' ? ' is-on' : ''}${locate === 'on' && follow ? ' is-follow' : ''}`;
+  const cls = `fab fab--locate${locate === 'pending' ? ' is-pending' : ''}${locate === 'on' ? ' is-on' : ''}${locate === 'on' && follow ? ' is-follow' : ''}`;
   return (
-    <button className={cls} onClick={() => useExplore.getState().locateMe()} aria-label={locate === 'pending' ? m.location.finding : m.location.show}>
+    <button
+      className={cls}
+      onClick={() => useExplore.getState().locateMe()}
+      aria-label={locate === 'pending' ? m.location.finding : m.location.show}
+      aria-pressed={locate === 'on'}
+      aria-busy={locate === 'pending'}
+    >
       {locate === 'pending' ? <span className="spinner" aria-hidden="true" /> : locate === 'on' && follow ? <LocateFilledIcon size={22} /> : <LocateIcon size={22} />}
     </button>
   );

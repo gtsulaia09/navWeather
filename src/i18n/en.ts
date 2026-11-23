@@ -135,6 +135,8 @@ export const en = {
     },
     summary: {
       unavailable: 'Weather data temporarily unavailable',
+      dataMissing: 'Forecast data is not available here yet',
+      dataStale: 'Forecast data is out of date',
       storms: (near?: string) => `Thunderstorms possible${near ? ` near ${near}` : ''}`,
       snow: (near?: string) => `Snow possible${near ? ` near ${near}` : ''}`,
       freezing: (near?: string) => `Freezing rain possible${near ? ` near ${near}` : ''}`,
@@ -307,6 +309,8 @@ export const en = {
     searchAlong: 'Along your route',
     none: 'Nothing found along the next part of your route.',
     addStop: 'Add stop',
+    showAll: (n: number) => `Show all ${n} along route`,
+    showLess: 'Show fewer',
     searching: 'Searching along your route…',
     unavailable: 'Places are unavailable right now.',
   },
@@ -438,6 +442,9 @@ export const en = {
     unableRoute: 'Unable to calculate route',
     noRoadRoute: 'Unable to calculate route — no drivable road connects these places',
     notCoveredYet: 'Routes aren\'t available here yet — our road data covers Georgia for now',
+    dataMissing: 'Map and road data are not available here yet',
+    devRunDataAll: 'run npm run data:all to build local data',
+    devRunDataWeather: 'run npm run data:weather to refresh local forecasts',
     busyService: 'the free service is busy, try again in a moment',
     checkConnection: 'check your connection',
     samePlace: 'Start and destination are the same place',
@@ -468,7 +475,7 @@ export const en = {
     findAlongRoute: 'Find along route',
     clear: 'Clear',
     attribution:
-      'Weather: ECMWF IFS (CC BY 4.0) and NOAA GFS forecasts from the Open-Meteo open-data archive (CC BY 4.0), processed by navWeather; where ours is missing, Open-Meteo · Routing: Valhalla on OpenStreetMap data; outside our region OSRM (cars: project-osrm.org; walking, cycling: FOSSGIS servers) · Search: our index of OpenStreetMap data; elsewhere Photon · Public transport: Transitous · Map data © OpenStreetMap contributors. No account, no stored location history.',
+      'Free, non-commercial, no ads. Weather & air: ECMWF IFS (CC BY 4.0), NOAA GFS and CAMS from the Open-Meteo open-data archive (CC BY 4.0), processed by navWeather · Heights: Copernicus DEM · Borders: Natural Earth · Routing, search & map: OpenStreetMap contributors (ODbL) and Protomaps (OpenFreeMap fallback). No account, no stored location history.',
     fixMap: 'Report a map error',
   },
 
@@ -559,6 +566,7 @@ export const en = {
     bike: 'Bicycle',
     transit: 'Public transport',
     flight: 'Flight',
+    flightDisabled: 'Flight (temporarily unavailable)',
     transitUnavailable: 'Public transport is switched off here: no timetable service is set up. Pick another way to travel.',
     transitNone:
       'No public transport found for this trip at this time. Timetables come from operators that publish them openly, and this area may not be covered.',

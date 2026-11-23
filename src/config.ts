@@ -1,4 +1,5 @@
 import { setApiOrigin } from './api/v1';
+import { DEFAULT_RELAYS as DEFAULT_RELAY_LIST } from './p2p/relays';
 
 /**
  * Single source of configuration. Every tunable reads from Vite env vars
@@ -21,6 +22,8 @@ function num(key: string, fallback: number): number {
   return Number.isFinite(n) ? n : fallback;
 }
 
+const DEFAULT_RELAYS = DEFAULT_RELAY_LIST.join(',');
+
 /** Our API: '' = this page's origin (the Worker serves both); an absolute origin otherwise (DP-2.3). */
 const apiOriginValue = str('VITE_API_ORIGIN', '').replace(/\/+$/, '');
 setApiOrigin(apiOriginValue);
@@ -40,7 +43,8 @@ export const config = {
     /** Settlements, places and road data: our tiles (DP-6.5). */
     places: str('VITE_PLACES_PROVIDER', 'tiles'),
     elevation: str('VITE_ELEVATION_PROVIDER', 'static'),
-    map: str('VITE_MAP_PROVIDER', 'openfreemap'),
+    /** Our own basemap files (ADR-020); 'openfreemap' uses OpenFreeMap's styles directly. */
+    map: str('VITE_MAP_PROVIDER', 'packs'),
     poi: str('VITE_POI_PROVIDER', 'tiles'),
     speedLimits: str('VITE_SPEED_LIMIT_PROVIDER', 'tiles'),
     traffic: str('VITE_TRAFFIC_PROVIDER', 'none'),
@@ -51,10 +55,27 @@ export const config = {
   endpoints: {
     /** Our static data (roads, search, weather, air, heights, places): free static files on the app's origin. */
     data: str('VITE_DATA_URL', '/data'),
-    /** Driver reports relay (the Worker in worker/, Free plan). */
+    /** Driver reports relay (the Worker in worker/, Free plan): writes, and reads where no feed is reachable. */
     reports: str('VITE_REPORTS_URL', api('/reports')),
+    /**
+     * Static driver-reports feed (ADR-020): files rebuilt every ~10 minutes. Production: the `navweather-reports`
+     * Worker's origin (set by the deploy workflow); localhost: `npm run data:reports` writes public/data/reports.
+     * Missing or stale → the app reads the Worker list instead.
+     */
+    reportsFeed: str('VITE_REPORTS_FEED_URL', '/data/reports'),
+    /**
+     * Nostr relays for overflow (ADR-020): live-sharing handshakes and driver reports when the Worker is busy.
+     * Public relays in production; "/nostr" = the local relay behind the dev server (scripts/nostr-relay.mjs).
+     */
+    nostrRelays: str('VITE_NOSTR_RELAYS', DEFAULT_RELAYS),
     /** Our places tiles (static assets built by `npm run data:osm`). */
     placesTiles: str('VITE_PLACES_TILES_URL', '/data/places/v1'),
+    /**
+     * Our basemap (ADR-020): production — the `navweather-basemap` Worker's origin (set by the deploy workflow);
+     * localhost — `npm run data:basemap` writes public/data/basemap. Missing → the OpenFreeMap styles below.
+     */
+    basemap: str('VITE_BASEMAP_URL', '/data/basemap'),
+    /** Fallback basemap styles while none of ours is deployed. */
     mapStyleLight: str('VITE_MAP_STYLE_LIGHT', 'https://tiles.openfreemap.org/styles/positron'),
     mapStyleDark: str('VITE_MAP_STYLE_DARK', 'https://tiles.openfreemap.org/styles/dark'),
   },

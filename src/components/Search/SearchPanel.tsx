@@ -4,10 +4,11 @@ import { useLayoutStore } from '../../state/layout';
 import { useMessages } from '../../state/settings';
 import { useAppStore, type PlaceField } from '../../state/store';
 import { useElementSize } from '../../hooks/useElementSize';
-import { BackIcon, CloseIcon, DirectionsIcon, EditIcon, SettingsIcon, SwapIcon } from '../Icons/Icons';
+import { AlertIcon, BackIcon, CloseIcon, DirectionsIcon, EditIcon, SettingsIcon, SwapIcon } from '../Icons/Icons';
 import { NearbyChips } from '../Explore/Nearby';
 import { TravelModeBar } from '../Plan/TravelModeBar';
 import { PlaceInput } from './PlaceInput';
+import '../Explore/Explore.css';
 import './Search.css';
 
 export function SearchPanel() {
@@ -25,6 +26,7 @@ export function SearchPanel() {
   const mode = useAppStore((s) => s.mode);
   const travelMode = useAppStore((s) => s.travelMode);
   const directionsOpen = useExplore((s) => s.directionsOpen);
+  const pickTarget = useExplore((s) => s.pickTarget);
   const query = useExplore((s) => s.query);
   const near = useExplore((s) => s.myLocation?.coordinate);
   const searching = useExplore((s) => s.searching);
@@ -101,10 +103,7 @@ export function SearchPanel() {
         </button>
         <button
           className="icon-btn search__settings"
-          onClick={() => {
-            useAppStore.getState().clearRoute();
-            useExplore.getState().openDirections(false);
-          }}
+          onClick={() => useExplore.getState().exitToMap()}
           aria-label={m.ui.close}
         >
           <CloseIcon size={20} />
@@ -124,57 +123,82 @@ export function SearchPanel() {
       >
         <TravelModeBar />
         <div className="search__fields">
-          <PlaceInput
-            inputRef={firstField}
-            label={m.ui.from}
-            icon="origin"
-            placeholder={m.ui.fromPlaceholder}
-            value={origin.text}
-            place={origin.place}
-            onChangeText={(t) => useAppStore.getState().setOriginText(t)}
-            onSelect={(p) => useAppStore.getState().setOriginPlace(p)}
-            onSubmit={submit}
-            onUseCurrentLocation={useCurrent}
-            quick
-            autoFocus={!hasPlan && typeof window !== 'undefined' && window.innerWidth >= 900}
-          />
-          {waypoints.map((w, i) => (
-            <div className="search__stop" key={i}>
-              <PlaceInput
-                label={`${m.ui.stopPlaceholder} ${i + 1}`}
-                icon="stop"
-                placeholder={m.ui.stopPlaceholder}
-                value={w.text}
-                place={w.place}
-                near={origin.place?.kind === 'here' ? near : origin.place?.coordinate}
-                onChangeText={(t) => useAppStore.getState().setWaypointText(i, t)}
-                onSelect={(p) => useAppStore.getState().setWaypointPlace(i, p)}
-                onSubmit={submit}
-              />
-              <button type="button" className="icon-btn" onClick={() => useAppStore.getState().removeWaypoint(i)} aria-label={m.ui.removeStop}>
-                <CloseIcon size={16} />
-              </button>
-            </div>
-          ))}
-          <PlaceInput
-            label={m.ui.to}
-            icon="destination"
-            placeholder={m.ui.toPlaceholder}
-            value={destination.text}
-            place={destination.place}
-            near={origin.place?.kind === 'here' ? near : origin.place?.coordinate}
-            onChangeText={(t) => useAppStore.getState().setDestinationText(t)}
-            onSelect={(p) => useAppStore.getState().setDestinationPlace(p)}
-            onSubmit={submit}
-            quick
-          />
+          <div className="search__inputs">
+            <PlaceInput
+              inputRef={firstField}
+              label={m.ui.from}
+              icon="origin"
+              placeholder={m.ui.fromPlaceholder}
+              value={origin.text}
+              place={origin.place}
+              onChangeText={(t) => useAppStore.getState().setOriginText(t)}
+              onSelect={(p) => useAppStore.getState().setOriginPlace(p)}
+              onSubmit={submit}
+              onUseCurrentLocation={useCurrent}
+              onPickOnMap={() => useExplore.getState().setPickTarget('origin')}
+              quick
+              autoFocus={!hasPlan && typeof window !== 'undefined' && window.innerWidth >= 900}
+            />
+            {waypoints.map((w, i) => (
+              <div className="search__stop" key={i}>
+                <PlaceInput
+                  label={`${m.ui.stopPlaceholder} ${i + 1}`}
+                  icon="stop"
+                  placeholder={m.ui.stopPlaceholder}
+                  value={w.text}
+                  place={w.place}
+                  near={origin.place?.kind === 'here' ? near : origin.place?.coordinate}
+                  onChangeText={(t) => useAppStore.getState().setWaypointText(i, t)}
+                  onSelect={(p) => useAppStore.getState().setWaypointPlace(i, p)}
+                  onSubmit={submit}
+                />
+                <button type="button" className="icon-btn" onClick={() => useAppStore.getState().removeWaypoint(i)} aria-label={m.ui.removeStop}>
+                  <CloseIcon size={16} />
+                </button>
+              </div>
+            ))}
+            <PlaceInput
+              label={m.ui.to}
+              icon="destination"
+              placeholder={m.ui.toPlaceholder}
+              value={destination.text}
+              place={destination.place}
+              near={origin.place?.kind === 'here' ? near : origin.place?.coordinate}
+              onChangeText={(t) => useAppStore.getState().setDestinationText(t)}
+              onSelect={(p) => useAppStore.getState().setDestinationPlace(p)}
+              onSubmit={submit}
+              onPickOnMap={() => useExplore.getState().setPickTarget('destination')}
+              quick
+            />
+          </div>
           <button type="button" className="icon-btn search__swap" onClick={() => useAppStore.getState().swapPlaces()} aria-label={m.ui.swap}>
             <SwapIcon size={18} />
           </button>
         </div>
+        {pickTarget ? (
+          <p className="search__pick-hint" role="status">
+            <span>
+              {m.locale === 'ka'
+                ? pickTarget === 'origin'
+                  ? 'დააჭირე რუკაზე საწყისი წერტილის ასარჩევად'
+                  : 'დააჭირე რუკაზე დანიშნულების წერტილის ასარჩევად'
+                : m.locale === 'ru'
+                  ? pickTarget === 'origin'
+                    ? 'Нажмите на карту, чтобы выбрать точку отправления'
+                    : 'Нажмите на карту, чтобы выбрать точку назначения'
+                  : pickTarget === 'origin'
+                    ? 'Click on the map to pick a starting point'
+                    : 'Click on the map to pick a destination'}
+            </span>
+            <button type="button" className="linkbtn" onClick={() => useExplore.getState().setPickTarget(null)}>
+              {m.ui.close}
+            </button>
+          </p>
+        ) : null}
         {routeError ? (
           <p className="search__error" role="alert">
-            {routeError}
+            <AlertIcon size={16} />
+            <span>{routeError}</span>
           </p>
         ) : null}
         {routeError && travelMode === 'transit' ? (
@@ -184,7 +208,7 @@ export function SearchPanel() {
         ) : null}
         <div className="search__actions">
           {!hasPlan ? (
-            <button type="button" className="icon-btn" onClick={() => useExplore.getState().openDirections(false)} aria-label={m.explore.back}>
+            <button type="button" className="icon-btn" onClick={() => useExplore.getState().exitToMap()} aria-label={m.explore.back}>
               <BackIcon size={20} />
             </button>
           ) : null}

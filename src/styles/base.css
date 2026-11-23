@@ -64,6 +64,9 @@ summary,
 .tabular {
   font-variant-numeric: tabular-nums;
 }
+.nowrap {
+  white-space: nowrap;
+}
 
 .sr-only {
   position: absolute;
@@ -88,7 +91,17 @@ summary,
   border-radius: var(--r-control);
   font-weight: 600;
   white-space: nowrap;
-  transition: background var(--dur) var(--ease), opacity var(--dur);
+  transition: background var(--dur) var(--ease), opacity var(--dur), transform 120ms var(--ease);
+}
+.btn:active:not(:disabled),
+.icon-btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+@media (prefers-reduced-motion: reduce) {
+  .btn:active:not(:disabled),
+  .icon-btn:active:not(:disabled) {
+    transform: none;
+  }
 }
 .btn-primary {
   background: var(--accent-fill);

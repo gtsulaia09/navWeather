@@ -1,0 +1,26 @@
+{
+  "name": "navweather-mobile",
+  "private": true,
+  "license": "MIT",
+  "version": "0.1.0",
+  "description": "ADR-010 React Native (Hermes) mobile app importing the shared navWeather TypeScript core with zero paid SDKs or closed-source dependencies.",
+  "scripts": {
+    "start": "react-native start --config metro.config.js",
+    "ios": "react-native run-ios",
+    "android": "react-native run-android",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "verify:hermes": "node scripts/verify-hermes.mjs"
+  },
+  "peerDependencies": {
+    "@maplibre/maplibre-react-native": ">=10.0.0",
+    "react": ">=19.0.0",
+    "react-native": ">=0.76.0",
+    "react-native-fs": ">=2.20.0",
+    "react-native-geolocation-service": ">=5.3.1",
+    "react-native-haptic-feedback": ">=2.3.3",
+    "react-native-keep-awake": ">=4.0.0",
+    "react-native-mmkv": ">=3.0.0",
+    "react-native-safe-area-context": ">=5.0.0",
+    "react-native-tts": ">=4.1.1"
+  }
+}

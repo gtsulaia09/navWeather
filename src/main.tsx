@@ -2,8 +2,11 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
 import { loadInitialLocale } from './state/settings';
+import { initNativeIosBridge } from './platform/nativeIosBridge';
 import './styles/tokens.css';
 import './styles/base.css';
+
+initNativeIosBridge();
 
 // The saved language's text (if not English) loads first, so the UI never flashes English.
 void loadInitialLocale().finally(() => {

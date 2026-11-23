@@ -26,7 +26,8 @@ Plan: [DEVELOPMENT_PLAN](../../DEVELOPMENT_PLAN.md) (stages that assumed paid ho
 | [013](ADR-013-trip-planner.md) | Long-trip planner: stateless Worker endpoint over a shared TS domain module | Revised by 019 (the same module on the device) |
 | [015](ADR-015-free-software-own-hosting.md) | Always free: free software and open data on our own hosting; no paid services, no sponsors | Accepted; "only hosting is paid" replaced by 019 |
 | [016](ADR-016-all-on-cloudflare-workers.md) | All hosting on Cloudflare Workers (not Pages) + R2 + D1 + Durable Objects + Queues + Cron + Containers; localhost parity | Workers (not Pages) and localhost parity stand; paid services replaced by 019 |
-| [019](ADR-019-zero-owner-cost.md) | Zero cost for the owner at any scale: Free plan, static data files, engines on the device | **Accepted (2026-11-18)** |
+| [019](ADR-019-zero-owner-cost.md) | Zero cost for the owner at any scale: Free plan, static data files, engines on the device | **Accepted (2026-11-18)**; amended by 020 |
+| [020](ADR-020-free-at-any-scale-overflow.md) | Everything works at any scale for $0: own basemap files, a static reports feed, overflow to the users' devices (WebRTC, Nostr relays) | **Accepted (2026-11-21)** |
 | 017 | Traffic from our own users' anonymised speeds (privacy) | Planned (DP-10.1) |
 | 018 | Offline regions in the PWA | Planned (DP-9.8) |
 

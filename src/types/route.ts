@@ -184,3 +184,68 @@ export interface ElevationProfile {
   distancesM: number[];
   elevationsM: number[];
 }
+
+/** A settlement returned by a places source before snapping to a route. */
+export interface RawPlace {
+  id: string;
+  name: string;
+  kind: PlaceKind;
+  population?: number;
+  coordinate: LngLat;
+}
+
+/** A road stretch with a posted limit (km/h) from map data. */
+export interface SpeedLimitWay {
+  kmh: number;
+  geometry: LngLat[];
+}
+
+/** A fixed speed camera from map data (only where the user enabled camera alerts). */
+export interface SpeedCamera {
+  id: string;
+  coordinate: LngLat;
+  /** Enforced limit when mapped, km/h. */
+  kmh?: number;
+}
+
+export type IncidentKind = 'accident' | 'closure' | 'roadworks' | 'congestion' | 'hazard' | 'weather';
+
+/**
+ * A road incident from a provider (official feed or user reports), already
+ * normalized. `verified` separates confirmed data from unconfirmed reports —
+ * reports are never presented as fact.
+ */
+export interface Incident {
+  id: string;
+  kind: IncidentKind;
+  coordinate: LngLat;
+  severity: 'critical' | 'high' | 'medium' | 'low';
+  verified: boolean;
+  /** Provider / feed name, shown as the source. */
+  source: string;
+  reportedAt: number;
+  /** UTC ms; unknown when omitted. Expired incidents are dropped. */
+  expiresAt?: number;
+  description?: string;
+  /** Driver reports: the relay's id (to answer "still there?"). */
+  reportId?: string;
+  /** Driver reports: how many other drivers said it is still there. */
+  confirmations?: number;
+}
+
+/** A timed route with settlements, elevation, weather samples and non-fatal warnings. */
+export interface PlannedRoute {
+  timed: TimedRoute;
+  places: PlaceAlongRoute[];
+  elevation: ElevationProfile | null;
+  samples: RouteSample[];
+  /** Non-fatal degradations, e.g. place names unavailable. */
+  warnings: string[];
+  /** Whether weather-change refinement already ran for this plan. */
+  refined: boolean;
+  /**
+   * Settlements that missed the soft deadline. Resolves later (or to []);
+   * the store then names samples without re-sampling or refetching weather.
+   */
+  latePlaces?: Promise<PlaceAlongRoute[]>;
+}

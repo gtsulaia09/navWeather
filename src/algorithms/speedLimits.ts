@@ -1,5 +1,4 @@
-import type { SpeedLimitWay } from '../services/speed/SpeedLimitProvider';
-import type { TimedRoute } from '../types/route';
+import type { SpeedLimitWay, TimedRoute } from '../types/route';
 import { bearingDeg, bearingDelta, lowerIndex, projectOntoSegment } from '../utils/distance';
 
 export interface SpeedLimitRange {

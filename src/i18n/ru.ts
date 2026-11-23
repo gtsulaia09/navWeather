@@ -132,6 +132,8 @@ export const ru: Messages = {
     },
     summary: {
       unavailable: 'Данные о погоде временно недоступны',
+      dataMissing: 'Данные прогноза здесь пока недоступны',
+      dataStale: 'Данные прогноза устарели',
       storms: (near?: string) => `Возможны грозы${near ? ` около ${near}` : ''}`,
       snow: (near?: string) => `Возможен снег${near ? ` около ${near}` : ''}`,
       freezing: (near?: string) => `Возможен ледяной дождь${near ? ` около ${near}` : ''}`,
@@ -300,6 +302,8 @@ export const ru: Messages = {
     searchAlong: 'По маршруту',
     none: 'На ближайшем участке маршрута ничего не найдено.',
     addStop: 'Добавить остановку',
+    showAll: (n: number) => `Показать все ${n} по маршруту`,
+    showLess: 'Свернуть',
     searching: 'Поиск по маршруту…',
     unavailable: 'Поиск мест сейчас недоступен.',
   },
@@ -431,6 +435,9 @@ export const ru: Messages = {
     unableRoute: 'Не удалось построить маршрут',
     noRoadRoute: 'Не удалось построить маршрут — между этими местами нет дороги',
     notCoveredYet: 'Маршруты здесь пока недоступны — наши данные о дорогах пока охватывают только Грузию',
+    dataMissing: 'Данные карт и дорог здесь пока недоступны',
+    devRunDataAll: 'выполните npm run data:all для сборки локальных данных',
+    devRunDataWeather: 'выполните npm run data:weather для обновления локального прогноза',
     busyService: 'бесплатный сервис перегружен, попробуйте чуть позже',
     checkConnection: 'проверьте подключение',
     samePlace: 'Начало и конец маршрута совпадают',
@@ -461,7 +468,7 @@ export const ru: Messages = {
     findAlongRoute: 'Найти по маршруту',
     clear: 'Очистить',
     attribution:
-      'Погода: прогнозы ECMWF IFS (CC BY 4.0) и NOAA GFS из открытого архива Open-Meteo (CC BY 4.0), обработанные navWeather; где нашего прогноза нет — Open-Meteo · Маршруты: Valhalla на данных OpenStreetMap; вне нашего региона OSRM (авто: project-osrm.org; пешком, велосипед: серверы FOSSGIS) · Поиск: наш индекс данных OpenStreetMap; в остальных местах Photon · Общественный транспорт: Transitous · Данные карты © участники OpenStreetMap. Без аккаунта, история поездок не хранится.',
+      'Бесплатно, некоммерчески, без рекламы. Погода и воздух: ECMWF IFS (CC BY 4.0), NOAA GFS и CAMS из открытого архива Open-Meteo (CC BY 4.0), обработанные navWeather · Высоты: Copernicus DEM · Границы: Natural Earth · Маршруты, поиск и карта: участники OpenStreetMap (ODbL) и Protomaps (резерв OpenFreeMap). Без аккаунта, история поездок не хранится.',
     fixMap: 'Сообщить об ошибке на карте',
   },
 
@@ -552,6 +559,7 @@ export const ru: Messages = {
     bike: 'Велосипед',
     transit: 'Общественный транспорт',
     flight: 'Самолёт',
+    flightDisabled: 'Самолёт (временно недоступно)',
     transitUnavailable: 'Общественный транспорт здесь отключён: сервис расписаний не настроен. Выберите другой способ.',
     transitNone:
       'На это время общественный транспорт для этой поездки не найден. Расписания берутся у перевозчиков, которые публикуют их открыто, — этот район может быть не охвачен.',

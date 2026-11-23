@@ -115,7 +115,7 @@ export function BottomSheet({ state, onChange, header, body, extra, label, grabb
       </div>
       <div className="sheet__scroll">
         {state !== 'compact' && body ? <div className="sheet__body">{body}</div> : null}
-        {state === 'expanded' && extra ? <div className="sheet__extra">{extra}</div> : null}
+        {state !== 'compact' && extra ? <div className="sheet__extra">{extra}</div> : null}
       </div>
     </section>
   );

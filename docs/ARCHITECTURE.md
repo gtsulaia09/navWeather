@@ -122,7 +122,7 @@ that names implementations, chosen by `VITE_*` variables.
 | `IncidentProvider` | driver reports (`/api/reports`) | normalized incidents (`verified` flag) → route events; reports are never verified; `report()`/`vote()` when the source accepts them |
 | `TextToSpeechProvider` | `BrowserSpeechSynthesis`: Google voices | see "Voice" below |
 | `SpeechRecognitionProvider` | browser | push-to-talk only |
-| `MapProvider` | OpenFreeMap | style URLs |
+| `MapProvider` | our basemap (`PackMapProvider`, `navpack://`); OpenFreeMap fallback | static packs, styles, fonts, sprites (ADR-020) |
 
 ## State
 
@@ -158,6 +158,19 @@ viewer app ◀──WebSocket snapshots (or 12 s polling)──────┘ a
 - Browsers pause location in the background, so the app keeps the screen on
   while sharing (Wake Lock) and tells both sides when updates stop.
 
+**Overflow, phone to phone (ADR-020, `src/share/peer.ts`).** When the Worker is busy (Free-plan daily limit) or
+unreachable — at start, or mid-share after a 429/5xx or three failures — the share continues with the same id:
+
+```
+viewer ──hello──▶ 3 Nostr relays (room tag = SHA-256 of the id; AES-GCM, key from the id) ──▶ sender
+sender ──offer (all ICE candidates)──▶ relays ──▶ viewer ──answer──▶ relays ──▶ sender
+sender ══WebRTC data channel (snapshots, route once per viewer)══▶ viewer        STUN: Cloudflare, Google
+no direct path after 25 s → viewer asks "relay": sender publishes an encrypted snapshot every 15 s
+```
+
+Links of shares that start phone to phone end in `/p` (the viewer skips the Worker); a viewer of a Worker share
+joins the room when the Worker answers 429/5xx, cannot be reached, or its snapshot is older than 90 s.
+
 ## Driver reports
 
 ```
@@ -173,6 +186,13 @@ passing a report ──POST /api/reports/:id/vote {still|gone}──┘
 - The relay keeps a daily-salted hash of the client IP (never the IP) to
   refuse double votes, voting on your own report and floods; three rate
   limits (create/vote, list, share creation).
+- **Reads come from a static feed (ADR-020):** `pipelines/reports/build.mjs` (every ~10 min, `reports-feed.yml`)
+  merges `GET /api/reports/export` with overflow events from Nostr relays (`src/reports/feed.ts`, same rules) and
+  writes one file per 1° cell to the assets-only Worker `navweather-reports`. The app reads the cells along the route;
+  no feed, or one older than an hour → the Worker list as before.
+- **Writes overflow (ADR-020):** a report or vote the Worker refuses as busy (429/5xx) or cannot take goes to 3 public
+  Nostr relays as an event signed with a daily key and 16-bit proof of work (`src/reports/overflow.ts`). The phone
+  shows its own reports at once; others see them in the next feed.
 - Client (`ReportsIncidentProvider`, store): reports become unverified route
   events ("Accident · reported"), a "still there?" card appears 30–400 m after
   passing someone else's report on a real drive; nothing is sent from a

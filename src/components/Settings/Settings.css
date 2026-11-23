@@ -109,9 +109,14 @@
 }
 .set-row--stack .seg {
   display: flex;
+  width: 100%;
+  justify-content: stretch;
 }
 .set-row--stack .seg__opt {
-  flex: 1 1 auto;
+  flex: 1 1 0;
+  min-width: fit-content;
+  padding: 0 10px;
+  text-align: center;
 }
 
 /* Toggle chips (several can be on). */
@@ -192,7 +197,7 @@
 }
 
 /* Narrow screens: a dropdown or a segmented control sits under its label, full width. */
-@media (max-width: 480px) {
+@media (max-width: 540px) {
   .set-row:has(> select),
   .set-row--seg {
     flex-direction: column;
@@ -205,10 +210,18 @@
   }
   .seg {
     display: flex;
+    width: 100%;
+    justify-content: stretch;
   }
   .seg__opt {
-    flex: 1 1 auto;
+    flex: 1 1 0;
+    min-width: fit-content;
     padding: 0 8px;
+    text-align: center;
+  }
+  .seg:has(> :nth-child(4)) {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 

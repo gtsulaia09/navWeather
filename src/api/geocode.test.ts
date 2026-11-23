@@ -54,4 +54,18 @@ describe('our geocoder: query and ranking (DP-4.4)', () => {
     const rows = [row({ id: 'n1', name_en: 'Gori', ctx_en: 'Georgia' }), row({ id: 'w2', kind: 'town', name_en: 'Gori', ctx_en: 'Georgia' })];
     expect(rerank(rows, 'gori', null, 'en', 5)).toHaveLength(1);
   });
+
+  it('exact city name beats a nearby street starting with the city name when origin is Tbilisi (B-45)', () => {
+    const tbilisi: [number, number] = [44.8014, 41.6936];
+    const rows = [
+      row({ id: 'w1', kind: 'street', rank: 14, name_en: 'Batumi Dead End', name_ru: 'тупик Батуми', ctx_en: 'Tbilisi', ctx_ru: 'Тбилиси', lat: 41.72, lon: 44.78, s: -5 }),
+      row({ id: 'w2', kind: 'street', rank: 14, name_en: 'Batumi Street', name_ru: 'улица Батуми', ctx_en: 'Tbilisi', ctx_ru: 'Тбилиси', lat: 41.72, lon: 44.78, s: -5 }),
+      row({ id: 'n2', kind: 'city', rank: 35, name_en: 'Batumi', name_ru: 'Батуми', ctx_en: 'Georgia', ctx_ru: 'Грузия', lat: 41.646, lon: 41.64, s: -5 }),
+    ];
+    const out = rerank(rows, 'Batumi', tbilisi, 'en', 5);
+    expect(out[0].label).toBe('Batumi, Georgia');
+    // Typing the full street name still puts the street first.
+    const street = rerank(rows, 'Batumi Street', tbilisi, 'en', 5);
+    expect(street[0].label).toBe('Batumi Street, Tbilisi');
+  });
 });

@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { describeError } from './routePlanner';
+import { describeError, describeWeatherError } from './routePlanner';
 import { ProviderError } from './http';
 import { en } from '../i18n/en';
+import { ru } from '../i18n/ru';
 import {
   BATUMI,
   FakeRecognition,
@@ -232,5 +233,27 @@ describe('finding more roads than the router offers', () => {
     expect(calls.some((c) => c.via?.length)).toBe(true);
     expect(roads).toHaveLength(1);
     vi.useRealTimers();
+  });
+});
+
+describe('missing and stale static data errors (B-46)', () => {
+  it('distinguishes missing road/search data from network failures', () => {
+    const missing = describeError(new ProviderError('roads.json missing', 'data-missing', 'Routing'), en.ui.unableRoute, en);
+    expect(missing).toContain(en.ui.dataMissing);
+    expect(missing).not.toContain(en.ui.checkConnection);
+
+    const missingRu = describeError(new ProviderError('roads.json missing', 'data-missing', 'Routing'), ru.ui.unableRoute, ru);
+    expect(missingRu).toContain(ru.ui.dataMissing);
+    expect(missingRu).not.toContain(ru.ui.checkConnection);
+
+    const net = describeError(new ProviderError('offline', 'network', 'Routing'), en.ui.unableRoute, en);
+    expect(net).toContain(en.ui.checkConnection);
+  });
+
+  it('distinguishes missing and stale forecast data from generic unavailability', () => {
+    expect(describeWeatherError(new ProviderError('missing', 'data-missing', 'Weather'), en)).toContain(en.weather.summary.dataMissing);
+    expect(describeWeatherError(new ProviderError('stale', 'data-stale', 'Weather'), en)).toContain(en.weather.summary.dataStale);
+    expect(describeWeatherError(new ProviderError('stale', 'data-stale', 'Weather'), ru)).toContain(ru.weather.summary.dataStale);
+    expect(describeWeatherError(new ProviderError('boom', 'network', 'Weather'), en)).toBe(en.weather.summary.unavailable);
   });
 });

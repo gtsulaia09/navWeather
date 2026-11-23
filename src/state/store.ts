@@ -34,6 +34,7 @@ import { getProviders, providersForMode } from '../services/providers';
 import {
   applyLatePlaces,
   describeError,
+  describeWeatherError,
   enrichRoute,
   fetchSampleForecasts,
   forecastLookupFn,
@@ -841,10 +842,11 @@ export const useAppStore = create<AppState>()(
         for (const [k, f] of lookup.forecasts) forecasts.set(k, f);
         const prevPoints = get().derived.points;
         const hasData = lookup.forecasts.size > 0;
+        const weatherMsg = lookup.error ? describeWeatherError(lookup.error, m) : null;
         set({
           forecasts,
           weatherStatus: lookup.error && !hasData ? 'error' : 'ready',
-          weatherError: lookup.error ? m.weather.summary.unavailable : null,
+          weatherError: weatherMsg,
           weatherStale: lookup.staleKeys.size > 0,
           weatherUpdatedAt: oldestFetch(get().plan!.samples, forecasts),
         });
@@ -858,7 +860,7 @@ export const useAppStore = create<AppState>()(
         if (reason === 'manual') {
           get().showNotice(
             lookup.error ? 'warning' : 'success',
-            lookup.error ? m.weather.summary.unavailable : changedIds.length ? m.ui.forecastUpdated(changes) : m.ui.forecastUpToDate,
+            weatherMsg ?? (changedIds.length ? m.ui.forecastUpdated(changes) : m.ui.forecastUpToDate),
           );
         }
 
@@ -886,7 +888,7 @@ export const useAppStore = create<AppState>()(
         if (isAbortError(e)) return;
         set({
           weatherStatus: get().forecasts.size ? 'ready' : 'error',
-          weatherError: m.weather.summary.unavailable,
+          weatherError: describeWeatherError(e, m),
           weatherStale: get().forecasts.size > 0,
         });
       } finally {
@@ -1268,8 +1270,9 @@ export const useAppStore = create<AppState>()(
       const providers = routeProviders();
       if (!s.plan || !providers.poi) return [];
       set({ poi: { category, status: 'loading', results: [] } });
-      const fromM = opts.aroundM !== undefined ? Math.max(0, opts.aroundM - 5000) : (s.progress?.distanceAlongM ?? 0);
-      const aheadM = opts.aroundM !== undefined ? 10_000 : 60_000;
+      const planningFull = s.mode === 'planning' && opts.aroundM === undefined;
+      const fromM = opts.aroundM !== undefined ? Math.max(0, opts.aroundM - 5000) : planningFull ? 0 : (s.progress?.distanceAlongM ?? 0);
+      const aheadM = opts.aroundM !== undefined ? 10_000 : planningFull ? s.plan.timed.totalDistM : 80_000;
       try {
         const results = await searchAlongRoute({
           places: providers.poi,
@@ -1278,6 +1281,8 @@ export const useAppStore = create<AppState>()(
           category,
           fromM,
           aheadM,
+          maxResults: planningFull ? 24 : 12,
+          spreadAlongRoute: planningFull,
           signal: opts.signal ?? planTasks?.signal,
           language: currentMessages().locale,
         });

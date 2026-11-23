@@ -79,6 +79,12 @@ export function useExploreLayer(mapRef: RefObject<MLMap | null>, styleVersion: n
     };
 
     render();
+    // If locate already resolved before the basemap finished loading, fly now (B-47).
+    const initialExplore = useExplore.getState();
+    if (initialExplore.followMe && initialExplore.myLocation && (opts.viewer || useAppStore.getState().mode === 'planning')) {
+      flyPending = false;
+      camera(initialExplore.myLocation.coordinate, true);
+    }
     const unsubFix = useExplore.subscribe(
       (s) => s.myLocation,
       (fix) => {
@@ -184,7 +190,13 @@ export function useExploreLayer(mapRef: RefObject<MLMap | null>, styleVersion: n
           else el.innerHTML = SAVED_GLYPH[place.slot];
           el.addEventListener('click', (e) => {
             e.stopPropagation();
-            useExplore.getState().selectPlace(place, 'search');
+            const ex = useExplore.getState();
+            const app = useAppStore.getState();
+            if (ex.directionsOpen && (ex.pickTarget !== null || !app.plan)) {
+              void ex.pickOnMap(place.coordinate, place);
+            } else {
+              ex.selectPlace(place, 'search');
+            }
           });
           mk = new Marker({ element: el }).setLngLat(place.coordinate).addTo(map);
           markers.set(k, mk);
@@ -217,11 +229,23 @@ export function useExploreLayer(mapRef: RefObject<MLMap | null>, styleVersion: n
     /** The current touch already dropped a pin: its lift-off "click" is not a tap. */
     let pressDropped = false;
 
+    const syncCursor = () => {
+      map.getCanvas().style.cursor = useExplore.getState().pickTarget ? 'crosshair' : '';
+    };
+    syncCursor();
+    const unsubPick = useExplore.subscribe((s) => s.pickTarget, syncCursor);
+
     const canDrop = () => useAppStore.getState().mode === 'planning';
     const drop = (lngLat: { lng: number; lat: number }) => {
       if (!canDrop()) return;
-      useAppStore.getState().select(null, 'map');
-      useExplore.getState().dropPin([lngLat.lng, lngLat.lat]);
+      const app = useAppStore.getState();
+      const ex = useExplore.getState();
+      app.select(null, 'map');
+      if (ex.directionsOpen && (ex.pickTarget !== null || !app.plan)) {
+        void ex.pickOnMap([lngLat.lng, lngLat.lat]);
+        return;
+      }
+      ex.dropPin([lngLat.lng, lngLat.lat]);
     };
     const cancelPress = () => {
       window.clearTimeout(pressTimer);
@@ -241,6 +265,11 @@ export function useExploreLayer(mapRef: RefObject<MLMap | null>, styleVersion: n
       }
       const touch = Date.now() - lastTouchAt < 800;
       if (touch) {
+        // When explicitly picking a point on the map for Directions, a single tap selects it immediately.
+        if (useExplore.getState().pickTarget !== null) {
+          drop(e.lngLat);
+          return;
+        }
         // Taps dismiss; press-and-hold drops a pin (as in other map apps).
         if (pressDropped) pressDropped = false;
         else if (useExplore.getState().card) useExplore.getState().closeCard();
@@ -292,6 +321,8 @@ export function useExploreLayer(mapRef: RefObject<MLMap | null>, styleVersion: n
     map.on('dragstart', cancelPress);
     map.on('zoomstart', cancelPress);
     return () => {
+      unsubPick();
+      map.getCanvas().style.cursor = '';
       cancelPress();
       window.clearTimeout(clickTimer);
       map.off('click', onClick);

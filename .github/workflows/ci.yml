@@ -25,12 +25,16 @@ jobs:
       - run: npm ci
       - name: Worker environments in step (dev, preview, production)
         run: npm run check:envs
-      - name: Typecheck (app + Worker)
+      - name: Typecheck (app + Worker + e2e + mobile)
         run: npm run typecheck
+      - name: React Native Hermes core spike (ADR-010)
+        run: npm run spike:mobile
       - name: Unit and scenario tests
         run: npm test
       - name: Production build
         run: npm run build
+      - name: Zero-cost and allowed-host bundle guard (G2/G3)
+        run: npm run check:cost
       - name: Worker smoke tests (local wrangler, /api/v1 and legacy /api)
         env:
           WRANGLER_SEND_METRICS: 'false'
@@ -63,11 +67,12 @@ jobs:
       - run: npm ci
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
-      - name: Our data as static files (Georgia roads, search, places; a forecast for the Caucasus) — ADR-019
+      - name: Our data as static files (Georgia roads, search, places, transit; a forecast for the Caucasus) — ADR-019
         run: |
           npm run data:download
           npm run data:osm
           npm run data:roads
+          npm run data:transit
           npm run data:weather -- --bbox 39,40,47,44
       - run: npm run build
       - name: Browser smoke test against the local Worker

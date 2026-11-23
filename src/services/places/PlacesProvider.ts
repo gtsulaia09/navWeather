@@ -1,13 +1,7 @@
 import type { LngLat } from '../../types/geo';
-import type { PlaceKind } from '../../types/route';
+import type { RawPlace } from '../../types/route';
 
-export interface RawPlace {
-  id: string;
-  name: string;
-  kind: PlaceKind;
-  population?: number;
-  coordinate: LngLat;
-}
+export type { RawPlace };
 
 /** Settlements near a route (for naming weather points and sampling anchors). */
 export interface PlacesProvider {

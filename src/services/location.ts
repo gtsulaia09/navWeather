@@ -1,3 +1,4 @@
+import { getLocationProvider, type LocationProvider, type RawPosition } from '../platform/location';
 import type { LngLat } from '../types/geo';
 
 /**
@@ -25,13 +26,14 @@ export class LocationError extends Error {
 
 interface Env {
   secure: boolean;
-  geo: Geolocation | undefined;
+  geo: Pick<LocationProvider, 'getCurrentPosition' | 'watchPosition' | 'clearWatch'> | undefined;
 }
 
 function defaultEnv(): Env {
+  const provider = getLocationProvider();
   return {
-    secure: typeof window === 'undefined' || window.isSecureContext !== false,
-    geo: typeof navigator !== 'undefined' && 'geolocation' in navigator ? navigator.geolocation : undefined,
+    secure: provider.isSecureContext(),
+    geo: provider.supported ? provider : undefined,
   };
 }
 
@@ -44,7 +46,7 @@ export function classifyLocationError(err: { code: number } | null, env: Pick<En
   return 'unavailable';
 }
 
-export function toFix(p: GeolocationPosition): LocationFix {
+export function toFix(p: RawPosition): LocationFix {
   const { longitude, latitude, accuracy, heading, speed } = p.coords;
   return {
     coordinate: [longitude, latitude],
@@ -188,6 +190,7 @@ export class LocationWatcher {
   private reasonSet = new Set<LocationReason>();
   private watchId: number | null = null;
   private precise = false;
+  private batterySaver = false;
   private coarseFallback = false;
   private preciseRetry = false;
   private hadFix = false;
@@ -224,6 +227,16 @@ export class LocationWatcher {
   releaseAll() {
     this.reasonSet.clear();
     this.sync();
+  }
+
+  /** Battery saver: allow slightly older cached GPS fixes to reduce radio wakeups when enabled. */
+  setBatterySaver(on: boolean) {
+    if (this.batterySaver === on) return;
+    this.batterySaver = on;
+    if (this.watchId !== null) {
+      this.stop();
+      this.start(this.precise);
+    }
   }
 
   private sync() {
@@ -271,7 +284,11 @@ export class LocationWatcher {
         }
         this.handlers.onError(kind, this.hadFix);
       },
-      { enableHighAccuracy: precise, maximumAge: precise ? 2000 : 30_000, timeout: precise ? 20_000 : 15_000 },
+      {
+        enableHighAccuracy: precise,
+        maximumAge: precise ? (this.batterySaver ? 5000 : 2000) : this.batterySaver ? 60_000 : 30_000,
+        timeout: precise ? 20_000 : 15_000,
+      },
     );
   }
 

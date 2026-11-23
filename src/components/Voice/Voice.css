@@ -24,7 +24,17 @@
   border-radius: 50%;
   background: var(--surface);
   color: var(--text);
+  border: 1px solid var(--border);
   box-shadow: var(--shadow-float);
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease), transform 120ms var(--ease);
+}
+.fab:active:not(:disabled) {
+  transform: scale(0.95);
+}
+@media (prefers-reduced-motion: reduce) {
+  .fab:active:not(:disabled) {
+    transform: none;
+  }
 }
 .fab--mic.is-listening {
   background: var(--accent-fill);

@@ -1,19 +1,21 @@
 import { en, type Messages } from './en';
 import { systemLanguage } from './systemLanguage';
 
-export type Locale = 'en' | 'ru';
+export type Locale = 'en' | 'ru' | 'ka';
 export const LOCALES: { id: Locale; name: string }[] = [
   { id: 'en', name: 'English' },
   { id: 'ru', name: 'Русский' },
+  { id: 'ka', name: 'ქართული' },
 ];
 
 /**
- * English ships with the app; Russian loads on demand, so nobody downloads a
- * language they don't use.
+ * English ships with the app; Russian and Georgian load on demand, so nobody
+ * downloads a language they don't use.
  */
 const table: Partial<Record<Locale, Messages>> = { en };
 const loaders: Record<Exclude<Locale, 'en'>, () => Promise<Messages>> = {
   ru: () => import('./ru').then((mod) => mod.ru),
+  ka: () => import('./ka').then((mod) => mod.ka),
 };
 
 export function getMessages(locale: Locale): Messages {
@@ -32,7 +34,8 @@ export async function loadLocale(locale: Locale): Promise<void> {
 /** Best supported locale for the device language. */
 export function detectLocale(lang = systemLanguage()): Locale {
   const base = lang.slice(0, 2).toLowerCase();
-  return base === 'ru' ? base : 'en';
+  if (base === 'ru' || base === 'ka') return base;
+  return 'en';
 }
 
 export { en };

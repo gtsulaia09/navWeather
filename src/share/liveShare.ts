@@ -7,13 +7,19 @@ import type { LngLat } from '../types/geo';
 import { bearingDelta, haversineM } from '../utils/distance';
 import { simplifyLine } from '../utils/simplify';
 import { liveUrl } from './links';
-import { MAX_ROUTE_POINTS, type ShareTrip, type ShareUpdate } from './protocol';
+import type { PeerSender } from './peer';
+import { peerOptions } from './peerConfig';
+import { MAX_ROUTE_POINTS, MAX_SHARE_MINUTES, MIN_SHARE_MINUTES, type ShareSnapshot, type ShareTrip, type ShareUpdate } from './protocol';
 import { deviceStorage } from '../platform/storage';
 
 /**
  * SHARER side of live location. Creates a share on the relay, then publishes
  * the current position (GPS, or the simulated vehicle — flagged as such)
  * plus the trip (destination, ETA, route once) while sharing is on.
+ *
+ * ADR-020: when the Worker relay is busy (Free-plan daily limit) or unreachable — at start or mid-share — the share
+ * runs phone to phone instead (`peer.ts`): same id, positions straight to each viewer over WebRTC, the handshake
+ * through public Nostr relays. Users see no difference.
  */
 
 export interface LiveShareState {
@@ -47,6 +53,9 @@ interface Stored {
   key: string;
   expiresAt: number;
   name: string;
+  /** Runs phone to phone (ADR-020). */
+  peer?: boolean;
+  startedAt?: number;
 }
 
 let key: string | null = null;
@@ -59,6 +68,9 @@ let paused: Stored | null = null;
 /** Consecutive failed updates → back off instead of retrying every second. */
 let failures = 0;
 let retryAt = 0;
+/** Phone-to-phone channel while the share runs without the Worker (ADR-020). */
+let peer: PeerSender | null = null;
+let current: Stored | null = null;
 
 function deleteShare(id: string, k: string) {
   return fetch(apiPaths.shareItem(id), { method: 'DELETE', headers: { Authorization: `Bearer ${k}` }, keepalive: true }).catch(() => undefined);
@@ -113,6 +125,13 @@ export const useLiveShare = create<LiveShareState>()((set, get) => ({
       activate({ id: body.id, key: body.key, expiresAt: body.expiresAt, name });
     } catch (e) {
       if (startAbort !== ctrl) return; // cancelled by the user
+      // The Worker is busy or unreachable: run the share phone to phone (ADR-020).
+      try {
+        if (await startPeerShare(minutes, name, ctrl)) return;
+      } catch {
+        /* no relay reachable either */
+      }
+      if (startAbort !== ctrl) return;
       set({ status: 'idle', error: (e as Error).message === 'no-server' ? m.share.noServer : m.share.failed });
     } finally {
       clearTimeout(timeout);
@@ -141,20 +160,73 @@ export const useLiveShare = create<LiveShareState>()((set, get) => ({
   async stop({ silent = false } = {}) {
     const { id } = get();
     const k = key ?? paused?.key ?? null;
+    const p = peer;
+    peer = null;
     deactivate();
     if (!silent) useAppStore.getState().showNotice('info', currentMessages().share.ended);
+    await p?.end(); // tells direct viewers and the relays
     if (id && k) await deleteShare(id, k); // if this fails, it still expires on its own
   },
 }));
 
+/** Start a share that runs phone to phone from the beginning; false when no relay took the announcement. */
+async function startPeerShare(minutes: number, name: string, ctrl: AbortController): Promise<boolean> {
+  if (!peerOptions().relays.length) return false;
+  const { newShareId, PeerSender } = await import('./peer');
+  if (startAbort !== ctrl || useLiveShare.getState().status !== 'starting') return false;
+  const now = Date.now();
+  const mins = Math.min(MAX_SHARE_MINUTES, Math.max(MIN_SHARE_MINUTES, Math.round(minutes)));
+  const s: Stored = { id: newShareId(), key: '', expiresAt: now + mins * 60_000, name, peer: true, startedAt: now };
+  const p = new PeerSender(s.id, peerOptions());
+  const accepted = await p.start();
+  if (!accepted || startAbort !== ctrl || useLiveShare.getState().status !== 'starting') {
+    p.close();
+    return false;
+  }
+  peer = p;
+  activate(s);
+  return true;
+}
+
+/** Mid-share, the Worker stopped taking updates: carry on phone to phone with the same id. */
+async function switchToPeer(): Promise<boolean> {
+  const s = current;
+  if (!s || s.peer || !peerOptions().relays.length) return false;
+  const { PeerSender } = await import('./peer');
+  if (current !== s) return false;
+  const p = new PeerSender(s.id, peerOptions());
+  if (!(await p.start()) || current !== s) {
+    p.close();
+    return false;
+  }
+  peer = p;
+  current = { ...s, peer: true, startedAt: s.startedAt ?? Date.now() };
+  save(current);
+  last = null;
+  failures = 0;
+  retryAt = 0;
+  useLiveShare.setState({ url: liveUrl(s.id, location.origin, true), failing: false });
+  return true;
+}
+
 function activate(s: Stored) {
+  current = { ...s, startedAt: s.startedAt ?? Date.now() };
   key = s.key;
   last = null;
   routeSentFor = null;
   failures = 0;
   retryAt = 0;
-  save(s);
-  useLiveShare.setState({ status: 'active', id: s.id, url: liveUrl(s.id), expiresAt: s.expiresAt, name: s.name, failing: false, lastSentAt: null });
+  save(current);
+  if (s.peer && !peer) {
+    // A phone-to-phone share resumed after a reload: rejoin its room.
+    const expected = current;
+    void import('./peer').then(({ PeerSender }) => {
+      if (current !== expected || peer) return;
+      peer = new PeerSender(s.id, peerOptions());
+      void peer.start();
+    });
+  }
+  useLiveShare.setState({ status: 'active', id: s.id, url: liveUrl(s.id, location.origin, !!s.peer), expiresAt: s.expiresAt, name: s.name, failing: false, lastSentAt: null });
   if (timer) clearInterval(timer);
   timer = setInterval(() => void tick(), 1000);
   void tick();
@@ -163,6 +235,9 @@ function activate(s: Stored) {
 function deactivate() {
   if (timer) clearInterval(timer);
   timer = null;
+  peer?.close();
+  peer = null;
+  current = null;
   key = null;
   paused = null;
   last = null;
@@ -185,7 +260,7 @@ export function resumeLiveShare() {
       return;
     }
     paused = s;
-    useLiveShare.setState({ status: 'paused', id: s.id, url: liveUrl(s.id), expiresAt: s.expiresAt, name: s.name, failing: false, lastSentAt: null });
+    useLiveShare.setState({ status: 'paused', id: s.id, url: liveUrl(s.id, location.origin, !!s.peer), expiresAt: s.expiresAt, name: s.name, failing: false, lastSentAt: null });
   } catch {
     save(null);
   }
@@ -247,7 +322,7 @@ export function shouldSend(
 
 async function tick() {
   const s = useLiveShare.getState();
-  if (s.status !== 'active' || !s.id || !key || inFlight) return;
+  if (s.status !== 'active' || !s.id || inFlight || (!key && !peer)) return;
   const now = Date.now();
   if (now < retryAt) return;
   if (s.expiresAt && now >= s.expiresAt) {
@@ -261,8 +336,18 @@ async function tick() {
   const tripKey = trip ? `${trip.routeId}|${trip.dest.c.join(',')}|${Math.round((trip.eta ?? 0) / 60_000)}` : '';
   if (!shouldSend(last, { c: src.pos.c, hdg: src.pos.hdg, tripKey }, now)) return;
 
-  const update: ShareUpdate = { pos: src.pos, trip, sim: src.sim };
   const app = useAppStore.getState();
+  if (peer) {
+    // Phone to phone: the whole snapshot to each viewer (PeerSender sends the route only once per viewer).
+    if (trip && app.plan) trip.route = simplifyLine(app.plan.timed.route.geometry, MAX_ROUTE_POINTS);
+    const st = current!;
+    const snapshot: ShareSnapshot = { v: 1, name: s.name || undefined, pos: src.pos, trip, sim: src.sim, startedAt: st.startedAt ?? now, expiresAt: st.expiresAt, updatedAt: now };
+    peer.update(snapshot);
+    last = { at: now, c: src.pos.c, hdg: src.pos.hdg, tripKey };
+    useLiveShare.setState({ lastSentAt: now, failing: false });
+    return;
+  }
+  const update: ShareUpdate = { pos: src.pos, trip, sim: src.sim };
   if (trip && trip.routeId !== routeSentFor && app.plan) {
     trip.route = simplifyLine(app.plan.timed.route.geometry, MAX_ROUTE_POINTS);
   }
@@ -281,7 +366,11 @@ async function tick() {
       useAppStore.getState().showNotice('info', currentMessages().share.ended);
       return;
     }
-    if (!res.ok) throw new Error(String(res.status));
+    if (!res.ok) {
+      // The Worker's free daily limit is used up (or it is failing): carry on phone to phone.
+      if ((res.status === 429 || res.status >= 500) && (await switchToPeer())) return;
+      throw new Error(String(res.status));
+    }
     const body = (await res.json()) as { needsRoute?: boolean };
     last = { at: now, c: src.pos.c, hdg: src.pos.hdg, tripKey };
     if (trip?.route) routeSentFor = trip.routeId ?? null;
@@ -291,6 +380,8 @@ async function tick() {
   } catch {
     // Back off: 2 s, 4 s, 8 s … up to 30 s between attempts.
     failures++;
+    // The Worker has not answered three times running: try phone to phone (needs relays to answer).
+    if (failures >= 3 && (await switchToPeer())) return;
     retryAt = Date.now() + Math.min(30_000, 1000 * 2 ** failures);
     useLiveShare.setState({ failing: true });
   } finally {
@@ -306,4 +397,9 @@ function timeoutSignal(ms: number): AbortSignal | undefined {
 export function __resetLiveShare() {
   deactivate();
   inFlight = false;
+}
+
+/** Test helper: is the share running phone to phone? */
+export function __isPeerShare(): boolean {
+  return peer !== null;
 }

@@ -1,0 +1,65 @@
+# The static driver-reports feed (ADR-020; pipelines/reports/build.mjs): every ~10 minutes, read every active report
+# from the production Worker (one request) and overflow reports from public Nostr relays, merge them and deploy the
+# files to the assets-only Worker `navweather-reports`. Phones read those files instead of asking the Worker, so
+# reading reports costs nothing at any number of users. GitHub may start scheduled runs late; the app trusts a feed
+# up to an hour old and otherwise reads the Worker list.
+# Needs the same secrets as Deploy; without them a scheduled run does nothing.
+name: Reports feed
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+    inputs:
+      target:
+        description: preview or production
+        type: choice
+        options: [preview, production]
+        default: production
+
+permissions:
+  contents: read
+
+concurrency:
+  group: reports-feed-${{ inputs.target || 'production' }}
+  cancel-in-progress: false
+
+jobs:
+  feed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: ${{ inputs.target || 'production' }}
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      WRANGLER_SEND_METRICS: 'false'
+      TARGET: ${{ inputs.target || 'production' }}
+    steps:
+      - name: Check credentials
+        id: creds
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::notice::No Cloudflare credentials yet — nothing to do."
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "ok=true" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        if: steps.creds.outputs.ok == 'true'
+      - uses: actions/setup-node@v4
+        if: steps.creds.outputs.ok == 'true'
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+        if: steps.creds.outputs.ok == 'true'
+      - name: Build the feed
+        if: steps.creds.outputs.ok == 'true'
+        run: |
+          SUB=$(node scripts/workers-subdomain.mjs)
+          WORKER=$([ "$TARGET" = preview ] && echo navweather-preview || echo navweather)
+          node --experimental-strip-types --no-warnings pipelines/reports/build.mjs \
+            --export "https://$WORKER.$SUB.workers.dev/api/v1/reports/export" --out dist-reports
+      - name: Deploy the feed (static assets only)
+        if: steps.creds.outputs.ok == 'true'
+        run: npx wrangler deploy -c wrangler.reports.toml --env $TARGET --message "${{ github.sha }}"

@@ -7,30 +7,16 @@ import { matchForecastToTime } from '../algorithms/weatherMatching';
 import { config } from '../config';
 import { en, type Messages } from '../i18n/en';
 import type { LngLat, Place } from '../types/geo';
-import type { ElevationProfile, PlaceAlongRoute, Route, RouteSample, TimedRoute } from '../types/route';
+import type { ElevationProfile, PlaceAlongRoute, PlannedRoute, Route, RouteSample, TimedRoute } from '../types/route';
 import type { LocationForecast, WeatherAtTime } from '../types/weather';
 import { isAbortError, mapWithConcurrency, ProviderError } from './http';
 import type { Providers } from './providers';
 import type { AvoidOption } from './routing/RoutingProvider';
 import type { ForecastLookup } from './weather/WeatherService';
 
-export type PlanStage = 'geocoding' | 'routing' | 'places' | 'weather';
+export type { PlannedRoute };
 
-export interface PlannedRoute {
-  timed: TimedRoute;
-  places: PlaceAlongRoute[];
-  elevation: ElevationProfile | null;
-  samples: RouteSample[];
-  /** Non-fatal degradations, e.g. place names unavailable. */
-  warnings: string[];
-  /** Whether weather-change refinement already ran for this plan. */
-  refined: boolean;
-  /**
-   * Settlements that missed the soft deadline. Resolves later (or to []);
-   * the store then names samples without re-sampling or refetching weather.
-   */
-  latePlaces?: Promise<PlaceAlongRoute[]>;
-}
+export type PlanStage = 'geocoding' | 'routing' | 'places' | 'weather';
 
 /** How long route planning waits for place names before continuing without them. */
 export const PLACES_SOFT_DEADLINE_MS = 3500;
@@ -443,13 +429,25 @@ export async function refinePlanWithWeather(
 
 /** Human-friendly, localized error text for the UI. */
 export function describeError(e: unknown, fallback: string, m: Messages = en): string {
+  const isDev = typeof import.meta !== 'undefined' && Boolean((import.meta as { env?: { DEV?: boolean } }).env?.DEV);
   if (e instanceof ProviderError) {
     if (e.kind === 'no-route') return m.ui.noRoadRoute;
     if (e.kind === 'not-covered') return m.ui.notCoveredYet;
+    if (e.kind === 'data-missing') return isDev ? `${m.ui.dataMissing} (${m.ui.devRunDataAll})` : m.ui.dataMissing;
     if (e.kind === 'not-found') return e.message;
     // Free public servers: overload and brief outages pass — say so rather than a bare failure.
     if (e.kind === 'rate-limited' || (e.kind === 'http' && (e.status ?? 0) >= 500)) return `${fallback} — ${m.ui.busyService}`;
     if (e.kind === 'timeout' || e.kind === 'network') return `${fallback} — ${m.ui.checkConnection}`;
   }
   return fallback;
+}
+
+/** Human-friendly, localized weather error text (distinguishes missing/stale local forecast data). */
+export function describeWeatherError(e: unknown, m: Messages = en): string {
+  const isDev = typeof import.meta !== 'undefined' && Boolean((import.meta as { env?: { DEV?: boolean } }).env?.DEV);
+  if (e instanceof ProviderError) {
+    if (e.kind === 'data-missing') return isDev ? `${m.weather.summary.dataMissing} (${m.ui.devRunDataWeather})` : m.weather.summary.dataMissing;
+    if (e.kind === 'data-stale') return isDev ? `${m.weather.summary.dataStale} (${m.ui.devRunDataWeather})` : m.weather.summary.dataStale;
+  }
+  return m.weather.summary.unavailable;
 }

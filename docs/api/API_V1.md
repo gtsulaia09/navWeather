@@ -57,9 +57,15 @@ Every `/share/:id` request (updates, polling, WebSocket opens) also counts again
 
 ### Driver reports
 
+Since ADR-020 phones read reports from the **static feed** (`<feed>/index.json` → `<feed>/builds/<build>/<lat>_<lon>.json`,
+`src/reports/feed.ts`) and use `GET /reports?bbox` only when no feed is reachable. When `POST /reports` or a vote
+answers 429/5xx or not at all, the phone publishes a Nostr event (kind 4207, tag `t=navweather-report-v1`, NIP-13
+proof of work ≥ 16 bits, NIP-40 expiry) instead; the feed merges both. `PublicReport.src = "n"` marks such reports.
+
 | Method & path | Body | Responses |
 | --- | --- | --- |
 | `GET /reports?bbox=w,s,e,n` | bbox ≤36 deg² | `200 { reports: PublicReport[] ≤400, now }`; rate limit 120/min per IP |
+| `GET /reports/export` | — | `200 { reports: PublicReport[] ≤50,000, now }` — every active report, for the static feed builder (one request every ~10 min, ADR-020); phones read the feed, not this |
 | `POST /reports` | `{ kind: accident\|hazard\|roadworks\|closure\|weather, lat, lon }` ≤300 B | `201 { id, expiresAt }` or `200 { id, expiresAt, merged: true }` (same kind within 150 m = confirmation); 429 (10/min per IP; 30/day per reporter hash); 503 when full |
 | `POST /reports/:id/vote` | `{ vote: "still" \| "gone" }` | `200 { confirms, denies, expiresAt, active }`; 409 `own-report` / `already-voted`; 404 |
 

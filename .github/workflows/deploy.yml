@@ -73,6 +73,13 @@ jobs:
       - name: Routing on real roads (src/roads/realData.test.ts runs now that the files exist)
         if: steps.creds.outputs.ok == 'true'
         run: npx vitest run src/roads/realData.test.ts
+      - name: Where the sibling Workers are (reports feed, basemap — ADR-020)
+        if: steps.creds.outputs.ok == 'true'
+        run: |
+          SUB=$(node scripts/workers-subdomain.mjs)
+          SUFFIX=$([ "$TARGET" = preview ] && echo -preview || echo "")
+          echo "VITE_REPORTS_FEED_URL=https://navweather-reports$SUFFIX.$SUB.workers.dev" >> "$GITHUB_ENV"
+          echo "VITE_BASEMAP_URL=https://navweather-basemap$SUFFIX.$SUB.workers.dev" >> "$GITHUB_ENV"
       - name: Build (mode preview or production → .env.preview / .env.production)
         if: steps.creds.outputs.ok == 'true'
         run: npm run ${{ env.TARGET == 'preview' && 'build:preview' || 'build' }}

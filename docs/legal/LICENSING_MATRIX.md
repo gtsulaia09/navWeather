@@ -24,6 +24,11 @@ decision/lawyer) · **NOT SUITABLE** (for production/commercial use as currently
 
 | Provider | Used for | Licence / terms | Commercial use | Attribution | Limits | Caching / redistribution | Verdict |
 | --- | --- | --- | --- | --- | --- | --- | --- |
+| **Protomaps basemap** ([daily builds](https://maps.protomaps.com/builds/), [basemaps](https://github.com/protomaps/basemaps)) | our map background (ADR-020): world z0–6, regions z7–14, packed static files | tiles: ODbL (OpenStreetMap); style code `@protomaps/basemaps` BSD-3; fonts (Noto) OFL; sprites CC0 (`protomaps/basemaps-assets`) | yes | "Protomaps © OpenStreetMap" (source attribution in the style) | build files are downloads, read with range requests once a week (volume independent of users) | derivative tiles stay ODbL | **SAFE** |
+| **pmtiles** CLI and library | basemap extraction at build time | BSD-3 | yes | — | — | — | **SAFE** |
+| **@noble/curves, @noble/hashes** | Nostr signatures (secp256k1 Schnorr), SHA-256 | MIT | yes | — | — | — | **SAFE** |
+| **Public Nostr relays** (list in `src/p2p/relays.ts`) | overflow only (ADR-020): live-share handshakes, overflow reports and votes | open protocol (NIPs, public domain); each relay sets its own policy | yes | — | per relay, unpublished; 3 relays per message, list is configuration | ephemeral events not stored; reports expire (NIP-40) | **ACCEPTABLE** (no guarantee; overflow only) |
+| **STUN** `stun.cloudflare.com`, `stun.l.google.com` | finding a phone's public address for WebRTC | Cloudflare: free and unlimited (Realtime docs); Google: public | yes | — | none published | nothing stored | **SAFE** |
 | **OpenStreetMap data** ([copyright](https://www.openstreetmap.org/copyright), [attribution guidelines](https://osmfoundation.org/wiki/Licence/Attribution_Guidelines)) | everything map/route/place | ODbL 1.0 | yes | "© OpenStreetMap contributors", map corner, may collapse behind "(i)" if findable | — | derivative databases must stay ODbL | **SAFE** |
 | **OpenFreeMap** ([site](https://openfreemap.org/), [ToS](https://openfreemap.org/tos/)) | vector tiles, styles | free public instance; ToS "AS-IS", Hungarian law | "Yes" (site FAQ); ToS silent | "OpenFreeMap © OpenMapTiles Data from OpenStreetMap" (OpenFreeMap part optional) | "no limits on the number of map views or requests"; no SLA | no automated data collection without permission; self-host via weekly planet builds | **SAFE** (availability risk → ADR-006 fallback) |
 | **OpenMapTiles schema/style** ([licence](https://github.com/openmaptiles/openmaptiles/blob/master/LICENSE.md)) | tile schema, style design | code BSD-3; design CC-BY 4.0 | yes | "© OpenMapTiles © OpenStreetMap contributors" | — | — | **SAFE** |
@@ -51,7 +56,9 @@ decision/lawyer) · **NOT SUITABLE** (for production/commercial use as currently
 | zustand | MIT | — |
 | maplibre-gl | BSD-3-Clause | notices kept in bundle |
 | Material Icons paths (travel-mode and transit glyphs) | Apache-2.0 | credited in `Icons.tsx` |
-| @photostructure/tz-lookup | CC0-1.0 | in the Worker: time zone of a forecast point (`worker/weather.ts`) |
+| @photostructure/tz-lookup | CC0-1.0 | time zone of a forecast point (shared/client) |
+| fflate | MIT | pure-JS gzip and raw deflate decompression (`src/utils/gzip.ts`, `src/map/packProtocol.ts`) — works in browsers, Web Workers, Node, and React Native Hermes (where `DecompressionStream` is absent) |
+| @fontsource-variable/noto-sans-georgian | SIL OFL 1.1 | self-hosted Georgian subset only (`unicode-range` in `src/styles/tokens.css`, ~41 kB woff2); zero external font requests |
 
 Build-time only (pipelines; never bundled into the app or the Worker):
 
@@ -74,10 +81,5 @@ commercial release — **PLANNED**.
 | MOTIS ([repo](https://github.com/motis-project/motis)) | MIT (verified 2026-10-04) | Transitous' engine: GTFS/NeTEx, GTFS-RT/SIRI, GBFS, OSM streets; self-hosting planned (DP-5.3, Cloudflare Containers) |
 
 ## Attribution as shipped
-- Map (top-right control): OpenFreeMap © OpenMapTiles Data from OpenStreetMap.
-- Sheets (`ui.attribution`): Weather: ECMWF IFS (CC BY 4.0) and NOAA GFS forecasts from the Open-Meteo open-data
-  archive (CC BY 4.0), processed by navWeather; where ours is missing, Open-Meteo · Routing: Valhalla on OpenStreetMap
-  data; outside our region OSRM (cars: project-osrm.org; walking, cycling: FOSSGIS servers) · Search: our index of
-  OpenStreetMap data; elsewhere Photon · Public transport: Transitous · Map data © OpenStreetMap contributors ·
-  "Report a map error" → openstreetmap.org/fixthemap.
-- Transit trips: "Timetables: Transitous and its sources" → transitous.org/sources/.
+- Map (top-right control): Protomaps © OpenStreetMap (or OpenFreeMap © OpenMapTiles Data from OpenStreetMap when falling back).
+- Sheets (`ui.attribution`, en/ru): Free, non-commercial, no ads. Weather & air: ECMWF IFS (CC BY 4.0), NOAA GFS and CAMS from the Open-Meteo open-data archive (CC BY 4.0), processed by navWeather · Heights: Copernicus DEM · Borders: Natural Earth · Routing, search & map: OpenStreetMap contributors (ODbL) and Protomaps (OpenFreeMap fallback). No account, no stored location history · "Report a map error" → openstreetmap.org/fixthemap.

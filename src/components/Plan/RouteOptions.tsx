@@ -2,6 +2,7 @@ import { formatDistance, formatDuration } from '../../i18n/format';
 import type { ExposureKind, RouteOptionSummary } from '../../state/derive';
 import { useMessages, useSettings } from '../../state/settings';
 import { useAppStore } from '../../state/store';
+import { AlertIcon } from '../Icons/Icons';
 import { RoadForecast } from './RoadForecast';
 
 /**
@@ -33,6 +34,7 @@ export function RouteOptions() {
         {options.map((o) => {
           const delta = o.durationS - fastest.durationS;
           const exposure = o.hasWeather ? exposureLine(o, m) : '';
+          const severe = o.hasWeather && SIGNIFICANT.some((k) => o.exposure[k] >= 5);
           const name = names.get(o.index) ?? '';
           return (
             <li key={o.index}>
@@ -53,7 +55,10 @@ export function RouteOptions() {
                     {delta > 60 ? ` · ${m.ui.longer(formatDuration(delta, m))}` : ''}
                   </span>
                   {o.forecast ? <RoadForecast forecast={o.forecast} label={`${m.ui.roadForecast}: ${name}`} /> : null}
-                  <span className={`ropt__wx${o === wettest && o.wetMinutes >= 10 ? ' is-wet' : ''}`}>{exposure}</span>
+                  <span className={`ropt__wx${severe ? ' is-severe' : o === wettest && o.wetMinutes >= 10 ? ' is-wet' : ''}`}>
+                    {severe ? <AlertIcon size={14} /> : null}
+                    {exposure}
+                  </span>
                 </span>
               </button>
             </li>

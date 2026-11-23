@@ -5,7 +5,7 @@ import { forgetLocationFailure, latestFix, LocationError, LocationWatcher, remem
 import { getProviders } from '../services/providers';
 import type { LayerKind } from '../algorithms/weatherGrid';
 import type { Poi, PoiCategory } from '../services/places/PoiProvider';
-import { parseCoordinateText } from '../services/routePlanner';
+import { describeError, describeWeatherError, parseCoordinateText } from '../services/routePlanner';
 import { placeUrl } from '../share/links';
 import { useLiveShare } from '../share/liveShare';
 import type { LngLat, Place } from '../types/geo';
@@ -25,7 +25,7 @@ export interface PlaceCard {
   place: Place;
   source: 'search' | 'pin' | 'link' | 'me';
   naming: boolean;
-  weather: { status: 'loading' | 'ready' | 'error'; forecast: LocationForecast | null };
+  weather: { status: 'loading' | 'ready' | 'error'; forecast: LocationForecast | null; error?: string | null };
   /** European AQI where available. */
   air: number | null;
   /** Drive from the user's position (only when a recent fix exists). */
@@ -80,6 +80,12 @@ export interface ExploreState {
   selectPlace(place: Place, source: PlaceCard['source']): void;
   /** Load the open card's weather, air quality and drive time again (after a failure). */
   retryCard(): void;
+  /** Which directions field is currently waiting for a map click ('origin' | 'destination' | null). */
+  pickTarget: 'origin' | 'destination' | null;
+  setPickTarget(target: 'origin' | 'destination' | null): void;
+  pickOnMap(coordinate: LngLat, existingPlace?: Place): Promise<void>;
+  /** Exit navigation/directions/pin card completely and return to the clean explore map. */
+  exitToMap(): void;
   dropPin(coordinate: LngLat): void;
   closeCard(): void;
   setCardSheet(s: SheetState): void;
@@ -141,6 +147,7 @@ export const useExplore = create<ExploreState>()(
     locateSeq: 0,
     locationError: null,
     directionsOpen: false,
+    pickTarget: null,
     query: '',
     card: null,
     cardSheet: 'default',
@@ -159,8 +166,8 @@ export const useExplore = create<ExploreState>()(
         get().stopLocate();
         return;
       }
-      set({ followMe: true, locationError: null, locateSeq: s.locateSeq + 1 });
-      if (s.locate === 'off') set({ locate: s.myLocation && Date.now() - s.myLocation.timestampMs < 30_000 ? 'on' : 'pending' });
+      const fresh = Boolean(s.myLocation && Date.now() - s.myLocation.timestampMs < 30_000);
+      set({ followMe: true, locationError: null, locateSeq: s.locateSeq + 1, locate: fresh ? 'on' : 'pending' });
       locationWatcher.acquire('locate');
       // Nothing at all (typically an unanswered permission prompt): stop spinning and say so.
       const seq = get().locateSeq;
@@ -174,6 +181,8 @@ export const useExplore = create<ExploreState>()(
     stopLocate() {
       set({ locate: 'off', followMe: false });
       locationWatcher.release('locate');
+      const app = useAppStore.getState();
+      if (isLocationNotice(app.notice?.text)) app.dismissNotice();
     },
     setFollowMe: (followMe) => set({ followMe }),
     setQuery: (query) => set({ query }),
@@ -183,7 +192,9 @@ export const useExplore = create<ExploreState>()(
         const app = useAppStore.getState();
         const card = get().card;
         if (card && !app.destination.place && !app.destination.text) app.setDestinationPlace(card.place);
-        if (!app.origin.place && !app.origin.text) get().useMyLocationAsOrigin();
+        // Pre-fill "Your location" only when a recent fix exists; otherwise leave From ready to type without a blocking
+        // permission warning ("Your location" remains the first suggestion in From, B-47).
+        if (!app.origin.place && !app.origin.text && latestFix(10 * 60_000)) get().useMyLocationAsOrigin(false);
         get().closeCard();
       }
     },
@@ -206,8 +217,8 @@ export const useExplore = create<ExploreState>()(
         if (get().query !== typed) return;
         if (place) get().selectPlace(place, 'search');
         else useAppStore.getState().showNotice('warning', m.ui.notFound(q));
-      } catch {
-        useAppStore.getState().showNotice('warning', m.explore.searchFailed);
+      } catch (e) {
+        useAppStore.getState().showNotice('warning', describeError(e, m.explore.searchFailed, m));
       } finally {
         set({ searching: false });
       }
@@ -233,6 +244,75 @@ export const useExplore = create<ExploreState>()(
     retryCard() {
       const card = get().card;
       if (card) get().selectPlace(card.place, card.source);
+    },
+
+    setPickTarget(pickTarget) {
+      set({ pickTarget });
+    },
+
+    async pickOnMap(coordinate, existingPlace) {
+      const m = currentMessages();
+      const label = coordsLabel(coordinate);
+      const initialPlace: Place = existingPlace ?? {
+        id: `pin:${label}`,
+        name: label,
+        label,
+        coordinate,
+        kind: 'pin',
+      };
+      const app = useAppStore.getState();
+      const target = get().pickTarget;
+      const hasOrigin = !!(app.origin.place || app.origin.text.trim());
+      const hasDest = !!(app.destination.place || app.destination.text.trim());
+
+      // Decide which field gets the picked pin: explicit pickTarget first, else destination (or origin if destination is already set and origin is empty).
+      const slot: 'origin' | 'destination' =
+        target ?? (!hasOrigin && hasDest && !get().myLocation ? 'origin' : 'destination');
+
+      if (slot === 'origin') {
+        app.setOriginPlace(initialPlace);
+      } else {
+        app.setDestinationPlace(initialPlace);
+        if (!hasOrigin && (get().myLocation || latestFix(10 * 60_000))) {
+          get().useMyLocationAsOrigin(false);
+        }
+      }
+      set({ pickTarget: null, directionsOpen: true, card: null });
+
+      // If both origin and destination are now set, build the route right away!
+      const after = useAppStore.getState();
+      if ((after.origin.place || after.origin.text.trim()) && (after.destination.place || after.destination.text.trim())) {
+        void after.calculateRoute();
+      }
+
+      // Resolve a human-readable street/place name in the background when dropped on bare map.
+      if (!existingPlace) {
+        try {
+          const named = await getProviders().reverseGeocoding.reverse?.(coordinate, { language: m.locale });
+          if (named) {
+            const cur = useAppStore.getState();
+            const updated: Place = { ...initialPlace, name: named.name, label: named.label };
+            if (slot === 'origin' && cur.origin.place?.id === initialPlace.id) cur.setOriginPlace(updated);
+            if (slot === 'destination' && cur.destination.place?.id === initialPlace.id) cur.setDestinationPlace(updated);
+          }
+        } catch {
+          /* coordinates label stays readable */
+        }
+      }
+    },
+
+    exitToMap() {
+      const app = useAppStore.getState();
+      if (app.mode === 'navigating') app.stopNavigation();
+      else if (app.mode === 'simulating') app.exitSimulation();
+      app.clearRoute();
+      app.clearPoi();
+      cardAbort?.abort();
+      cardAbort = null;
+      nearbyAbort?.abort();
+      nearbyAbort = null;
+      set({ card: null, nearby: null, pickTarget: null, directionsOpen: false, query: '' });
+      syncUrl(null);
     },
 
     dropPin(coordinate) {
@@ -347,9 +427,10 @@ async function loadCardWeather(place: Place, signal: AbortSignal) {
     const lookup = await weather.getForecasts([{ latitude: lat, longitude: lon }], { needUntilMs: Date.now() + 7 * 86_400_000, signal });
     if (signal.aborted) return;
     const forecast = lookup.forecasts.get(weather.keyFor(lat, lon)) ?? null;
-    patchCard(place, { weather: { status: forecast ? 'ready' : 'error', forecast } });
+    const error = lookup.error ? describeWeatherError(lookup.error, currentMessages()) : null;
+    patchCard(place, { weather: { status: forecast ? 'ready' : 'error', forecast, error } });
   } catch (e) {
-    if (!isAbortError(e)) patchCard(place, { weather: { status: 'error', forecast: null } });
+    if (!isAbortError(e)) patchCard(place, { weather: { status: 'error', forecast: null, error: describeWeatherError(e, currentMessages()) } });
   }
 }
 
@@ -447,7 +528,7 @@ export const locationWatcher = new LocationWatcher({
       locationWatcher.release('locate');
       useExplore.setState({ locate: 'off', followMe: false });
     }
-    app.showNotice('warning', locationMessage(kind), kind === 'unavailable');
+    app.showNotice('warning', locationMessage(kind), kind === 'unavailable' || kind === 'timeout');
   },
 });
 

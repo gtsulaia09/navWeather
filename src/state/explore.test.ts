@@ -196,3 +196,31 @@ describe('quick categories near the map centre', () => {
     expect(useExplore.getState().nearby).toBeNull();
   });
 });
+
+describe('directions open and locate states (B-47)', () => {
+  it('opening directions without a known location leaves From ready to type and shows no blocking location error', () => {
+    stubGeolocation({ code: 1 });
+    useExplore.getState().openDirections(true);
+    expect(useExplore.getState().directionsOpen).toBe(true);
+    expect(useAppStore.getState().origin.place).toBeNull();
+    expect(useAppStore.getState().notice).toBeNull();
+  });
+
+  it('opening directions with a recent fix pre-fills Your location', () => {
+    rememberFix({ coordinate: [44.8, 41.7], timestampMs: BASE });
+    useExplore.getState().openDirections(true);
+    expect(useAppStore.getState().origin.place?.kind).toBe('here');
+  });
+
+  it('tapping locate again when the fix is stale enters pending state and stopping clears location notice', () => {
+    const geo = { getCurrentPosition: vi.fn(), watchPosition: vi.fn(() => 1), clearWatch: vi.fn() };
+    Object.defineProperty(navigator, 'geolocation', { value: geo, configurable: true });
+    useExplore.setState({ locate: 'on', myLocation: { coordinate: [44.8, 41.7], timestampMs: BASE - 60_000 } });
+    useExplore.getState().locateMe();
+    expect(useExplore.getState().locate).toBe('pending');
+    useAppStore.getState().showNotice('warning', currentMessages().location.errors.timeout, true);
+    useExplore.getState().stopLocate();
+    expect(useExplore.getState().locate).toBe('off');
+    expect(useAppStore.getState().notice).toBeNull();
+  });
+});

@@ -78,6 +78,9 @@ npm run build
 ```
 
 ```bash
+npm run check:envs   # wrangler environments in step, zero billable bindings (ADR-019/020)
+npm run check:cost   # production bundle & CSP host guard (zero forbidden public services or TURN)
+npm run spike:mobile # ADR-010 React Native (Hermes) shared-core verification & latency check
 npm run e2e
 ```
 
@@ -274,79 +277,51 @@ driving); a street-level camera while driving; installable PWA.
 
 ## What it costs
 
-**For users: nothing, forever** — no ads, subscriptions or paid features (non-commercial project).
-**For the owner: only hosting, on Cloudflare** — and every third-party API, data source and program must stay free
-forever, at any scale, in development too ([ADR-015](docs/architecture/decisions/ADR-015-free-software-own-hosting.md),
-[ADR-016](docs/architecture/decisions/ADR-016-all-on-cloudflare-workers.md)).
+**For users: nothing, forever** — no ads, subscriptions, in-app purchases, sponsors or paid features (non-commercial, MIT open source).
+**For the owner: $0 at any number of users** ([ADR-019](docs/architecture/decisions/ADR-019-zero-owner-cost.md),
+[ADR-020](docs/architecture/decisions/ADR-020-free-at-any-scale-overflow.md)) — Cloudflare Workers **Free plan with no payment method** (cannot bill).
 
-**Today's code** still calls the public free services below. They have usage limits or forbid production use, so
-they are being replaced by the same free, open-source engines running on our own Cloudflare hosting (Valhalla,
-MOTIS and LibreWXR in Containers; places, geocoder, map tiles and weather cells in D1/R2) — see the
-[development plan](docs/DEVELOPMENT_PLAN.md) and the [catalogue of free replacements](docs/FREE_STACK_PLAN.md):
-
-| Part | Service today | Its limits (why it is replaced) |
+| Part | Where it runs | Cost |
 | --- | --- | --- |
-| App + live sharing + driver reports | Cloudflare Workers **Free plan** (static assets, 2 SQLite Durable Objects, rate limits) | 100 000 Worker requests/day (static files don't count); plenty for personal use |
-| Map tiles | OpenFreeMap | free, no key |
-| Routing | OSRM public demo server | non-commercial, at most 1 request/s (the app queues requests), no uptime guarantee |
-| Public transport | Transitous | open-source, **non-commercial** projects; link to its sources (shown with every trip); ask them before heavy use |
-| Weather, air quality, elevation | Open-Meteo | free for **non-commercial** use (≈10 000 calls/day) |
-| Search | Nominatim (1 request/s) and Photon | fair use |
-| Places, speed limits, cameras | Overpass (OpenStreetMap) | fair use, often slow |
-| Device voices, speech recognition | built into the browser | free |
+| App, map styles & static data (`/data`) | Cloudflare Workers Free static assets (unlimited requests) | $0 |
+| Map background | Our own Protomaps vector-tile packs on assets-only Worker `navweather-basemap` (OpenFreeMap fallback) | $0 |
+| Routing (car, walk, bike), search, forecasts, air quality, heights, places, Long Trip planner | **On the user's device** over static gzip-compressed files (`src/roads` Web Worker, `fflate`, `src/trip`) | $0 |
+| Data pipelines (OSM, ECMWF/GFS, CAMS, DEM, Protomaps, reports feed) | GitHub Actions (public repository: free) | $0 |
+| Driver-report reads | Static feed rebuilt every ~10 min on assets-only Worker `navweather-reports` | $0 |
+| Live sharing & report writes | Worker + SQLite Durable Objects (Free plan: 100k req/day), then **overflows to users' devices** (WebRTC phone-to-phone + signed Nostr events over public relays; free STUN only, no TURN) | $0 |
+| Native app stores (optional, future) | Web/PWA, Android APK + F-Droid, Wear OS sideload, Android Auto unknown-sources, iOS 7-day personal Apple ID builds, Xcode simulators are **$0**; Apple Developer Program (\$99/yr) & Google Play (\$25 once) stay **BLOCKED** unless the owner opts in ([MOBILE_STRATEGY](docs/mobile/MOBILE_STRATEGY.md)) | $0 today |
 
-Hosting is Cloudflare **Workers** (not Pages); development and the test Worker cost nothing (Workers Free) until
-the first engine runs in Cloudflare Containers (Workers Paid). Everything also runs on `localhost`.
+No public server with usage limits (OSRM demo, FOSSGIS, Photon, Nominatim, Overpass, Open-Meteo API, Transitous) is called anywhere — guarded continuously by `npm run check:envs`, `npm run check:cost`, and `e2e/smoke.spec.ts` + `e2e/mobile.spec.ts`.
 
 ## Honest limits
 
-- **No live traffic, no official incident feed.** There is no free source;
-  the interfaces exist (`TrafficProvider`, `IncidentProvider`) and the app says
-  "not available" instead of inventing data. ETAs use typical road speeds.
-  Incidents come only from other drivers' reports, labelled unconfirmed; there
-  are no moderation tools yet.
-- **Avoid tolls/highways** is not offered: the free OSRM server rejects it.
-- **Web app limits:** no navigation or sharing with the screen locked or the
-  app in the background (browsers pause location); no CarPlay/Android Auto.
-- **Offline:** the loaded route, instructions and cached forecasts keep working
-  and are labelled stale; new routes, new forecasts and map tiles need a
-  connection.
-- **Free services are shared** (Overpass is often slow; the OSRM demo server has
-  no uptime guarantee). Swap endpoints in `.env` for production.
+- **Coverage:** routing, search, places and heights work inside regions we build (Georgia first; outside built regions the app honestly says "not available here yet"). Forecasts and air quality cover land worldwide.
+- **No live traffic, no official incident feed, no public transport yet.** Interfaces exist (`TrafficProvider`, `IncidentProvider`) and the app says "not available" rather than inventing data; driver reports are always labelled "reported". Public transport is off until an on-device open-GTFS router exists (ADR-019).
+- **Web app limits:** no navigation or sharing with the screen locked or in the background (browsers pause location); no CarPlay/Android Auto from the web (see [MOBILE_STRATEGY](docs/mobile/MOBILE_STRATEGY.md) for the React Native path and free routes).
+- **Offline:** the app shell, loaded route, instructions, and cached `/data` files keep working (forecasts labelled stale); uncached regions need a connection.
+- **Overflow relays:** past the Free Worker's 100k req/day limit, live sharing and report writes use public Nostr relays (3 relays per message, configurable list, no SLA); behind strict NATs without direct WebRTC, viewers receive encrypted relay snapshots every 15 s.
 - **Translation:** Russian is a draft that needs native review.
-- Chrome's speech recognition sends audio to the browser vendor; the mic is
-  only opened when you press it.
-- **Voice:** Google voices need a connection and come with Chrome; elsewhere
-  or offline the browser's own voice speaks. An approximate start (location
-  unavailable) is only as good as your connection's location — a VPN moves it.
+- **Voice:** Google voices come with Chrome online; offline or in Safari/Firefox the device's own voice speaks.
 
 ## Privacy
 
-No account. Stored on the device only: preferences, places you save, recent
-destinations (can be turned off and cleared in Settings), and — while you share
-— the share's own link/key so you can stop it after a reload. Positions and
-routes are never stored. Live sharing sends your position only while you share.
-A driver report sends only its kind and your position at that moment; the
-relay keeps a daily-salted hash instead of your IP address. Google voices are Google's
-online voices (the sentence is sent to Google to be spoken). The approximate
-start is worked out by the app's own Worker from the connection and is not
-stored.
+No account. Stored on the device only: preferences, saved places, recent destinations (opt-out and clearable in Settings), and — while you share — the share's own link/key. Trips, searches, and positions stay on the device (only active live sharing and driver reports leave it; live sharing keeps only the latest position until stopped/expired, and driver reports store only a daily-salted hash, never your IP).
 
-## Deploy (Cloudflare Workers)
+## Deploy (Cloudflare Workers — Free plan, no card)
 
 ```bash
 npx wrangler login
-npm run deploy:preview      # Worker navweather-preview: its own Durable Objects, D1, R2 (test data)
-npm run seed:preview        # our search index into its D1
-npm run data:weather -- --env preview   # our forecast into its R2 (or let .github/workflows/weather.yml do it)
-npm run deploy:production   # Worker navweather (real users); seed:production, --env production likewise
+npm run check:envs          # verifies dev/preview/production parity & zero billable bindings
+npm run build && npm run check:cost
+npm run deploy:preview      # Worker navweather-preview (test data)
+npm run deploy:production   # Worker navweather (real users)
 ```
 
-Or from GitHub: the **Deploy** workflow (secrets `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`) builds the data,
-deploys and, for preview, runs the Worker smoke tests; the **Weather** workflow refreshes the forecast every hour
-when new model runs appear. `public/_headers` sets the CSP. Hosting is one Cloudflare **Worker** project per
-environment (not Pages) — see [ADR-016](docs/architecture/decisions/ADR-016-all-on-cloudflare-workers.md);
-`npm run check:envs` keeps the environments of `wrangler.toml` in step.
+Or from GitHub Actions (`CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`): `.github/workflows/deploy.yml` builds all
+static data and deploys the app Worker; `reports-feed.yml` rebuilds the static reports feed (`wrangler.reports.toml`)
+every ~10 minutes; `basemap.yml` builds the Protomaps basemap (`wrangler.basemap.toml`). Every Worker stays on the Free
+plan with zero D1/R2/Containers/Queues ([ADR-019](docs/architecture/decisions/ADR-019-zero-owner-cost.md),
+[ADR-020](docs/architecture/decisions/ADR-020-free-at-any-scale-overflow.md)).
 
 ## Licence
 

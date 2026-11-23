@@ -59,7 +59,7 @@ export function hasGeorgian(text: string): boolean {
 
 /** Transliterate Georgian script in `text` for the given UI language. */
 export function localizeScript(text: string, locale: string): string {
-  if (!text || !GEORGIAN.test(text)) return text;
+  if (!text || !GEORGIAN.test(text) || locale === 'ka') return text;
   const target: Target = locale === 'ru' ? 'ru' : 'en';
   const table = target === 'ru' ? CYRILLIC : LATIN;
 

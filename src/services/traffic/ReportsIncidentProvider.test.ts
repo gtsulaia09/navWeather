@@ -129,3 +129,63 @@ describe('driver reports → incidents', () => {
     expect(reportFailure(await p.vote('dddddddddddddddd', 'still').catch((e) => e))).toBe('refused');
   });
 });
+
+describe('static feed and overflow (ADR-020)', () => {
+  const feedIndex = (generatedAt = Date.now()) => ({ v: 1, build: 'b1', generatedAt, cells: ['41_44', '41_43', '42_43', '41_41', '41_42'] });
+
+  it('reads the static feed instead of the Worker and keeps only reports along the route', async () => {
+    const along = report({ id: 'feed000000000001', lat: route.geometry[10][1], lon: route.geometry[10][0], expiresAt: Date.now() + 600_000 });
+    const far = report({ id: 'feed000000000002', lat: 41.0, lon: 41.0, expiresAt: Date.now() + 600_000 });
+    const calls: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      calls.push(url);
+      if (url.endsWith('/index.json')) return jsonResponse(feedIndex());
+      if (url.includes('/builds/b1/')) return jsonResponse({ v: 1, generatedAt: Date.now(), reports: [along, far] });
+      return jsonResponse({ reports: [] });
+    }));
+    const p = new ReportsIncidentProvider('/api/v1/reports', { feedUrl: 'https://feed.example' });
+    const list = await p.getIncidents(route);
+    expect(list.map((i) => i.reportId)).toEqual(['feed000000000001']);
+    expect(calls.some((u) => u.startsWith('/api/v1/reports'))).toBe(false);
+  });
+
+  it('falls back to the Worker when the feed is missing or stale', async () => {
+    const calls: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      calls.push(url);
+      if (url.endsWith('/index.json')) return jsonResponse(feedIndex(Date.now() - 2 * 3_600_000));
+      return jsonResponse({ reports: [], now: Date.now() });
+    }));
+    const p = new ReportsIncidentProvider('/api/v1/reports', { feedUrl: 'https://feed.example' });
+    await p.getIncidents(route);
+    expect(calls.some((u) => u.startsWith('/api/v1/reports?bbox='))).toBe(true);
+  });
+
+  it('publishes to relays when the Worker is busy, and shows the report here at once', async () => {
+    vi.resetModules();
+    vi.doMock('../../reports/overflow', () => ({
+      publishOverflowReport: vi.fn(async () => ({ id: 'abcdef0123456789', expiresAt: Date.now() + 3_600_000 })),
+      publishOverflowVote: vi.fn(async () => undefined),
+    }));
+    const mod = await import('./ReportsIncidentProvider');
+    const overflow = await import('../../reports/overflow');
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init?: RequestInit) => (init?.method === 'POST' ? jsonResponse({ error: 'busy' }, 429) : jsonResponse({ reports: [], now: Date.now() }))));
+    const p = new mod.ReportsIncidentProvider('/api/v1/reports', { relays: ['wss://r1', 'wss://r2'] });
+    const at = route.geometry[20];
+    expect(await p.report('hazard', at)).toMatchObject({ id: 'abcdef0123456789' });
+    expect(overflow.publishOverflowReport).toHaveBeenCalledWith('hazard', at[1], at[0], expect.objectContaining({ relays: ['wss://r1', 'wss://r2'] }));
+    expect((await p.getIncidents(route)).map((i) => i.reportId)).toContain('abcdef0123456789');
+    // A vote on an overflow report goes to the relays too, not to the Worker.
+    await p.vote('abcdef0123456789', 'gone');
+    expect(overflow.publishOverflowVote).toHaveBeenCalledWith('abcdef0123456789', 'gone', expect.anything());
+    expect((await p.getIncidents(route)).map((i) => i.reportId)).not.toContain('abcdef0123456789');
+    vi.doUnmock('../../reports/overflow');
+  });
+
+  it('does not overflow without relays, or when the Worker refuses the request itself', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({ error: 'busy' }, 429)));
+    await expect(new ReportsIncidentProvider('/api/v1/reports').report('hazard', route.geometry[0])).rejects.toMatchObject({ kind: 'rate-limited' });
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({ error: 'bad-request' }, 400)));
+    await expect(new ReportsIncidentProvider('/api/v1/reports', { relays: ['wss://r'] }).report('hazard', route.geometry[0])).rejects.toMatchObject({ status: 400 });
+  });
+});

@@ -16,6 +16,18 @@ import { expect, test, type Request } from '@playwright/test';
 const STRICT = process.env.E2E_STRICT === '1';
 /** The only other host the app may reach: the map background (OpenFreeMap, no limits). */
 const ALLOWED_HOSTS = ['tiles.openfreemap.org'];
+/** Minimal valid MapLibre style so map layers and markers still mount when tiles are stubbed on CI (no basemap build). */
+const BLANK_STYLE = JSON.stringify({
+  version: 8,
+  sources: {},
+  layers: [{ id: 'background', type: 'background', paint: { 'background-color': '#eceef1' } }],
+});
+const stubOpenFreeMap = (ctx: import('@playwright/test').BrowserContext) =>
+  ctx.route(/tiles\.openfreemap\.org/, (r) =>
+    /\/styles\//.test(r.request().url())
+      ? r.fulfill({ status: 200, contentType: 'application/json', body: BLANK_STYLE })
+      : r.abort(),
+  );
 // Where the example road starts (Tbilisi, our geocoder's city point).
 const TBILISI = { latitude: 41.6936, longitude: 44.8014, accuracy: 8 };
 
@@ -28,12 +40,26 @@ test('search → road with weather → simulated drive → live share → driver
     if (!own && !ALLOWED_HOSTS.includes(u.host)) foreign.push(`${u.host}${u.pathname}`);
   };
   context.on('request', watch);
-  if (process.env.E2E_MAP !== '1') await context.route(/tiles\.openfreemap\.org/, (r) => r.abort());
+  if (process.env.E2E_MAP !== '1') await stubOpenFreeMap(context);
   await context.grantPermissions(['geolocation']);
   await context.setGeolocation(TBILISI);
 
-  await test.step('search answers on the device from our index files', async () => {
+  await test.step('locate button shows a visible blue dot and activates follow mode (B-43, B-47)', async () => {
     await page.goto('/');
+    const locate = page.getByRole('button', { name: 'Show my location' });
+    await expect(locate).toBeVisible();
+    await locate.click();
+    await expect(locate).toHaveAttribute('aria-pressed', 'true');
+    const dot = page.locator('.me-dot');
+    await expect(dot).toBeVisible();
+    const dotBox = await dot.boundingBox();
+    expect(dotBox?.width ?? 0).toBeGreaterThanOrEqual(16);
+    expect(dotBox?.height ?? 0).toBeGreaterThanOrEqual(16);
+    const coreBg = await page.locator('.me-dot__core').evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(coreBg).not.toBe('rgba(0, 0, 0, 0)');
+  });
+
+  await test.step('search answers on the device from our index files', async () => {
     const search = page.getByRole('combobox', { name: 'Search a place or address' });
     const answer = page.waitForResponse((r) => r.url().includes('/data/search/') && r.request().method() === 'GET');
     await search.fill('Kutaisi');
@@ -43,16 +69,32 @@ test('search → road with weather → simulated drive → live share → driver
     await page.keyboard.press('Escape');
   });
 
-  await test.step('a road (routed on the device) with the weather along it', async () => {
+  await test.step('typing Tbilisi → Batumi ranks Batumi city first, draws route line above basemap, and shows weather (B-44, B-45, B-47)', async () => {
+    await page.getByRole('button', { name: 'Directions' }).click();
+    const from = page.getByRole('combobox', { name: 'From' });
+    await from.fill('Tbilisi');
+    await page.getByRole('option', { name: /Tbilisi/ }).first().click();
+    const to = page.getByRole('combobox', { name: 'To' });
+    await to.fill('Batumi');
+    // Batumi city must rank first ahead of streets in Tbilisi (B-45).
+    await expect(page.getByRole('option').first()).toContainText(/Batumi/);
+    await expect(page.getByRole('option').first()).toContainText(/Georgia/);
     const roads = page.waitForResponse((r) => r.url().includes('/data/roads/'));
     const forecast = page.waitForResponse((r) => r.url().includes('/data/weather/'));
-    await page.getByRole('button', { name: 'Try Tbilisi → Batumi' }).click();
+    // Submitting directly while suggestions are open must not be blocked by the dropdown (B-47).
+    await page.locator('form button[type="submit"]').click();
     await expect(page.getByText(/\d{3}\s?km\b/).first()).toBeVisible();
+    await expect(page.getByText(/\d+\s*h\s*\d+\s*min/).first()).toBeVisible();
     expect((await roads).ok()).toBe(true);
     const f = await forecast;
     if (STRICT) expect(f.status()).toBe(200);
+    // The route line must be inserted above all basemap fills (B-44).
+    await expect(page.locator('.map')).toHaveAttribute('data-route-visible', '1');
     // The weather at each place on the way, at the time we get there.
     await expect(page.getByText('ETA').first()).toBeVisible();
+    if (f.ok()) {
+      await expect(page.locator('.sheet').getByText(/-?\d+°/).first()).toBeVisible();
+    }
   });
 
   await test.step('a simulated drive, shared live, seen by a viewer', async () => {
@@ -91,4 +133,20 @@ test('search → road with weather → simulated drive → live share → driver
   });
 
   expect(foreign, 'requests to anyone but our own origin and the map background').toEqual([]);
+});
+
+test('locate button shows a visible warning when geolocation permission is denied (B-47)', async ({ browser }) => {
+  const ctx = await browser.newContext({
+    viewport: { width: 1280, height: 800 },
+    locale: 'en-GB',
+    timezoneId: 'Asia/Tbilisi',
+    permissions: [],
+  });
+  const page = await ctx.newPage();
+  if (process.env.E2E_MAP !== '1') await stubOpenFreeMap(ctx);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Show my location' }).click();
+  await expect(page.locator('.notice')).toBeVisible();
+  await expect(page.locator('.notice')).toContainText(/Location is blocked/i);
+  await ctx.close();
 });

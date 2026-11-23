@@ -1,6 +1,7 @@
 import type { GeoJSONSource, Map as MLMap } from 'maplibre-gl';
 import type * as maplibregl from 'maplibre-gl';
 import type { LngLat } from '../../types/geo';
+import { registerMapIcons } from './mapIcons';
 
 export const EMPTY_FC: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
 
@@ -46,14 +47,35 @@ export function fillMissingStyleImages(map: MLMap) {
   });
 }
 
+/**
+ * Find the first symbol (label) layer that sits above all non-symbol basemap layers (earth, water, roads, buildings).
+ * Our two-tier Protomaps style places world labels (`w-*`) underneath regional land (`r-earth`), so taking the very
+ * first `symbol` layer would bury route lines and the accuracy circle under `r-earth` at zoom ≥ 7 (B-44).
+ */
+export function firstTopLabelLayerId(layers: readonly { id: string; type: string }[] | undefined): string | undefined {
+  if (!layers?.length) return undefined;
+  let lastNonSymbol = -1;
+  for (let i = layers.length - 1; i >= 0; i--) {
+    if (layers[i].type !== 'symbol') {
+      lastNonSymbol = i;
+      break;
+    }
+  }
+  for (let i = lastNonSymbol + 1; i < layers.length; i++) {
+    if (layers[i].type === 'symbol') return layers[i].id;
+  }
+  return undefined;
+}
+
 /** Route + weather layers, inserted below the basemap's labels so place names stay readable. */
 export function addRouteLayers(map: MLMap) {
+  registerMapIcons(map);
   const route = cssVar('--route', '#0a6cff');
   const casing = cssVar('--route-casing', '#ffffff');
-  const danger = cssVar('--danger', '#c62828');
+  const danger = cssVar('--danger-fill', '#c62828');
   const surface = cssVar('--surface', '#ffffff');
 
-  const beforeId = map.getStyle().layers?.find((l) => l.type === 'symbol')?.id;
+  const beforeId = firstTopLabelLayerId(map.getStyle().layers);
   // lineMetrics → line-progress, so the driven part is a gradient stop, not a re-uploaded line.
   if (!map.getSource('route')) map.addSource('route', { type: 'geojson', data: EMPTY_FC, lineMetrics: true });
   for (const id of ['route-weather', 'endpoints', 'focus', 'pois', 'me-accuracy', 'cameras', 'hazards', 'incidents', 'alternatives', 'transit', 'transit-stops']) {
@@ -247,52 +269,94 @@ export function addRouteLayers(map: MLMap) {
       'circle-stroke-width': 3,
     },
   });
+  const textColor = cssVar('--text', '#111418');
   map.addLayer({
     id: 'pois',
-    type: 'circle',
+    type: 'symbol',
     source: 'pois',
+    layout: {
+      'icon-image': [
+        'match',
+        ['get', 'category'],
+        'restaurant',
+        'poi-restaurant',
+        'cafe',
+        'poi-cafe',
+        'fuel',
+        'poi-fuel',
+        'ev_charging',
+        'poi-ev_charging',
+        'hotel',
+        'poi-hotel',
+        'parking',
+        'poi-parking',
+        'pharmacy',
+        'poi-pharmacy',
+        'hospital',
+        'poi-hospital',
+        'rest_area',
+        'poi-rest_area',
+        'supermarket',
+        'poi-supermarket',
+        'poi-default',
+      ],
+      'icon-size': ['interpolate', ['linear'], ['zoom'], 7, 0.72, 11, 0.9, 15, 1.08],
+      'icon-allow-overlap': true,
+      'text-field': ['step', ['zoom'], '', 11, ['coalesce', ['get', 'name'], '']],
+      'text-size': 12,
+      'text-offset': [0, 1.45],
+      'text-anchor': 'top',
+      'text-max-width': 10,
+      'text-optional': true,
+    },
     paint: {
-      'circle-radius': 6,
-      'circle-color': route,
-      'circle-stroke-color': surface,
-      'circle-stroke-width': 2.5,
+      'text-color': textColor,
+      'text-halo-color': surface,
+      'text-halo-width': 1.8,
     },
   });
   map.addLayer({
     id: 'cameras',
-    type: 'circle',
+    type: 'symbol',
     source: 'cameras',
-    minzoom: 9,
+    minzoom: 8,
+    layout: {
+      'icon-image': 'map-camera',
+      'icon-size': ['interpolate', ['linear'], ['zoom'], 8, 0.68, 12, 0.88, 15, 1.05],
+      'icon-allow-overlap': true,
+      'text-field': ['step', ['zoom'], '', 12, ['case', ['>', ['coalesce', ['get', 'kmh'], 0], 0], ['concat', ['to-string', ['get', 'kmh']]], '']],
+      'text-size': 11,
+      'text-offset': [0, 1.35],
+      'text-anchor': 'top',
+      'text-optional': true,
+    },
     paint: {
-      'circle-radius': 5,
-      'circle-color': cssVar('--text', '#111418'),
-      'circle-stroke-color': surface,
-      'circle-stroke-width': 2,
+      'text-color': textColor,
+      'text-halo-color': surface,
+      'text-halo-width': 1.8,
     },
   });
   map.addLayer({
     id: 'hazards',
-    type: 'circle',
+    type: 'symbol',
     source: 'hazards',
-    minzoom: 10,
-    paint: {
-      'circle-radius': 5,
-      'circle-color': cssVar('--sev-high', '#b45309'),
-      'circle-stroke-color': surface,
-      'circle-stroke-width': 2,
+    minzoom: 9,
+    layout: {
+      'icon-image': 'map-hazard',
+      'icon-size': ['interpolate', ['linear'], ['zoom'], 9, 0.72, 13, 0.95],
+      'icon-allow-overlap': true,
     },
   });
-  // Reports / incidents on the route: a ring + dot (unconfirmed reports are hollow).
+  // Reports / incidents on the route: high-contrast diamond badge.
   map.addLayer({
     id: 'incidents',
-    type: 'circle',
+    type: 'symbol',
     source: 'incidents',
-    minzoom: 7,
-    paint: {
-      'circle-radius': ['interpolate', ['linear'], ['zoom'], 7, 4.5, 13, 7],
-      'circle-color': ['case', ['get', 'verified'], cssVar('--sev-critical', '#b42318'), surface],
-      'circle-stroke-color': cssVar('--sev-critical', '#b42318'),
-      'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 7, 2.5, 13, 3.5],
+    minzoom: 6,
+    layout: {
+      'icon-image': 'map-incident',
+      'icon-size': ['interpolate', ['linear'], ['zoom'], 6, 0.72, 12, 0.96],
+      'icon-allow-overlap': true,
     },
   });
   map.addLayer({
@@ -349,30 +413,33 @@ export function circleFeature(center: LngLat, radiusM: number, steps = 48): GeoJ
 }
 
 /**
- * 3D buildings from the basemap's own building heights (OpenMapTiles
- * `render_height`), under the route so it stays visible. Added hidden; shown
- * while the map is tilted. Skipped when the style has no building layer.
+ * 3D buildings from the basemap's own building heights (our Protomaps basemap: `buildings` with `height`;
+ * OpenMapTiles fallback: `building` with `render_height`), under the route so it stays visible. Added hidden;
+ * shown while the map is tilted. Skipped when the style has no building layer.
  */
 export function add3dBuildings(map: MLMap) {
   if (map.getLayer('building-3d')) return;
   const layers = map.getStyle().layers ?? [];
-  const flat = layers.find((l) => l.type === 'fill' && 'source-layer' in l && l['source-layer'] === 'building') as maplibregl.FillLayerSpecification | undefined;
+  // The region copy of our basemap ("r-…") carries the detail; else the first building layer.
+  const isBuildings = (l: maplibregl.LayerSpecification) => l.type === 'fill' && 'source-layer' in l && (l['source-layer'] === 'building' || l['source-layer'] === 'buildings');
+  const flat = (layers.find((l) => isBuildings(l) && l.id.startsWith('r-')) ?? layers.find(isBuildings)) as maplibregl.FillLayerSpecification | undefined;
   if (!flat || typeof flat.source !== 'string') return;
-  const before = map.getLayer('me-accuracy') ? 'me-accuracy' : layers.find((l) => l.type === 'symbol')?.id;
+  const sourceLayer = flat['source-layer']!;
+  const before = map.getLayer('me-accuracy') ? 'me-accuracy' : firstTopLabelLayerId(layers);
   map.addLayer(
     {
       id: 'building-3d',
       type: 'fill-extrusion',
       source: flat.source,
-      'source-layer': 'building',
+      'source-layer': sourceLayer,
       minzoom: 15,
       filter: ['!=', ['get', 'hide_3d'], true],
       layout: { visibility: 'none' },
       paint: {
         'fill-extrusion-color': cssVar('--map-building-3d', '#dcdcd5'),
         // Grow in over half a zoom level instead of popping up.
-        'fill-extrusion-height': ['interpolate', ['linear'], ['zoom'], 15, 0, 15.5, ['coalesce', ['get', 'render_height'], 0]],
-        'fill-extrusion-base': ['interpolate', ['linear'], ['zoom'], 15, 0, 15.5, ['coalesce', ['get', 'render_min_height'], 0]],
+        'fill-extrusion-height': ['interpolate', ['linear'], ['zoom'], 15, 0, 15.5, ['coalesce', ['get', 'render_height'], ['get', 'height'], 0]],
+        'fill-extrusion-base': ['interpolate', ['linear'], ['zoom'], 15, 0, 15.5, ['coalesce', ['get', 'render_min_height'], ['get', 'min_height'], 0]],
         'fill-extrusion-opacity': 0.8,
       },
     },

@@ -34,15 +34,18 @@ weather. It is not "a map site" or "a weather site" — keep that direction.
   nothing at any number of users. Cloudflare Workers **Free plan with no payment method** (it cannot bill: past its
   daily limits it returns errors). Everything a user does is a **static file under `/data`** plus code **on the
   device**: routing (`src/roads`), search, forecasts, air quality, heights, places, the Long Trip planner. Only live
-  sharing and driver reports use the Worker (Durable Objects, Free plan; they say "busy" when the day's free requests
-  are used up). Never add Workers Paid, Containers, R2, D1, Queues, a paid domain, a paid API, a key with a quota, a
-  free tier with a request limit, a public demo server, ads, subscriptions, sponsors or credits — not even "for now"
-  or "in development". A new feature that needs the server for each user is redesigned as static data + device code,
+  sharing and driver reports use the Worker (Durable Objects, Free plan), and only until its free daily requests are
+  used up: then they **overflow to the users' devices (ADR-020)** — live sharing phone to phone over WebRTC, reports
+  through public Nostr relays — and report reads come from a static feed rebuilt every ~10 minutes. The map background
+  is our own static basemap (Protomaps planet extract, packed). Never add Workers Paid, Containers, R2, D1, Queues, a
+  paid domain, a paid API, a key with a quota, a free tier with a request limit, a public demo server, ads,
+  subscriptions, sponsors or credits — not even "for now" or "in development". A new feature that needs the server for each user is redesigned as static data + device code,
   or not built. Data are built on GitHub Actions (public repo: free). Every third-party component is free software or
   open data with its licence recorded. Target scale: Google-Maps-class.
-- **Hosting = Cloudflare Workers, not Pages (ADR-016, ADR-019):** static assets (app + data) and `/api/*` (sharing,
-  reports) in one Worker project; `wrangler.toml` environments `dev` / `preview` / `production`; `npm run check:envs`
-  fails on any billable binding.
+- **Hosting = Cloudflare Workers, not Pages (ADR-016, ADR-019, ADR-020):** static assets (app + data) and `/api/*`
+  (sharing, reports) in one Worker project; two more Workers with static assets only — the reports feed
+  (`wrangler.reports.toml`) and the basemap (`wrangler.basemap.toml`); environments `dev` / `preview` / `production`;
+  `npm run check:envs` fails on any billable binding and on any binding at all in the two asset-only Workers.
 - **Localhost parity (REQ-DEV-001):** every feature must work on `http://localhost` with no Cloudflare account and
   no money (Vite serves `public/data`; `wrangler dev` runs sharing and reports locally) **and** on the preview Worker.
   A change verified in only one of the two is not done.
@@ -53,8 +56,11 @@ weather. It is not "a map site" or "a weather site" — keep that direction.
   estimate vs official warning (docs/architecture/WEATHER_ENGINE.md §6).
 - No location history on the server; route history (if ever) is opt-in.
 - No secrets in the client: `VITE_*` values are public.
-- The app calls no public service with limits (no OSRM/FOSSGIS/Photon/Nominatim/Overpass/Open-Meteo API/Transitous):
-  the only third-party host it reaches is OpenFreeMap (map background, no limits). Attribution everywhere.
+- The app calls no public service with limits (no OSRM/FOSSGIS/Photon/Nominatim/Overpass/Open-Meteo API/Transitous).
+  Third parties it may reach: public **Nostr relays** — only for overflow (ADR-020: our Worker busy), only small
+  end-to-end-encrypted or public-anyway messages, 3 relays per message from a configurable list, never in tests
+  (`.env.test`); STUN (`stun.cloudflare.com`, `stun.l.google.com`) for direct connections; OpenFreeMap only as the map
+  fallback while no basemap of ours is deployed. Attribution everywhere.
 - Navigation and safety-critical calculations stay deterministic; AI may
   only explain or translate requests into deterministic calls.
 - Engines (`src/algorithms`, `src/intelligence`, `src/navigation`, `src/types`)
@@ -71,6 +77,9 @@ npm run typecheck    # app + Worker + e2e
 npm run build        # production build (copies public/data into dist/)
 npm run data:all     # all our static data: OSM → places, search, roads; heights; forecast; air quality
 npm run data:roads   # just the road files the device routes on (after data:download)
+npm run data:basemap # our map background: world z0–6 + regions z7–14 from the Protomaps planet build (~240 MB)
+npm run data:reports # the static reports feed from the local Worker and local relay (public/data/reports)
+npm run dev:relay    # only the local Nostr relay (npm run dev starts it)   npm run check:relays  # which public relays answer
 npm run check:envs   # wrangler environments in step, no billable bindings
 npm run test:share   # Worker smoke (needs the Worker on :8787); API=/api for legacy paths
 npm run test:reports
@@ -82,8 +91,9 @@ and push it. Commit messages: what and why; reference requirement IDs.
 
 ## Map of the docs (only current documents; history lives in git)
 - Requirements: `docs/PROJECT_REQUIREMENTS.md`
-- **Cost rule now: ADR-019** (`docs/architecture/decisions/ADR-019-zero-owner-cost.md`) — where it conflicts with older
-  plans (paid hosting, Containers, R2, D1), ADR-019 wins
+- **Cost rule now: ADR-019 + ADR-020** (`docs/architecture/decisions/ADR-019-zero-owner-cost.md`,
+  `ADR-020-free-at-any-scale-overflow.md`) — where they conflict with older plans (paid hosting, Containers, R2, D1),
+  they win
 - **The single work plan: `docs/DEVELOPMENT_PLAN.md`** (stages 0–13, tasks DP-x.y with localhost and Workers checks,
   release gates G1–G13, risks, owner decisions) — ADR-015, ADR-016
 - Catalogue of free replacements, Google Maps gaps and Cloudflare placement: `docs/FREE_STACK_PLAN.md` (§1.1 "always

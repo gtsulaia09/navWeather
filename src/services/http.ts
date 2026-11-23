@@ -8,7 +8,11 @@ export type ProviderErrorKind =
   | 'not-found'
   | 'no-route'
   /** Outside the regions our static data cover (ADR-019): "not available here yet". */
-  | 'not-covered';
+  | 'not-covered'
+  /** Static data files have not been built/deployed yet (404 / HTML fallback). */
+  | 'data-missing'
+  /** Static forecast files are older than MAX_RUN_AGE_H and need a fresh data build. */
+  | 'data-stale';
 
 export class ProviderError extends Error {
   constructor(
@@ -125,20 +129,4 @@ export class RateLimiter {
   }
 }
 
-/** Run async tasks with bounded concurrency, preserving result order. */
-export async function mapWithConcurrency<T, R>(
-  items: T[],
-  limit: number,
-  fn: (item: T, index: number) => Promise<R>,
-): Promise<R[]> {
-  const results = new Array<R>(items.length);
-  let next = 0;
-  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
-    while (next < items.length) {
-      const i = next++;
-      results[i] = await fn(items[i], i);
-    }
-  });
-  await Promise.all(workers);
-  return results;
-}
+export { mapWithConcurrency } from '../utils/async';
