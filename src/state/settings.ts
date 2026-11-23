@@ -183,14 +183,22 @@ interface SettingsStore extends Settings {
   reset(): void;
 }
 
+function preloadLocaleFont(locale: Locale): Promise<unknown> {
+  if (locale !== 'ka' || typeof document === 'undefined' || !document.fonts?.load) return Promise.resolve();
+  return Promise.race([
+    document.fonts.load('400 16px "Noto Sans Georgian Variable"', 'ქართული'),
+    new Promise((r) => setTimeout(r, 400)),
+  ]).catch(() => undefined);
+}
+
 export const useSettings = create<SettingsStore>()((set, get) => ({
   ...load(),
   update(patch) {
-    // Switch language only once its text has loaded (it arrives as a separate file).
+    // Switch language only once its text (and Georgian font, if needed) has loaded.
     if (patch.language && !isLocaleLoaded(patch.language)) {
       const { language, ...rest } = patch;
       if (Object.keys(rest).length) get().update(rest);
-      loadLocale(language).then(
+      Promise.all([loadLocale(language), preloadLocaleFont(language)]).then(
         () => get().update({ language }),
         () => undefined, // offline and not cached: keep the current language
       );
@@ -218,7 +226,10 @@ export function useMessages(): Messages {
 
 /** Load the saved language's text before first render (English is built in). */
 export function loadInitialLocale(): Promise<void> {
-  return loadLocale(useSettings.getState().language).catch(() => undefined);
+  const lang = useSettings.getState().language;
+  return Promise.all([loadLocale(lang), preloadLocaleFont(lang)])
+    .then(() => undefined)
+    .catch(() => undefined);
 }
 
 export function currentMessages(): Messages {

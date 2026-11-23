@@ -56,6 +56,7 @@ describe('message grammar', () => {
 
     walk(ka as unknown as Record<string, unknown>);
     expect(untranslated).toEqual([]);
+    expect(JSON.stringify(ka)).not.toContain('დააწკაპუნ');
   });
 
   it('Georgian: localizeScript preserves native Georgian street names', () => {
