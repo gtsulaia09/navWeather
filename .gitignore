@@ -25,3 +25,9 @@ dist-basemap/
 # Browser tests (Playwright)
 test-results/
 playwright-report/
+
+# iOS build artifacts
+ios/build/
+ios/NavWeather/dist/
+*.xcworkspace
+xcuserdata/

@@ -6,3 +6,4 @@ export * from './share';
 export * from './fileCache';
 export * from './haptics';
 export * from './surfaces';
+export * from './nativeIosBridge';

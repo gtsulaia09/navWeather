@@ -10,6 +10,8 @@
  * Also importable: `startRelay({ port })` (tests and the reports-feed dev script).
  */
 import { WebSocketServer } from 'ws';
+import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
 import { matchFilter, verifyEvent, tagValue } from '../src/p2p/nostr.ts';
 
 const MAX_STORED = 20_000;
@@ -81,7 +83,7 @@ export function startRelay({ port = 7777, host = '127.0.0.1', quiet = false } = 
   return { close: () => new Promise((r) => wss.close(() => r())), stored, wss };
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
   const at = process.argv.indexOf('--port');
   startRelay({ port: at > 0 ? Number(process.argv[at + 1]) : 7777 });
 }

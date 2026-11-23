@@ -23,7 +23,12 @@ const children = [];
 let stopping = false;
 
 function run(name, color, cmd, args, env = process.env) {
-  const child = spawn(cmd, args, { stdio: ['inherit', 'pipe', 'pipe'], env: { ...env, FORCE_COLOR: '1' } });
+  const isCmd = process.platform === 'win32' && (cmd.endsWith('.cmd') || cmd.endsWith('.bat'));
+  const child = spawn(cmd, args, {
+    stdio: ['inherit', 'pipe', 'pipe'],
+    env: { ...env, FORCE_COLOR: '1' },
+    shell: isCmd,
+  });
   const tag = `\x1b[${color}m[${name}]\x1b[0m `;
   const pipe = (from, to) => {
     let rest = '';

@@ -56,7 +56,9 @@ export function ensureDevCert() {
   return { ips };
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
+if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
   const { ips } = ensureDevCert();
   console.log(`Certificate in ${CERT_DIR}/ for localhost${ips.length ? `, ${ips.join(', ')}` : ''}`);
 }
