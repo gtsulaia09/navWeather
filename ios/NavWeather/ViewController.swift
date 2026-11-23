@@ -3,6 +3,7 @@ import WebKit
 import CoreLocation
 import AVFoundation
 
+@MainActor
 class ViewController: UIViewController, WKScriptMessageHandler, CLLocationManagerDelegate {
     private var webView: WKWebView!
     private let locationManager = CLLocationManager()
@@ -24,7 +25,7 @@ class ViewController: UIViewController, WKScriptMessageHandler, CLLocationManage
     private func setupLocationManager() {
         locationManager.delegate = self
         locationManager.desiredAccuracy = kCLLocationAccuracyBestForNavigation
-        locationManager.distanceFilter = 2
+        locationManager.distanceFilter = 2.0
         locationManager.allowsBackgroundLocationUpdates = true
         locationManager.pausesLocationUpdatesAutomatically = false
         locationManager.requestWhenInUseAuthorization()
@@ -63,20 +64,23 @@ class ViewController: UIViewController, WKScriptMessageHandler, CLLocationManage
     }
 
     // MARK: - WKScriptMessageHandler
-    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+    nonisolated func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         guard let body = message.body as? [String: Any] else { return }
+        let messageName = message.name
 
-        switch message.name {
-        case "nativeLocation":
-            handleLocationMessage(body)
-        case "nativeHaptics":
-            handleHapticsMessage(body)
-        case "nativeWakeLock":
-            handleWakeLockMessage(body)
-        case "nativeTTS":
-            handleTTSMessage(body)
-        default:
-            break
+        Task { @MainActor in
+            switch messageName {
+            case "nativeLocation":
+                self.handleLocationMessage(body)
+            case "nativeHaptics":
+                self.handleHapticsMessage(body)
+            case "nativeWakeLock":
+                self.handleWakeLockMessage(body)
+            case "nativeTTS":
+                self.handleTTSMessage(body)
+            default:
+                break
+            }
         }
     }
 
@@ -93,25 +97,21 @@ class ViewController: UIViewController, WKScriptMessageHandler, CLLocationManage
 
     private func handleHapticsMessage(_ body: [String: Any]) {
         let kind = body["kind"] as? String
-        DispatchQueue.main.async { [weak self] in
-            switch kind {
-            case "selection":
-                self?.selectionFeedback.selectionChanged()
-            case "warning":
-                self?.notificationFeedback.notificationOccurred(.warning)
-            case "alert":
-                self?.notificationFeedback.notificationOccurred(.error)
-            default:
-                self?.impactFeedback.impactOccurred()
-            }
+        switch kind {
+        case "selection":
+            selectionFeedback.selectionChanged()
+        case "warning":
+            notificationFeedback.notificationOccurred(.warning)
+        case "alert":
+            notificationFeedback.notificationOccurred(.error)
+        default:
+            impactFeedback.impactOccurred()
         }
     }
 
     private func handleWakeLockMessage(_ body: [String: Any]) {
         let active = body["active"] as? Bool ?? false
-        DispatchQueue.main.async {
-            UIApplication.shared.isIdleTimerDisabled = active
-        }
+        UIApplication.shared.isIdleTimerDisabled = active
     }
 
     private func handleTTSMessage(_ body: [String: Any]) {
@@ -120,14 +120,12 @@ class ViewController: UIViewController, WKScriptMessageHandler, CLLocationManage
         let utterance = AVSpeechUtterance(string: text)
         utterance.voice = AVSpeechSynthesisVoice(language: lang)
         utterance.rate = AVSpeechUtteranceDefaultSpeechRate
-        DispatchQueue.main.async { [weak self] in
-            self?.speechSynthesizer.stopSpeaking(at: .immediate)
-            self?.speechSynthesizer.speak(utterance)
-        }
+        speechSynthesizer.stopSpeaking(at: .immediate)
+        speechSynthesizer.speak(utterance)
     }
 
     // MARK: - CLLocationManagerDelegate
-    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+    nonisolated func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         guard let loc = locations.last else { return }
 
         let payload: [String: Any] = [
@@ -135,8 +133,8 @@ class ViewController: UIViewController, WKScriptMessageHandler, CLLocationManage
                 "longitude": loc.coordinate.longitude,
                 "latitude": loc.coordinate.latitude,
                 "accuracy": loc.horizontalAccuracy,
-                "heading": loc.course >= 0 ? loc.course : NSNull(),
-                "speed": loc.speed >= 0 ? loc.speed : NSNull()
+                "heading": loc.course >= 0 ? loc.course as Any : NSNull(),
+                "speed": loc.speed >= 0 ? loc.speed as Any : NSNull()
             ],
             "timestamp": Int(loc.timestamp.timeIntervalSince1970 * 1000)
         ]
@@ -144,19 +142,19 @@ class ViewController: UIViewController, WKScriptMessageHandler, CLLocationManage
         if let json = try? JSONSerialization.data(withJSONObject: payload),
            let jsonString = String(data: json, encoding: .utf8) {
             let script = "window.__navweather_native_location_update && window.__navweather_native_location_update(\(jsonString));"
-            DispatchQueue.main.async { [weak self] in
-                self?.webView.evaluateJavaScript(script, completionHandler: nil)
+            Task { @MainActor in
+                self.webView?.evaluateJavaScript(script, completionHandler: nil)
             }
         }
     }
 
-    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+    nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
         let errorPayload: [String: Any] = ["code": 1]
         if let json = try? JSONSerialization.data(withJSONObject: errorPayload),
            let jsonString = String(data: json, encoding: .utf8) {
             let script = "window.__navweather_native_location_error && window.__navweather_native_location_error(\(jsonString));"
-            DispatchQueue.main.async { [weak self] in
-                self?.webView.evaluateJavaScript(script, completionHandler: nil)
+            Task { @MainActor in
+                self.webView?.evaluateJavaScript(script, completionHandler: nil)
             }
         }
     }
