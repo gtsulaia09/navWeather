@@ -3,13 +3,16 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
+  min-width: 0;
+  max-width: 100%;
   margin: 6px 0 2px;
 }
 .rfc__ribbon {
   display: flex;
-  height: 6px;
+  gap: 1px;
+  height: 7px;
   overflow: hidden;
-  border-radius: 3px;
+  border-radius: 4px;
   background: var(--surface-3);
 }
 .rfc__seg {
@@ -17,16 +20,16 @@
   min-width: 2px;
 }
 .rfc__seg[data-wx='clear'] {
-  background: color-mix(in srgb, var(--sun) 60%, transparent);
+  background: color-mix(in oklab, var(--sun) 72%, transparent);
 }
 .rfc__seg[data-wx='cloudy'] {
-  background: color-mix(in srgb, var(--cloud) 60%, transparent);
+  background: color-mix(in oklab, var(--cloud) 70%, transparent);
 }
 .rfc__seg[data-wx='fog'] {
   background: var(--fog);
 }
 .rfc__seg[data-wx='rain'] {
-  background: color-mix(in srgb, var(--rain) 60%, transparent);
+  background: color-mix(in oklab, var(--rain) 72%, transparent);
 }
 .rfc__seg[data-wx='heavy-rain'] {
   background: var(--rain);
@@ -39,15 +42,20 @@
   background: var(--storm);
 }
 .rfc__stops {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(68px, 1fr));
-  gap: 4px 8px;
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.rfc__stops::-webkit-scrollbar {
+  display: none;
 }
 .rfc__stop {
   display: flex;
   flex-direction: column;
+  flex: 1 0 56px;
   min-width: 0;
-  font-size: 13px;
+  font-size: 12.5px;
   line-height: 1.25;
 }
 .rfc__where {

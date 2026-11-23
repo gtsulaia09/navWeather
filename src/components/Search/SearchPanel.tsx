@@ -4,7 +4,7 @@ import { useLayoutStore } from '../../state/layout';
 import { useMessages } from '../../state/settings';
 import { useAppStore, type PlaceField } from '../../state/store';
 import { useElementSize } from '../../hooks/useElementSize';
-import { BackIcon, CloseIcon, DirectionsIcon, EditIcon, SettingsIcon, SwapIcon } from '../Icons/Icons';
+import { AlertIcon, BackIcon, CloseIcon, DirectionsIcon, EditIcon, SettingsIcon, SwapIcon } from '../Icons/Icons';
 import { NearbyChips } from '../Explore/Nearby';
 import { TravelModeBar } from '../Plan/TravelModeBar';
 import { PlaceInput } from './PlaceInput';
@@ -177,7 +177,8 @@ export function SearchPanel() {
         </div>
         {routeError ? (
           <p className="search__error" role="alert">
-            {routeError}
+            <AlertIcon size={16} />
+            <span>{routeError}</span>
           </p>
         ) : null}
         {routeError && travelMode === 'transit' ? (

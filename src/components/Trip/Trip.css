@@ -1,11 +1,12 @@
 /* Long Trip Mode */
 
 .ltrip-banner {
+  flex: 1 0 100%;
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
   gap: 4px 10px;
-  margin: 8px 0 0;
+  margin: 6px 0 0;
   padding: 8px 10px;
   border-radius: var(--r-control);
   background: var(--accent-soft);
@@ -20,7 +21,9 @@
   min-width: 0;
 }
 .ltrip-banner--quiet {
+  flex: 0 1 auto;
   background: transparent;
+  margin: 0;
   padding: 0;
 }
 

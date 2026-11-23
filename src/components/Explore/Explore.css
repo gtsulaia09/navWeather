@@ -315,6 +315,7 @@ button.me-dot::after {
   padding: 0 12px 0 8px;
   border-radius: 20px;
   background: var(--surface);
+  border: 1px solid var(--border);
   box-shadow: var(--shadow-float);
   color: var(--text);
   font-size: 14px;
@@ -403,15 +404,48 @@ button.me-dot::after {
 }
 
 /* Quick category chips + nearby results */
+@property --chips-fade-start {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+@property --chips-fade-end {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
 .nearby-chips {
   display: flex;
   gap: 6px;
   /* 4 px of the gap moved inside the scroller, so the chips' taller hit areas aren't clipped by it. */
   margin-top: 4px;
-  padding: 4px 0;
+  padding: 4px 16px 4px 2px;
+  scroll-padding-inline: 24px;
   overflow-x: auto;
   scrollbar-width: none;
   pointer-events: auto;
+}
+@supports (animation-timeline: scroll(self inline)) {
+  .nearby-chips {
+    --chips-fade: 24px;
+    mask:
+      linear-gradient(#000, #000) no-clip subtract,
+      linear-gradient(to right, #000, transparent) 0 0 / var(--chips-fade-start) 100% no-repeat no-clip,
+      linear-gradient(to right, transparent, #000) 100% 0 / var(--chips-fade-end) 100% no-repeat no-clip;
+    animation: chips-fade-start linear both, chips-fade-end linear both;
+    animation-timeline: scroll(self inline);
+    animation-range: 0 var(--chips-fade), calc(100% - var(--chips-fade)) 100%;
+  }
+  @keyframes chips-fade-start {
+    to {
+      --chips-fade-start: var(--chips-fade);
+    }
+  }
+  @keyframes chips-fade-end {
+    from {
+      --chips-fade-end: var(--chips-fade);
+    }
+  }
 }
 .nearby-chips::-webkit-scrollbar {
   display: none;
@@ -423,11 +457,21 @@ button.me-dot::after {
   padding: 0 14px;
   border-radius: 18px;
   background: var(--surface);
+  border: 1px solid var(--border);
   box-shadow: var(--shadow-float);
   color: var(--text);
   font-size: 14px;
   font-weight: 600;
   white-space: nowrap;
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease), transform 120ms var(--ease);
+}
+.nearby-chip:active {
+  transform: scale(0.97);
+}
+@media (prefers-reduced-motion: reduce) {
+  .nearby-chip:active {
+    transform: none;
+  }
 }
 .nearby-chip::before {
   content: '';

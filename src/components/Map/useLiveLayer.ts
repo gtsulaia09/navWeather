@@ -2,6 +2,7 @@ import { LngLatBounds, Marker, type Map as MLMap } from 'maplibre-gl';
 import { useEffect, type RefObject } from 'react';
 import type { ShareSnapshot } from '../../share/protocol';
 import { useViewer } from '../../share/viewer';
+import { useLayoutStore } from '../../state/layout';
 import type { LngLat } from '../../types/geo';
 import { EMPTY_FC, lineFeature, pointFeature, routeGradient, setData } from './mapLayers';
 
@@ -78,10 +79,19 @@ export function useLiveLayer(mapRef: RefObject<MLMap | null>, styleVersion: numb
       const follow = useViewer.getState().follow;
       if (!framed) {
         framed = true;
+        const insets = useLayoutStore.getState().insets;
+        const w = typeof window !== 'undefined' ? window.innerWidth : 1280;
+        const pad = {
+          top: Math.max(48, insets.top + 32),
+          bottom: Math.max(48, insets.bottom + 32),
+          left: Math.max(48, insets.left + 32),
+          right: w >= 600 ? 84 : 48,
+        };
         if (trip) {
           const b = new LngLatBounds(pos.c, pos.c).extend(trip.dest.c);
-          map.fitBounds(b, { padding: 48, maxZoom: 14, duration: 0 });
-        } else map.jumpTo({ center: pos.c, zoom: 14 });
+          if (trip.route) for (const c of trip.route) b.extend(c);
+          map.fitBounds(b, { padding: pad, maxZoom: 14, duration: 0 });
+        } else map.jumpTo({ center: pos.c, zoom: 14, padding: pad });
       } else if (follow && !ended) {
         map.easeTo({ center: pos.c, zoom: Math.max(map.getZoom(), 12), duration: opts.reduced ? 0 : 1000 });
       }

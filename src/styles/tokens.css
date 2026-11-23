@@ -41,21 +41,21 @@
   --fog: light-dark(#8a929d, #8c95a1);
   --storm: light-dark(#5b3cc4, #a48bff);
 
-  --sev-high: light-dark(#b45309, #f0a54a);
-  --sev-high-soft: light-dark(rgba(217, 119, 6, 0.12), rgba(240, 165, 74, 0.14));
+  --sev-high: light-dark(#9a4406, #f0a54a);
+  --sev-high-soft: light-dark(rgba(180, 83, 9, 0.11), rgba(240, 165, 74, 0.16));
   --sev-critical: light-dark(#b42318, #ff7b72);
-  --sev-critical-soft: light-dark(rgba(180, 35, 24, 0.1), rgba(255, 123, 114, 0.14));
+  --sev-critical-soft: light-dark(rgba(180, 35, 24, 0.1), rgba(255, 123, 114, 0.16));
   --danger-fill: #c62828;
   --success: light-dark(#157a3a, #4ade80);
 
   --route: light-dark(#0a64e8, #4c8dff);
   --route-casing: light-dark(#ffffff, #0b0d10);
   --route-traveled: light-dark(#9aa3ad, #59616c);
-  --route-alt: light-dark(#8d97a3, #6b7480);
+  --route-alt: light-dark(#7d8794, #76808d);
   --map-building-3d: light-dark(#dcdcd5, #25282e);
 
-  --shadow-float: 0 2px 12px light-dark(rgba(15, 23, 42, 0.16), rgba(0, 0, 0, 0.5)), 0 0 0 1px var(--border);
-  --shadow-marker: 0 1px 4px light-dark(rgba(15, 23, 42, 0.25), rgba(0, 0, 0, 0.6));
+  --shadow-float: 0 4px 16px light-dark(rgba(15, 23, 42, 0.14), rgba(0, 0, 0, 0.55)), 0 1px 3px light-dark(rgba(15, 23, 42, 0.08), rgba(0, 0, 0, 0.35)), 0 0 0 1px var(--border);
+  --shadow-marker: 0 2px 8px light-dark(rgba(15, 23, 42, 0.24), rgba(0, 0, 0, 0.65)), 0 0 0 1px var(--border-strong);
 
   --r-surface: 14px;
   --r-control: 10px;

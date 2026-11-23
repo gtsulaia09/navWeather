@@ -35,7 +35,7 @@ on Cloudflare Workers, localhost parity). Catalogue of free replacements: [FREE_
 | REQ-COST-013 | **Zero cost for the owner at any scale (ADR-019, owner, 2026-11-18):** Cloudflare Workers Free plan with no payment method (it cannot bill); everything per user is a static file under `/data` plus device code — routing (`src/roads`), search, forecasts, air quality, heights, places, Long Trip planner; the Worker serves only live sharing and driver reports (Durable Objects, Free plan). No Workers Paid, Containers, R2, D1, Queues or paid domain; `npm run check:envs` fails on any billable binding | P0 | IMPLEMENTED 2026-11-18 (Georgia: roads, search, places, heights; forecast and air quality worldwide on land) |
 | REQ-COST-015 | **Everything works at any number of users, still at $0 (ADR-020, owner, 2026-11-21):** report reads come from a static feed (assets-only Worker, rebuilt every ~10 min); reports, votes and live sharing use the Worker until its free daily limit, then overflow to the users' devices — live sharing phone to phone (WebRTC; handshake as encrypted ephemeral Nostr events; relay snapshots every 15 s behind strict NATs), reports as signed Nostr events with 16-bit proof of work merged into the feed; the map background is our own static basemap. Owner cost: $0 (optional domain ≤ $12/year) | P0 | IMPLEMENTED 2026-11-21 (localhost: local relay, local feed, Georgia basemap; production workflows `reports-feed.yml`, `basemap.yml` need the Cloudflare secrets) |
 | REQ-COST-014 | **Fast for users:** data files small and gzip-compressed (road tiles ≈ 35 kB, main roads 0.9 MB per region, forecast tiles 2° ≈ 40 kB, search shards a few kB), immutable per build folder and cached on the device (HTTP cache + service worker); routing in a Web Worker; a cached route is computed in well under a second | P0 | IMPLEMENTED 2026-11-18 (`src/roads/realData.test.ts`: Tbilisi → Batumi with alternatives < 1.5 s) |
-| REQ-DEV-001 | **Localhost parity:** every feature runs on a developer machine with no Cloudflare account and no money (`npm run dev` = Vite serving `public/data` + `wrangler dev` with local Durable Objects for sharing and reports; data from `npm run data:all`) **and** on the preview Worker; one E2E suite passes against both (ADR-016, ADR-019) | P0 | IMPLEMENTED (localhost) / PLANNED (preview needs the owner's free Cloudflare account) |
+| REQ-DEV-001 | **Localhost parity:** every feature runs on a developer machine with no Cloudflare account and no money (`npm run dev` = Vite serving `public/data` + `wrangler dev` with local Durable Objects for sharing and reports; data from `npm run data:all`) **and** on the preview Worker; one E2E suite passes against both (ADR-016, ADR-019) | P0 | VERIFIED (localhost `http://localhost:5173` + local `preview:worker` `http://127.0.0.1:8787`, 15/15 strict E2E passing 2026-11-23; B-48 fixed via `scripts/preview-worker.mjs`) / PLANNED (deployed Cloudflare preview needs the owner's free Cloudflare account) |
 
 ## 1. Product vision
 
@@ -283,10 +283,10 @@ While driving: one banner, voice first, large targets, nothing to read for long
 
 | ID | Requirement | Priority | Status |
 | --- | --- | --- | --- |
-| REQ-UX-001 | Desktop side panel; phone bottom sheet (not a shrunken desktop) | P0 | IMPLEMENTED |
+| REQ-UX-001 | Desktop side panel; phone bottom sheet (not a shrunken desktop) | P0 | VERIFIED (2026-11-23 visual audit across 375×812, 390×844, 768×1024, 1280×800 and 844×390 landscape, light/dark, EN/RU; B-43, B-44, B-47, B-50 fixed) |
 | REQ-UX-002 | While moving: no typing, no long lists, Report = 5 large buttons, voice push-to-talk | P0 | IMPLEMENTED |
 | REQ-UX-003 | Navigation camera at street level, heading-up, auto re-centre | P1 | IMPLEMENTED |
-| REQ-UX-004 | Every source shows its freshness (Forecast / Estimated / Scheduled / Stale / Simulated / Not available) | P0 | IMPLEMENTED |
+| REQ-UX-004 | Every source shows its freshness (Forecast / Estimated / Scheduled / Stale / Simulated / Not available) | P0 | VERIFIED (2026-11-23: explicit `data-missing` / `data-stale` messages + dev data hints in routing, search, weather and place cards; B-46) |
 
 ## 17. Accessibility requirements
 
@@ -294,7 +294,7 @@ While driving: one banner, voice first, large targets, nothing to read for long
 | --- | --- | --- | --- |
 | REQ-A11Y-001 | WCAG 2.1 AA: axe-core 0 violations in all main states, light/dark | P1 | VERIFIED (manual axe run 2026-10-02; automated in DP-11.4) |
 | REQ-A11Y-002 | Keyboard: focus traps in dialogs, Escape, focus return | P1 | VERIFIED |
-| REQ-A11Y-003 | Touch targets ≥44 px; text never relies on colour alone | P1 | VERIFIED (2026-11-23: map labels `.altlabel` and `.wmarker` have ≥44 px hit areas — DP-11.11; 36 px chips and segmented options get 44 px hit areas, departure bars a finger slide, header controls no longer under the sheet handle — B-26, B-33; `e2e/mobile.spec.ts`) |
+| REQ-A11Y-003 | Touch targets ≥44 px; text never relies on colour alone | P1 | VERIFIED (2026-11-23: map labels `.altlabel` and `.wmarker` have ≥44 px hit areas — DP-11.11; 36 px chips and segmented options get 44 px hit areas, departure bars a finger slide, header controls no longer under the sheet handle — B-26, B-33; `--sev-high` deepened to `#9a4406` and paired with `AlertIcon` + tinted callouts on route options, weather warnings, errors and empty states — B-50; `e2e/mobile.spec.ts`) |
 
 ## 18. Performance requirements
 
@@ -365,13 +365,13 @@ BLOCKED (REQ-PLAT-005).
 
 | ID | Requirement | Priority | Status |
 | --- | --- | --- | --- |
-| REQ-TEST-001 | Unit + scenario tests for all engines (586 passing on 2026-10-03) | P0 | VERIFIED |
+| REQ-TEST-001 | Unit + scenario tests for all engines (898 passing on 2026-11-23) | P0 | VERIFIED |
 | REQ-TEST-002 | Worker smoke tests for share and reports, both API prefixes | P0 | VERIFIED (local) |
 | REQ-TEST-003 | Special cases: time-zone crossing, provider failure, re-route, GPS drift/tunnel, offline, duplicate alerts, forecast update, long and international routes | P0 | PARTIALLY (see TESTING gaps) |
 | REQ-TEST-004 | Real-device tests (iOS Safari, Android Chrome) before public beta | P1 | PLANNED (DP-11.7) |
-| REQ-TEST-005 | Browser E2E (Playwright) for search → route → simulate → arrive, Long Trip, offline, API failure | P1 | PLANNED (DP-11.3) |
-| REQ-TEST-006 | A regression test for every confirmed defect (B-01…B-07 first) before it is closed | P0 | PLANNED (stage 1) |
-| REQ-TEST-007 | The same E2E suite runs against `localhost` and the preview Worker (REQ-DEV-001) | P0 | PLANNED (DP-2.6, DP-11.3) |
+| REQ-TEST-005 | Browser E2E (Playwright) for search → route → simulate → arrive, Long Trip, offline, API failure | P1 | PARTIALLY (`e2e/smoke.spec.ts` + `e2e/mobile.spec.ts`: 15/15 strict E2E incl. locate dot, denied notice, typed Tbilisi→Batumi route line & weather; DP-11.3 for offline/Long Trip) |
+| REQ-TEST-006 | A regression test for every confirmed defect (B-01…B-07 first) before it is closed | P0 | IN PROGRESS (B-01…B-07, B-24…B-50 covered by unit/E2E regression tests) |
+| REQ-TEST-007 | The same E2E suite runs against `localhost` and the preview Worker (REQ-DEV-001) | P0 | VERIFIED locally (2026-11-23: 15/15 `E2E_STRICT=1` against `http://localhost:5173` and `preview:worker` `http://127.0.0.1:8787`); deployed Cloudflare preview pending account |
 
 ## 26. CI/CD requirements
 

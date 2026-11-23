@@ -3,7 +3,7 @@
 ## Commands
 
 ```bash
-npm test              # unit + store-level scenarios (deterministic fake providers, no network; 91 files, 889 tests)
+npm test              # unit + store-level scenarios (deterministic fake providers, no network; 91 files, 898 tests)
 npm run typecheck     # app + worker + e2e + mobile spike
 npm run check:envs    # wrangler environments in step, zero billable bindings (ADR-019/020)
 npm run check:cost    # production bundle, CSP connect-src and .env.* guard (zero forbidden hosts, zero TURN)
@@ -34,12 +34,17 @@ UI folders, and for browser globals (`window`, `document`, `localStorage`, `navi
 
 **Browser test** (`e2e/smoke.spec.ts`, Playwright, DP-2.6): drives the installed Google Chrome headless (`channel:
 'chrome'` — nothing to download). `BASE_URL` picks the target: `http://localhost:5173` (`npm run dev`, the default),
-`http://127.0.0.1:8787` (`npm run build` + `npm run dev:api` — what CI uses), or the preview Worker (never
-production: the test shares and reports). `E2E_STRICT=1` — with our data, forecast and router running — also fails
-on any request to the public services with usage limits (OSRM, FOSSGIS, Photon, Nominatim, Overpass, the Open-Meteo
-forecast API). The basemap is skipped (`E2E_MAP=1` keeps it): in headless Chrome every map frame waits on a GPU
-process without a display and the page stalls for a minute. The CI job `e2e` builds Georgia's data, a Caucasus
-forecast and Valhalla on the runner and runs it strictly.
+`http://127.0.0.1:8787` (`npm run build` + `npm run preview:worker` via `scripts/preview-worker.mjs` — what CI uses),
+or the preview Worker (never production: the test shares and reports). Covers pressing "my location" with mocked
+geolocation (verifying active `aria-pressed="true"` and visible blue `.me-dot` dimensions/fill), denied geolocation
+notice, typing `Tbilisi` → `Batumi` (verifying `"Batumi, Georgia"` ranks #1, submit works with suggestions open, route
+line layers render above basemap fills via `data-route-visible="1"`, distance/duration/ETA and real arrival-time
+temperatures appear), simulated drive, live sharing and driver reports. `E2E_STRICT=1` — with our data, forecast and
+router running — also fails on any request to the public services with usage limits (OSRM, FOSSGIS, Photon, Nominatim,
+Overpass, the Open-Meteo forecast API). Both `http://localhost:5173` and `http://127.0.0.1:8787` (`preview:worker`)
+pass 15/15 strict E2E tests (`smoke.spec.ts` + `mobile.spec.ts`). The basemap is skipped (`E2E_MAP=1` keeps it): in
+headless Chrome every map frame waits on a GPU process without a display and the page stalls for a minute. The CI job
+`e2e` builds Georgia's data, a Caucasus forecast and runs it strictly.
 
 ## What is covered
 
@@ -116,7 +121,8 @@ automation of this check is DEVELOPMENT_PLAN DP-11.4.
   - **4× CPU slowdown:** search ready **1,836 ms → 1,607 ms**, FCP/LCP **1,588 ms**, route **7,975 ms → 6,777 ms**, route long tasks **1,014 ms → 662 ms** (8 → 6), drive long tasks **728 ms → 596 ms** (7 → 5), max interaction event (INP) **216 ms → 184 ms** (within ≤ 200 ms budget), heap after exit **57.2 MB → 26.6 MB** (pre-drive 28.6 MB).
   - **6× CPU slowdown:** FCP/LCP **1,944 ms → 1,756 ms**, search ready **1,984 ms → 1,800 ms**, pause latency **473 ms → 397 ms**, max interaction event (INP) **304 ms → 248 ms**, drive long tasks **968 ms → 855 ms** (8 → 6).
 - **Real Android Chrome 134** (Android Studio emulator `Medium_Phone_API_36.1`, 411×813 CSS px, DPR 2.625): verified 2026-11-18 (keyboard visual viewport, dialogs, top-edge ✕ tap) and re-verified 2026-11-23 on the production build (own Protomaps static basemap rendered, zero horizontal overflow, Web Worker routing triggered).
-- **Real iOS Simulator Safari (iOS 27.2, iPhone 18 Pro, 402×714 CSS px, DPR 3):** verified 2026-11-19 (B-37…B-41) and re-verified 2026-11-23 on the production build with own Protomaps static basemap — full Tbilisi → Batumi route + 8 s simulated drive at 60× ran at **251 frames (~31 fps), 0 freezes (B-42 fixed), 166 ms pause response, 0 horizontal overflow**.
+- **Real iOS Simulator Safari (iOS 27.2, iPhone 18 Pro, 402×714 CSS px, DPR 3):** verified 2026-11-19 (B-37…B-41) and re-verified 2026-11-23 on the production build (`preview:worker` with own Protomaps static basemap) — full Tbilisi → Batumi route + 8 s simulated drive at 60× ran at **251 frames (~31 fps), 0 freezes (B-42 fixed), 166 ms pause response, 0 horizontal overflow**; start screen and category chips / place card re-verified after B-43 and Part 2 visual polish.
+- **Desktop Safari (`safaridriver`):** Safari 26.6.2 requires the user to enable "Allow remote automation" in Safari Settings (not altered automatically; WebKit rendering verified via iOS 27.2 Simulator Safari).
 - **Real Meta Hermes bytecode compiler (`hermesc` 250829098.0.19, HBC v98, 2026-11-23):** shared TS core (`mobile/src/hermes-core-entry.ts`, 146.6 kB ES2019 `platform: 'neutral'`, 0 browser polyfills, `fflate` gzip) compiled to 151 kB `.hbc` with 0 errors and ran 50 full `derive` iterations in a zero-DOM ES2020 sandbox at **median 1 ms / p95 2 ms**.
 - **Not run on:** physical iPhone / Android handsets, Samsung Internet, Firefox for Android, live CarPlay external display / Android Auto DHU (CocoaPods, Android NDK, and SDK Manager `extras/google/auto` not installed on this host).
 

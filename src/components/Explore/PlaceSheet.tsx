@@ -188,7 +188,14 @@ function PlaceWeather() {
         <span className="pw-now__temp tabular">{formatTemp(now.temperature, units.temperature)}</span>
         <span className="pw-now__text">
           <span className="pw-now__cond">{conditionText(now, m)}</span>
-          <span className="pw-now__detail">{detailLine(now, m, units)}</span>
+          <span className="pw-now__detail">
+            {detailParts(now, m, units).map((part, i) => (
+              <span key={i} className="nowrap">
+                {i > 0 ? ' · ' : ''}
+                {part}
+              </span>
+            ))}
+          </span>
         </span>
       </section>
       {card.air !== null ? (
@@ -238,14 +245,14 @@ function PlaceWeather() {
   );
 }
 
-function detailLine(w: WeatherAtTime, m: ReturnType<typeof useMessages>, units: ReturnType<typeof useSettings.getState>['units']): string {
+function detailParts(w: WeatherAtTime, m: ReturnType<typeof useMessages>, units: ReturnType<typeof useSettings.getState>['units']): string[] {
   const parts: string[] = [];
   if (w.feelsLike !== undefined && Math.round(w.feelsLike) !== Math.round(w.temperature)) parts.push(m.explore.feels(formatTemp(w.feelsLike, units.temperature)));
   if (w.windSpeed !== undefined) parts.push(`${m.detail.wind} ${formatSpeed(w.windSpeed, units.wind, m)}`);
   if (w.precipitationProbability !== undefined && w.precipitationProbability >= 10) {
     parts.push(m.explore.rainChance(`${Math.round(w.precipitationProbability / 5) * 5}%`));
   }
-  return parts.join(' · ');
+  return parts;
 }
 
 function PlaceDays() {

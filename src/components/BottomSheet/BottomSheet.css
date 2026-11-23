@@ -12,6 +12,7 @@
   padding-left: var(--safe-left);
   padding-right: var(--safe-right);
   background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: var(--r-surface) var(--r-surface) 0 0;
   box-shadow: var(--shadow-float);
   transition: transform var(--dur) var(--ease);
@@ -122,6 +123,8 @@
 }
 .sheet__body {
   display: grid;
+  /* Prevent horizontal scrollers (road forecast stops, weather strip) from widening the sheet grid track. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
   border-top: 1px solid var(--border);
   padding-top: 12px;

@@ -98,9 +98,12 @@ export default function RouteMap({ viewer = false }: { viewer?: boolean }) {
 
   const padding = useMemo(() => {
     const h = typeof window !== 'undefined' ? window.innerHeight : 800;
+    const w = typeof window !== 'undefined' ? window.innerWidth : 1280;
     const top = insets.top + 8;
     const bottom = Math.min(insets.bottom + 8, Math.max(0, h - top - 160));
-    return { top, bottom, left: insets.left + 16, right: 16 };
+    // Keep routes and endpoints clear of the right-hand floating map controls (52 px + margin).
+    const right = w >= 600 ? 76 : 20;
+    return { top, bottom, left: insets.left + 16, right };
   }, [insets.top, insets.bottom, insets.left]);
   const paddingRef = useRef(padding);
   paddingRef.current = padding;
