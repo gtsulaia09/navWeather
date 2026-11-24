@@ -10,6 +10,7 @@
 </p>
 
 <p align="center">
+  <a href="https://gtsulaia09.github.io/navWeather/"><img src="https://img.shields.io/badge/live%20demo-try%20now-0a64e8.svg" alt="Live Demo" /></a>
   <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License" />
   <img src="https://img.shields.io/badge/cost-%240%20at%20any%20scale-157a3a.svg" alt="$0 at any scale" />
   <img src="https://img.shields.io/badge/languages-EN%20%7C%20RU%20%7C%20KA-2f6fe0.svg" alt="Languages: EN, RU, KA" />
