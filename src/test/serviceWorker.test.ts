@@ -13,15 +13,16 @@ interface FakeFetchEvent {
   respondWith: ReturnType<typeof vi.fn>;
 }
 
-function loadWorker(existingCaches: string[] = []) {
+function loadWorker(existingCaches: string[] = [], base = '/') {
   const listeners: Record<string, Listener> = {};
   const self = {
     location: { origin: 'https://navweather.pages.dev' },
+    registration: { scope: `https://navweather.pages.dev${base}` },
     addEventListener: (type: string, fn: Listener) => (listeners[type] = fn),
     skipWaiting: vi.fn(),
     clients: { claim: vi.fn() },
   };
-  const caches = { open: vi.fn(async () => ({ put: vi.fn() })), match: vi.fn(async () => undefined), keys: vi.fn(async () => existingCaches), delete: vi.fn() };
+  const caches = { open: vi.fn(async () => ({ put: vi.fn(async () => undefined), match: vi.fn(async () => undefined), keys: vi.fn(async () => []), delete: vi.fn() })), match: vi.fn(async () => undefined), keys: vi.fn(async () => existingCaches), delete: vi.fn() };
   const fetch = vi.fn(async () => new Response('ok'));
   const src = readFileSync(resolve(__dirname, '../../public/sw.js'), 'utf8');
   new Function('self', 'caches', 'fetch', src)(self, caches, fetch);
@@ -61,6 +62,17 @@ describe('service worker', () => {
     expect(dispatch('https://navweather.pages.dev/', { mode: 'navigate' }).respondWith).toHaveBeenCalled();
     expect(dispatch('https://navweather.pages.dev/assets/index-abc.js').respondWith).toHaveBeenCalled();
     expect(dispatch('https://navweather.pages.dev/assets/x.js', { method: 'POST' }).respondWith).not.toHaveBeenCalled();
+  });
+});
+
+describe('service worker: under a base path (GitHub Pages demo, REQ-CF-019)', () => {
+  it('applies the same rules below /navWeather/', () => {
+    const { dispatch } = loadWorker([], '/navWeather/');
+    expect(dispatch('https://navweather.pages.dev/navWeather/', { mode: 'navigate' }).respondWith).toHaveBeenCalled();
+    expect(dispatch('https://navweather.pages.dev/navWeather/assets/index-abc.js').respondWith).toHaveBeenCalled();
+    expect(dispatch('https://navweather.pages.dev/navWeather/data/roads/b1/7/1.bin').respondWith).toHaveBeenCalled();
+    expect(dispatch('https://navweather.pages.dev/navWeather/data/roads.json').respondWith).not.toHaveBeenCalled();
+    expect(dispatch('https://navweather.pages.dev/api/v1/reports').respondWith).not.toHaveBeenCalled();
   });
 });
 

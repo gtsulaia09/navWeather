@@ -2,10 +2,13 @@ import { getShareProvider } from '../platform/share';
 import type { Place } from '../types/geo';
 import { SHARE_ID_RE } from './protocol';
 
+/** Where the app lives on its origin: '/' (Cloudflare) or '/navWeather/' (GitHub Pages demo). */
+export const APP_BASE = import.meta.env?.BASE_URL ?? '/';
+
 /** A place link: `/?p=lat,lon&n=Name`. Contains only that spot — never the sender's position. */
 export function placeUrl(place: Place, origin = location.origin): string {
   const [lon, lat] = place.coordinate;
-  const u = new URL('/', origin);
+  const u = new URL(APP_BASE, origin);
   u.searchParams.set('p', `${lat.toFixed(5)},${lon.toFixed(5)}`);
   if (place.name && place.kind !== 'pin') u.searchParams.set('n', place.name.slice(0, 80));
   return u.toString();
@@ -25,7 +28,7 @@ export function parsePlaceUrl(search: string): Place | null {
 
 /** A live link. `/p` marks a share that runs phone to phone (ADR-020): the viewer skips the Worker. */
 export function liveUrl(id: string, origin = location.origin, peer = false): string {
-  return new URL(`/live/${id}${peer ? '/p' : ''}`, origin).toString();
+  return new URL(`${APP_BASE}live/${id}${peer ? '/p' : ''}`, origin).toString();
 }
 
 export function parseLiveUrl(pathname: string): string | null {
@@ -33,7 +36,8 @@ export function parseLiveUrl(pathname: string): string | null {
 }
 
 export function parseLiveLink(pathname: string): { id: string; peer: boolean } | null {
-  const m = /^\/live\/([^/]+)(\/p)?\/?$/.exec(pathname);
+  const path = pathname.startsWith(APP_BASE) ? `/${pathname.slice(APP_BASE.length)}` : pathname;
+  const m = /^\/live\/([^/]+)(\/p)?\/?$/.exec(path);
   return m && SHARE_ID_RE.test(m[1]) ? { id: m[1], peer: !!m[2] } : null;
 }
 

@@ -6,7 +6,7 @@ import { getProviders } from '../services/providers';
 import type { LayerKind } from '../algorithms/weatherGrid';
 import type { Poi, PoiCategory } from '../services/places/PoiProvider';
 import { describeError, describeWeatherError, parseCoordinateText } from '../services/routePlanner';
-import { placeUrl } from '../share/links';
+import { APP_BASE, placeUrl } from '../share/links';
 import { useLiveShare } from '../share/liveShare';
 import type { LngLat, Place } from '../types/geo';
 import type { LocationForecast } from '../types/weather';
@@ -134,8 +134,8 @@ function isAppleMobile(): boolean {
 }
 
 function syncUrl(place: Place | null) {
-  if (typeof history === 'undefined' || location.pathname.startsWith('/live/')) return;
-  const next = place ? placeUrl(place) : `${location.origin}/`;
+  if (typeof history === 'undefined' || location.pathname.startsWith(`${APP_BASE}live/`)) return;
+  const next = place ? placeUrl(place) : `${location.origin}${APP_BASE}`;
   if (next !== location.href) history.replaceState(null, '', next);
 }
 

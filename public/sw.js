@@ -16,7 +16,11 @@ const DATA_MAX = 600;
 const IMMUTABLE_DATA = /^\/data\/(roads\/[^/]+\/|search\/[^/]+\/|weather\/runs\/|air\/runs\/|basemap\/m\d+\/|basemap\/assets\/)/;
 /** The downloadable voice was removed; free the space it took (~93 MB) on devices that had it. */
 const RETIRED = ['navweather-voices-v1'];
-const SHELL = ['/', '/manifest.webmanifest', '/favicon.svg', '/icons/icon-192.png', '/icons/icon-512.png'];
+/** Where the app lives: '/' on Cloudflare, '/navWeather/' on the GitHub Pages demo (this worker's own scope). */
+const BASE = new URL(self.registration.scope).pathname;
+/** A same-origin path as if the app lived at '/', so the rules below read the same under any base. */
+const rel = (pathname) => (pathname.startsWith(BASE) ? `/${pathname.slice(BASE.length)}` : pathname);
+const SHELL = ['', 'manifest.webmanifest', 'favicon.svg', 'icons/icon-192.png', 'icons/icon-512.png'].map((p) => BASE + p);
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(VERSION).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
@@ -37,7 +41,8 @@ self.addEventListener('fetch', (event) => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return; // never touch provider / tile traffic
-  if (url.pathname.startsWith('/api/')) return; // live data (share positions) is never cached
+  const path = rel(url.pathname);
+  if (path.startsWith('/api/')) return; // live data (share positions) is never cached
 
   if (req.mode === 'navigate') {
     event.respondWith(
@@ -46,16 +51,16 @@ self.addEventListener('fetch', (event) => {
           // Only a real app page may become the offline shell.
           if (res.ok && (res.headers.get('content-type') || '').includes('text/html')) {
             const copy = res.clone();
-            caches.open(VERSION).then((c) => c.put('/', copy));
+            caches.open(VERSION).then((c) => c.put(BASE, copy));
           }
           return res;
         })
-        .catch(() => caches.match('/')),
+        .catch(() => caches.match(BASE)),
     );
     return;
   }
 
-  if (IMMUTABLE_DATA.test(url.pathname)) {
+  if (IMMUTABLE_DATA.test(path)) {
     event.respondWith(
       caches.open(DATA).then((cache) =>
         cache.match(req).then(
@@ -73,7 +78,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  if (url.pathname.startsWith('/assets/') || url.pathname.startsWith('/icons/')) {
+  if (path.startsWith('/assets/') || path.startsWith('/icons/')) {
     event.respondWith(
       caches.match(req).then(
         (hit) =>

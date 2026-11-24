@@ -32,7 +32,7 @@ export function LiveView() {
   const title = status === 'ended' ? (name ?? m.share.viewerTitle) : name ? m.share.sharedBy(name) : m.share.sharedAnon;
   return (
     <>
-      <a className="live-brand" href="/">
+      <a className="live-brand" href={import.meta.env.BASE_URL}>
         WayTher
       </a>
       <BottomSheet
@@ -91,7 +91,7 @@ function NotFound() {
   const m = useMessages();
   return (
     <div className="live-body">
-      <a className="btn btn-primary" href="/">
+      <a className="btn btn-primary" href={import.meta.env.BASE_URL}>
         {m.share.openApp}
       </a>
     </div>

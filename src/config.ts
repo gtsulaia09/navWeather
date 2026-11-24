@@ -28,6 +28,8 @@ const DEFAULT_RELAYS = DEFAULT_RELAY_LIST.join(',');
 const apiOriginValue = str('VITE_API_ORIGIN', '').replace(/\/+$/, '');
 setApiOrigin(apiOriginValue);
 const api = (path: string) => `${apiOriginValue}/api/v1${path}`;
+/** Our static files sit under the app's base path: '/data' on Cloudflare, '/navWeather/data' on GitHub Pages. */
+const DATA = `${(import.meta.env?.BASE_URL ?? '/').replace(/\/+$/, '')}/data`;
 
 export const config = {
   providers: {
@@ -54,7 +56,7 @@ export const config = {
   },
   endpoints: {
     /** Our static data (roads, search, weather, air, heights, places): free static files on the app's origin. */
-    data: str('VITE_DATA_URL', '/data'),
+    data: str('VITE_DATA_URL', DATA),
     /** Driver reports relay (the Worker in worker/, Free plan): writes, and reads where no feed is reachable. */
     reports: str('VITE_REPORTS_URL', api('/reports')),
     /**
@@ -62,19 +64,19 @@ export const config = {
      * Worker's origin (set by the deploy workflow); localhost: `npm run data:reports` writes public/data/reports.
      * Missing or stale → the app reads the Worker list instead.
      */
-    reportsFeed: str('VITE_REPORTS_FEED_URL', '/data/reports'),
+    reportsFeed: str('VITE_REPORTS_FEED_URL', `${DATA}/reports`),
     /**
      * Nostr relays for overflow (ADR-020): live-sharing handshakes and driver reports when the Worker is busy.
      * Public relays in production; "/nostr" = the local relay behind the dev server (scripts/nostr-relay.mjs).
      */
     nostrRelays: str('VITE_NOSTR_RELAYS', DEFAULT_RELAYS),
     /** Our places tiles (static assets built by `npm run data:osm`). */
-    placesTiles: str('VITE_PLACES_TILES_URL', '/data/places/v1'),
+    placesTiles: str('VITE_PLACES_TILES_URL', `${DATA}/places/v1`),
     /**
      * Our basemap (ADR-020): production — the `navweather-basemap` Worker's origin (set by the deploy workflow);
      * localhost — `npm run data:basemap` writes public/data/basemap. Missing → the OpenFreeMap styles below.
      */
-    basemap: str('VITE_BASEMAP_URL', '/data/basemap'),
+    basemap: str('VITE_BASEMAP_URL', `${DATA}/basemap`),
     /** Fallback basemap styles while none of ours is deployed. */
     mapStyleLight: str('VITE_MAP_STYLE_LIGHT', 'https://tiles.openfreemap.org/styles/positron'),
     mapStyleDark: str('VITE_MAP_STYLE_DARK', 'https://tiles.openfreemap.org/styles/dark'),

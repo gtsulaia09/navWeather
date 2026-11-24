@@ -156,6 +156,7 @@ decision: [ADR-013](architecture/decisions/ADR-013-trip-planner.md).
 | REQ-CF-016 | ~~R2 for tiles, weather cells, terrain~~ → static assets under `/data` (roads, search, forecast, air, heights, places) | P1 | SUPERSEDED by ADR-019 (IMPLEMENTED as static files) | `pipelines/lib/store.mjs`, `public/_headers` |
 | REQ-CF-017 | ~~Cloudflare Containers for Valhalla, MOTIS, LibreWXR~~ → routing on the device; transit off until an on-device timetable router | P1 | SUPERSEDED by ADR-019 | `src/roads/` |
 | REQ-CF-018 | Data pipelines on a schedule: GitHub Actions (public repo: free) build all static data and deploy four times a day; every job runs by hand on localhost (`npm run data:all`) | P1 | IMPLEMENTED 2026-11-18 (`.github/workflows/deploy.yml`) | ADR-019 |
+| REQ-CF-019 | Public demo on GitHub Pages (owner, 2026-11-24): the same app and static data, built under the `/navWeather/` base path four times a day and on every push to main. A showcase mirror, not production — production stays on Workers (REQ-CF-013). Pages serves static files only: live sharing and driver reports say "not available", the map uses the OpenFreeMap fallback, `_headers` (CSP) is not applied. The app runs under any base path (`import.meta.env.BASE_URL`: links, `/data`, service worker, manifest) | P2 | IMPLEMENTED 2026-11-24 (`.github/workflows/pages.yml`) | [DELIVERY](operations/DELIVERY.md) |
 
 ## 7. Map architecture
 
