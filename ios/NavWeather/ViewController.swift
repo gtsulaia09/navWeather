@@ -13,6 +13,10 @@ class ViewController: UIViewController, WKScriptMessageHandler, CLLocationManage
     private let notificationFeedback = UINotificationFeedbackGenerator()
     private var isWatchingLocation = false
     private var utteranceIds: [ObjectIdentifier: Int] = [:]
+    /// AVAudioSession activation can take a noticeable time; never do it on the main thread.
+    private let audioQueue = DispatchQueue(label: "app.wayther.audio-session", qos: .userInitiated)
+    /// When a prompt was last queued: the session must not be released while one is on its way to the synthesizer.
+    private var lastSpeakRequestAt = Date.distantPast
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -27,6 +31,7 @@ class ViewController: UIViewController, WKScriptMessageHandler, CLLocationManage
     private func setupLocationManager() {
         locationManager.delegate = self
         locationManager.desiredAccuracy = kCLLocationAccuracyBestForNavigation
+        locationManager.activityType = .automotiveNavigation
         locationManager.distanceFilter = 2.0
         locationManager.allowsBackgroundLocationUpdates = true
         locationManager.pausesLocationUpdatesAutomatically = false
@@ -55,6 +60,12 @@ class ViewController: UIViewController, WKScriptMessageHandler, CLLocationManage
         webView.scrollView.contentInsetAdjustmentBehavior = .never
         webView.isOpaque = false
         webView.backgroundColor = .clear
+        #if DEBUG
+        // Lets Safari › Develop › <iPhone> inspect and profile the page in debug builds.
+        if #available(iOS 16.4, *) {
+            webView.isInspectable = true
+        }
+        #endif
 
         view.addSubview(webView)
     }
@@ -66,23 +77,21 @@ class ViewController: UIViewController, WKScriptMessageHandler, CLLocationManage
     }
 
     // MARK: - WKScriptMessageHandler
-    nonisolated func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+    // WebKit delivers script messages on the main thread; handling them right here (instead of reading the
+    // main-actor WKScriptMessage from a nonisolated method and hopping through a Task) is what Swift expects.
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         guard let body = message.body as? [String: Any] else { return }
-        let messageName = message.name
-
-        Task { @MainActor in
-            switch messageName {
-            case "nativeLocation":
-                self.handleLocationMessage(body)
-            case "nativeHaptics":
-                self.handleHapticsMessage(body)
-            case "nativeWakeLock":
-                self.handleWakeLockMessage(body)
-            case "nativeTTS":
-                self.handleTTSMessage(body)
-            default:
-                break
-            }
+        switch message.name {
+        case "nativeLocation":
+            handleLocationMessage(body)
+        case "nativeHaptics":
+            handleHapticsMessage(body)
+        case "nativeWakeLock":
+            handleWakeLockMessage(body)
+        case "nativeTTS":
+            handleTTSMessage(body)
+        default:
+            break
         }
     }
 
@@ -128,6 +137,7 @@ class ViewController: UIViewController, WKScriptMessageHandler, CLLocationManage
         let action = body["action"] as? String ?? "speak"
         if action == "cancel" {
             speechSynthesizer.stopSpeaking(at: .immediate)
+            deactivateAudioSessionIfIdle()
             return
         }
 
@@ -150,7 +160,25 @@ class ViewController: UIViewController, WKScriptMessageHandler, CLLocationManage
         if let utteranceId {
             utteranceIds[ObjectIdentifier(utterance)] = utteranceId
         }
-        speechSynthesizer.speak(utterance)
+        let synthesizer = speechSynthesizer
+        lastSpeakRequestAt = Date()
+        audioQueue.async {
+            try? AVAudioSession.sharedInstance().setActive(true)
+            Task { @MainActor in
+                synthesizer.speak(utterance)
+            }
+        }
+    }
+
+    /// Gives the audio back to other apps (music un-ducks) once nothing is being spoken.
+    private func deactivateAudioSessionIfIdle() {
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            guard let self, !self.speechSynthesizer.isSpeaking, Date().timeIntervalSince(self.lastSpeakRequestAt) > 0.4 else { return }
+            self.audioQueue.async {
+                try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+            }
+        }
     }
 
     private func notifyTtsEnd(id: Int) {
@@ -174,6 +202,7 @@ class ViewController: UIViewController, WKScriptMessageHandler, CLLocationManage
             if let id = self.utteranceIds.removeValue(forKey: key) {
                 self.notifyTtsEnd(id: id)
             }
+            self.deactivateAudioSessionIfIdle()
         }
     }
 
@@ -183,6 +212,7 @@ class ViewController: UIViewController, WKScriptMessageHandler, CLLocationManage
             if let id = self.utteranceIds.removeValue(forKey: key) {
                 self.notifyTtsEnd(id: id)
             }
+            self.deactivateAudioSessionIfIdle()
         }
     }
 

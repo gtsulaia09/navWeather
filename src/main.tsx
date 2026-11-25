@@ -3,10 +3,13 @@ import { createRoot } from 'react-dom/client';
 import App from './App';
 import { loadInitialLocale } from './state/settings';
 import { initNativeIosBridge } from './platform/nativeIosBridge';
+import { installNativeDecompression } from './platform/decompress';
 import './styles/tokens.css';
 import './styles/base.css';
 
 initNativeIosBridge();
+// Map tiles and data files decode in the browser's native code instead of blocking the UI thread.
+installNativeDecompression();
 
 // The saved language's text (if not English) loads first, so the UI never flashes English.
 void loadInitialLocale().finally(() => {

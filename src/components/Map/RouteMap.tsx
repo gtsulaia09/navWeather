@@ -124,6 +124,9 @@ export default function RouteMap({ viewer = false }: { viewer?: boolean }) {
         attributionControl: false, // placed top-right so the sheet never hides it
         pitchWithRotate: false,
         fadeDuration: 150,
+        // Phones report 3× pixels; drawing the map at 3× costs ~2.25× the GPU/CPU of 2× for detail the eye barely
+        // sees, and made panning stutter on iPhone. Cap at 2×.
+        pixelRatio: Math.min(typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1, 2),
       });
     } catch {
       setMapError(m.ui.mapUnavailable);
