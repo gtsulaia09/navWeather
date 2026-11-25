@@ -3,16 +3,16 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 54;
+	objectVersion = 56;
 	objects = {
 
 /* Begin PBXBuildFile section */
 		010000000000000000000015 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 010000000000000000000014 /* AppDelegate.swift */; };
 		010000000000000000000017 /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 010000000000000000000016 /* ViewController.swift */; };
 		010000000000000000000019 /* LocalSchemeHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 010000000000000000000018 /* LocalSchemeHandler.swift */; };
-		010000000000000000000029 /* CarPlaySceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 010000000000000000000028 /* CarPlaySceneDelegate.swift */; };
 		010000000000000000000022 /* dist in Resources */ = {isa = PBXBuildFile; fileRef = 010000000000000000000021 /* dist */; };
 		010000000000000000000027 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 010000000000000000000026 /* Assets.xcassets */; };
+		010000000000000000000029 /* CarPlaySceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 010000000000000000000028 /* CarPlaySceneDelegate.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -20,10 +20,10 @@
 		010000000000000000000014 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		010000000000000000000016 /* ViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewController.swift; sourceTree = "<group>"; };
 		010000000000000000000018 /* LocalSchemeHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalSchemeHandler.swift; sourceTree = "<group>"; };
-		010000000000000000000028 /* CarPlaySceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarPlaySceneDelegate.swift; sourceTree = "<group>"; };
 		010000000000000000000020 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		010000000000000000000021 /* dist */ = {isa = PBXFileReference; lastKnownFileType = folder; path = dist; sourceTree = "<group>"; };
 		010000000000000000000026 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		010000000000000000000028 /* CarPlaySceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarPlaySceneDelegate.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -217,6 +217,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 3;
+				DEVELOPMENT_TEAM = 6649C5S62L;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = NavWeather/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -240,6 +241,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 3;
+				DEVELOPMENT_TEAM = 6649C5S62L;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = NavWeather/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
