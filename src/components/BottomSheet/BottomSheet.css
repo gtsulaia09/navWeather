@@ -16,7 +16,8 @@
   border-radius: var(--r-surface) var(--r-surface) 0 0;
   box-shadow: var(--shadow-float);
   opacity: 1;
-  translate: 0 0;
+  /* `none` at rest, not `0 0`: a translate value makes the sheet the containing block of the fixed strip below. */
+  translate: none;
   /* Detent changes and drags move the sheet with compositor animations (BottomSheet.tsx); only the entrance is CSS. */
   transition:
     opacity var(--dur-enter) var(--ease-out),
@@ -28,11 +29,13 @@
   }
 }
 /* The phone sheet slides when its height changes: while it is drawn above its new, lower edge, this strip of the
-   same surface fills the gap down to the screen edge (never visible at rest — it sits below the screen). */
+   same surface fills the gap down to the screen edge. Fixed, so that at rest it sits below the screen and is no part
+   of the sheet's content (it would count as overflow); while a slide or a drag transforms the sheet, the sheet
+   becomes its containing block and it hangs from the sheet's bottom edge. */
 @media (max-width: 699px) and (not ((orientation: landscape) and (max-height: 560px))) {
   .sheet::after {
     content: '';
-    position: absolute;
+    position: fixed;
     left: -1px;
     right: -1px;
     top: calc(100% - 1px);
