@@ -101,14 +101,21 @@ class ViewController: UIViewController, WKScriptMessageHandler, CLLocationManage
     func notifyCarPlayStatus(connected: Bool) {
         let flag = connected ? "true" : "false"
         let script = "window.__navweather_native_carplay_status && window.__navweather_native_carplay_status(\(flag));"
-        webView?.evaluateJavaScript(script, completionHandler: nil)
+        evaluateJavaScript(script)
     }
 
     func sendCarPlayCommand(_ payload: [String: Any]) {
         guard let json = try? JSONSerialization.data(withJSONObject: payload),
               let jsonString = String(data: json, encoding: .utf8) else { return }
         let script = "window.__navweather_native_carplay_command && window.__navweather_native_carplay_command(\(jsonString));"
-        webView?.evaluateJavaScript(script, completionHandler: nil)
+        evaluateJavaScript(script)
+    }
+
+    private func evaluateJavaScript(_ script: String) {
+        guard let webView else { return }
+        Task {
+            _ = try? await webView.evaluateJavaScript(script)
+        }
     }
 
     private func handleLocationMessage(_ body: [String: Any]) {
@@ -211,7 +218,7 @@ class ViewController: UIViewController, WKScriptMessageHandler, CLLocationManage
 
     private func notifyTtsEnd(id: Int) {
         let script = "window.__navweather_native_tts_end && window.__navweather_native_tts_end(\(id));"
-        webView?.evaluateJavaScript(script, completionHandler: nil)
+        evaluateJavaScript(script)
     }
 
     private func sendLocationError(code: Int) {
@@ -219,7 +226,7 @@ class ViewController: UIViewController, WKScriptMessageHandler, CLLocationManage
         if let json = try? JSONSerialization.data(withJSONObject: errorPayload),
            let jsonString = String(data: json, encoding: .utf8) {
             let script = "window.__navweather_native_location_error && window.__navweather_native_location_error(\(jsonString));"
-            webView?.evaluateJavaScript(script, completionHandler: nil)
+            evaluateJavaScript(script)
         }
     }
 
@@ -275,7 +282,8 @@ class ViewController: UIViewController, WKScriptMessageHandler, CLLocationManage
            let jsonString = String(data: json, encoding: .utf8) {
             let script = "window.__navweather_native_location_update && window.__navweather_native_location_update(\(jsonString));"
             Task { @MainActor in
-                self.webView?.evaluateJavaScript(script, completionHandler: nil)
+                guard let webView = self.webView else { return }
+                _ = try? await webView.evaluateJavaScript(script)
             }
         }
     }
