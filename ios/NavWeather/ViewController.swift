@@ -15,8 +15,8 @@ class ViewController: UIViewController, WKScriptMessageHandler, CLLocationManage
     private var utteranceIds: [ObjectIdentifier: Int] = [:]
     /// AVAudioSession activation can take a noticeable time; never do it on the main thread.
     private let audioQueue = DispatchQueue(label: "app.wayther.audio-session", qos: .userInitiated)
-    /// When a prompt was last queued: the session must not be released while one is on its way to the synthesizer.
-    private var lastSpeakRequestAt = Date.distantPast
+    /// The prompt waiting for the audio session to come up. A newer prompt replaces it, as it interrupts a spoken one.
+    private var pendingUtterance: AVSpeechUtterance?
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -136,6 +136,7 @@ class ViewController: UIViewController, WKScriptMessageHandler, CLLocationManage
     private func handleTTSMessage(_ body: [String: Any]) {
         let action = body["action"] as? String ?? "speak"
         if action == "cancel" {
+            dropPendingUtterance()
             speechSynthesizer.stopSpeaking(at: .immediate)
             deactivateAudioSessionIfIdle()
             return
@@ -157,16 +158,27 @@ class ViewController: UIViewController, WKScriptMessageHandler, CLLocationManage
         if speechSynthesizer.isSpeaking {
             speechSynthesizer.stopSpeaking(at: .immediate)
         }
+        dropPendingUtterance()
         if let utteranceId {
             utteranceIds[ObjectIdentifier(utterance)] = utteranceId
         }
-        let synthesizer = speechSynthesizer
-        lastSpeakRequestAt = Date()
-        audioQueue.async {
+        pendingUtterance = utterance
+        audioQueue.async { [weak self] in
             try? AVAudioSession.sharedInstance().setActive(true)
-            Task { @MainActor in
-                synthesizer.speak(utterance)
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self, let next = self.pendingUtterance else { return }
+                self.pendingUtterance = nil
+                self.speechSynthesizer.speak(next)
             }
+        }
+    }
+
+    /// Forgets a prompt that never reached the synthesizer, telling the page it is over.
+    private func dropPendingUtterance() {
+        guard let dropped = pendingUtterance else { return }
+        pendingUtterance = nil
+        if let id = utteranceIds.removeValue(forKey: ObjectIdentifier(dropped)) {
+            notifyTtsEnd(id: id)
         }
     }
 
@@ -174,7 +186,7 @@ class ViewController: UIViewController, WKScriptMessageHandler, CLLocationManage
     private func deactivateAudioSessionIfIdle() {
         Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: 500_000_000)
-            guard let self, !self.speechSynthesizer.isSpeaking, Date().timeIntervalSince(self.lastSpeakRequestAt) > 0.4 else { return }
+            guard let self, !self.speechSynthesizer.isSpeaking, self.pendingUtterance == nil else { return }
             self.audioQueue.async {
                 try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
             }
