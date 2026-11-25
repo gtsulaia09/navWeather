@@ -88,6 +88,8 @@
   }
   .voice__buttons {
     flex-direction: row;
+    flex-wrap: wrap;
+    max-height: none;
   }
   .voice__caption {
     flex-basis: 100%;
