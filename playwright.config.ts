@@ -12,7 +12,7 @@ export default defineConfig({
   timeout: 300_000,
   expect: { timeout: 90_000 },
   retries: process.env.CI ? 1 : 0,
-  reporter: process.env.CI ? 'line' : 'list',
+  reporter: process.env.CI ? [['line'], ['github']] : 'list',
   use: {
     baseURL: process.env.BASE_URL ?? 'http://localhost:5173',
     channel: 'chrome',

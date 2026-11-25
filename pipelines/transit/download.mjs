@@ -20,12 +20,29 @@ export const FEEDS = [
 const DIR = 'data/raw/gtfs';
 const MAX_MB = 40;
 
+async function fetchRetry(url, init, tries = 4) {
+  for (let i = 1; ; i++) {
+    try {
+      const res = await fetch(url, {
+        ...init,
+        headers: { 'user-agent': 'NavWeather-DataPipeline/1.0', ...init?.headers },
+      });
+      if (res.ok) return res;
+      if ((res.status < 500 && res.status !== 429 && res.status !== 408) || i >= tries) {
+        throw new Error(`${url}: HTTP ${res.status}`);
+      }
+    } catch (e) {
+      if (i >= tries) throw e;
+    }
+    await new Promise((r) => setTimeout(r, 1000 * i * i + Math.floor(Math.random() * 400)));
+  }
+}
+
 mkdirSync(DIR, { recursive: true });
 let total = 0;
 for (const f of FEEDS) {
   const file = `${DIR}/${f.name}.gtfs.zip`;
-  const head = await fetch(f.url, { method: 'HEAD', signal: AbortSignal.timeout(30_000) });
-  if (!head.ok) throw new Error(`${f.url}: HTTP ${head.status}`);
+  const head = await fetchRetry(f.url, { method: 'HEAD', signal: AbortSignal.timeout(30_000) });
   const size = Number(head.headers.get('content-length') ?? 0);
   const modified = Date.parse(head.headers.get('last-modified') ?? '') || Date.now();
   if (existsSync(file) && statSync(file).mtimeMs >= modified && statSync(file).size === size) {
@@ -33,8 +50,8 @@ for (const f of FEEDS) {
     continue;
   }
   if ((total + size) / 1e6 > MAX_MB) throw new Error(`${f.name}: over the ${MAX_MB} MB ceiling — check the source`);
-  const res = await fetch(f.url, { signal: AbortSignal.timeout(300_000) });
-  if (!res.ok || !res.body) throw new Error(`${f.url}: HTTP ${res.status}`);
+  const res = await fetchRetry(f.url, { signal: AbortSignal.timeout(300_000) });
+  if (!res.body) throw new Error(`${f.url}: empty body`);
   await pipeline(Readable.fromWeb(res.body), createWriteStream(file));
   utimesSync(file, new Date(), new Date(modified));
   total += statSync(file).size;

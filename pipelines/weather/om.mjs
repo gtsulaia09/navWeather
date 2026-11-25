@@ -28,7 +28,7 @@ async function fetchRetry(url, init, tries = 4) {
     try {
       const res = await fetch(url, { ...init, signal: AbortSignal.timeout(60_000) });
       if (res.ok) return res;
-      if (res.status < 500 || i >= tries) throw new Error(`${url}: HTTP ${res.status}`);
+      if ((res.status < 500 && res.status !== 429 && res.status !== 408) || i >= tries) throw new Error(`${url}: HTTP ${res.status}`);
     } catch (e) {
       if (i >= tries) throw e;
     }

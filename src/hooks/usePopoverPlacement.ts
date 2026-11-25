@@ -41,18 +41,24 @@ export function usePopoverPlacement(
             : 'up';
 
       const availH = Math.max(120, (vertical === 'up' ? spaceAbove : spaceBelow) - 4);
-      // Measure horizontal shift after clearing previous horizontal nudge.
+      const maxH = `${Math.round(Math.min(360, availH))}px`;
+      // Apply vertical flip and reset horizontal shift before measuring clamping bounds.
+      pop.dataset.v = vertical;
       pop.style.setProperty('--pop-shift-x', '0px');
+      pop.style.maxHeight = maxH;
+      pop.style.overflowY = 'auto';
       const p = pop.getBoundingClientRect();
       let dx = 0;
       if (p.right > vw - 10) dx = vw - 10 - p.right;
       if (p.left + dx < 10) dx = 10 - p.left;
+      const shiftPx = `${Math.round(dx)}px`;
+      pop.style.setProperty('--pop-shift-x', shiftPx);
 
       setPlacement({
         vertical,
         style: {
-          '--pop-shift-x': `${Math.round(dx)}px`,
-          maxHeight: `${Math.round(Math.min(360, availH))}px`,
+          '--pop-shift-x': shiftPx,
+          maxHeight: maxH,
           overflowY: 'auto',
         } as CSSProperties,
       });

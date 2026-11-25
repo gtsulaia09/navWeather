@@ -18,8 +18,6 @@
   opacity: 1;
   transition:
     transform var(--dur-sheet) var(--ease-spring),
-    max-height var(--dur-sheet) var(--ease-spring),
-    height var(--dur-sheet) var(--ease-spring),
     opacity 180ms var(--ease-out);
 
   @starting-style {

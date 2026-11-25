@@ -113,16 +113,10 @@
   box-shadow: var(--shadow-float);
   opacity: 1;
   translate: var(--pop-shift-x, 0px) 0;
-  scale: 1;
-  transition: opacity 160ms var(--ease-out), scale 180ms var(--ease-spring);
+  transition: opacity 160ms var(--ease-out);
 
   @starting-style {
     opacity: 0;
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    @starting-style {
-      scale: 0.96;
-    }
   }
 }
 .departure__pop {

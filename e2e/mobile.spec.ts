@@ -313,10 +313,9 @@ test.describe('iPhone Safari, portrait', () => {
   });
 
   test('Fresco in Georgia is searchable and popovers/layers never clip or overlap map controls', async ({ page }) => {
-    const ambientPlaces = page.waitForResponse((r) => r.url().includes('/data/places/v1/') && r.status() === 200);
     await page.goto('/');
-    await ambientPlaces;
     const search = page.getByRole('combobox', { name: 'Search a place or address' });
+    await expect(search).toBeVisible();
     await search.fill('Fresco');
     const frescoOpt = page.getByRole('option', { name: /Fresco/i }).first();
     await expect(frescoOpt).toBeVisible();
@@ -334,9 +333,11 @@ test.describe('iPhone Safari, portrait', () => {
     expect(popBox.y).toBeGreaterThanOrEqual(4);
     expect(popBox.y + popBox.height).toBeLessThanOrEqual(714 - 4);
     await page.keyboard.press('Escape');
+    await expect(saveMenu).toHaveCount(0);
 
     // Close place card, turn on forecast layer, and verify .layerbar never overlaps right-hand .voice buttons
     await page.locator('.phead__close').click();
+    await expect(page.locator('.phead__close')).toHaveCount(0);
     const layersBtn = page.getByRole('button', { name: 'Map layers' });
     await expect(layersBtn).toBeVisible();
     await layersBtn.click();

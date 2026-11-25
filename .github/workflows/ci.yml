@@ -58,6 +58,7 @@ jobs:
     timeout-minutes: 40
     env:
       WRANGLER_SEND_METRICS: 'false'
+      CHOKIDAR_USEPOLLING: '1'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -67,6 +68,11 @@ jobs:
       - run: npm ci
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+      - name: Cache regional OSM & GTFS raw downloads
+        uses: actions/cache@v4
+        with:
+          path: data/raw
+          key: osm-gtfs-raw-${{ runner.os }}-v1
       - name: Our data as static files (Georgia roads, search, places, transit; a forecast for the Caucasus) — ADR-019
         run: |
           npm run data:download
@@ -82,7 +88,7 @@ jobs:
             curl -sf http://127.0.0.1:8787/api/v1/health && break
             sleep 1
           done
-          BASE_URL=http://127.0.0.1:8787 E2E_STRICT=1 npm run e2e || (tail -50 wrangler.log; exit 1)
+          BASE_URL=http://127.0.0.1:8787 E2E_STRICT=1 npx playwright test --workers=2 || (tail -50 wrangler.log; exit 1)
       - name: Trace of a failed run
         if: failure()
         uses: actions/upload-artifact@v4

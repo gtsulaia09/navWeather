@@ -20,9 +20,29 @@ const name = `${region.split('/').at(-1)}-latest.osm.pbf`;
 const url = `https://download.geofabrik.de/${region}-latest.osm.pbf`;
 const dest = `data/raw/${name}`;
 
+const USER_AGENT = 'NavWeather-DataPipeline/1.0 (+https://github.com/gtsulaia09/navWeather)';
+
+async function fetchRetry(targetUrl, timeoutMs = 180_000, tries = 5) {
+  for (let i = 1; ; i++) {
+    try {
+      const res = await fetch(targetUrl, {
+        headers: { 'user-agent': USER_AGENT },
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      if (res.ok) return res;
+      if ((res.status < 500 && res.status !== 429 && res.status !== 408) || i >= tries) {
+        throw new Error(`${targetUrl}: HTTP ${res.status}`);
+      }
+    } catch (err) {
+      if (i >= tries) throw err;
+    }
+    const jitter = Math.floor(Math.random() * 600);
+    await new Promise((r) => setTimeout(r, 1200 * i * i + jitter));
+  }
+}
+
 mkdirSync('data/raw', { recursive: true });
-const md5Res = await fetch(`${url}.md5`);
-if (!md5Res.ok) throw new Error(`no checksum for ${region} (${md5Res.status}) — is the region name right? see https://download.geofabrik.de`);
+const md5Res = await fetchRetry(`${url}.md5`, 30_000);
 const expected = (await md5Res.text()).trim().split(/\s+/)[0];
 
 const md5 = (path) => createHash('md5').update(readFileSync(path)).digest('hex');
@@ -32,11 +52,19 @@ if (!force && existsSync(dest) && md5(dest) === expected) {
 }
 
 console.log(`downloading ${url} …`);
-const res = await fetch(url);
-if (!res.ok || !res.body) throw new Error(`download failed: ${res.status}`);
-const tmp = `${dest}.part`;
-await pipeline(Readable.fromWeb(res.body), createWriteStream(tmp));
-const got = md5(tmp);
-if (got !== expected) throw new Error(`checksum mismatch: got ${got}, expected ${expected} — try again`);
-renameSync(tmp, dest);
-console.log(`${dest}: ${(statSync(dest).size / 1e6).toFixed(0)} MB, md5 ok, data of ${res.headers.get('last-modified') ?? 'unknown date'}`);
+let lastDate = 'unknown date';
+for (let attempt = 1; attempt <= 4; attempt++) {
+  const res = await fetchRetry(url, 300_000);
+  if (!res.body) throw new Error(`download failed: empty body`);
+  const tmp = `${dest}.part`;
+  await pipeline(Readable.fromWeb(res.body), createWriteStream(tmp));
+  const got = md5(tmp);
+  if (got === expected) {
+    lastDate = res.headers.get('last-modified') ?? 'unknown date';
+    renameSync(tmp, dest);
+    break;
+  }
+  if (attempt === 4) throw new Error(`checksum mismatch: got ${got}, expected ${expected} — try again`);
+  await new Promise((r) => setTimeout(r, 1500 * attempt));
+}
+console.log(`${dest}: ${(statSync(dest).size / 1e6).toFixed(0)} MB, md5 ok, data of ${lastDate}`);
