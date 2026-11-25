@@ -40,4 +40,6 @@ export interface PoiProvider {
   ): Promise<Poi[]>;
   /** Places of a category within `radiusM` of a point ("coffee near here"). */
   searchNear?(category: PoiCategory, center: LngLat, radiusM: number, options?: { signal?: AbortSignal; language?: string }): Promise<Poi[]>;
+  /** Ambient places visible inside `[west, south, east, north]` at `zoom` (static tiles only; never hits third-party servers). */
+  searchBounds?(bbox: [number, number, number, number], zoom: number, options?: { signal?: AbortSignal; language?: string }): Promise<Poi[]>;
 }

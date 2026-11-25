@@ -26,9 +26,41 @@
   text-align: center;
 }
 
+/* Top-left stack over the visible map (live share pill + map weather/AQI chip): never overlaps itself,
+   the search card, the side-docked sheet on desktop/landscape, or the top-right map attribution. */
+.map-status-stack {
+  position: absolute;
+  z-index: 16;
+  top: calc(var(--inset-top, 64px) + 36px);
+  left: calc(var(--inset-left, 0px) + var(--safe-left) + 12px);
+  max-width: calc(100vw - var(--inset-left, 0px) - var(--safe-left) - var(--safe-right) - 68px);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  pointer-events: none;
+}
+.map-status-stack > * {
+  pointer-events: auto;
+}
+@media (min-width: 1024px) and (min-height: 560px) {
+  .map-status-stack {
+    top: 16px;
+    left: calc(var(--inset-left, 416px) + 16px);
+    max-width: calc(100vw - var(--inset-left, 416px) - 96px);
+  }
+}
+@media (orientation: landscape) and (max-height: 560px) {
+  .map-status-stack {
+    top: calc(var(--inset-top, 56px) + 8px);
+    left: calc(var(--inset-left, 0px) + var(--safe-left) + 12px);
+  }
+}
+
 /* A sheet pulled over most of the map: its buttons would only collide with the top bar. */
 [data-sheet-covers] .voice,
-[data-sheet-covers] .map-controls {
+[data-sheet-covers] .map-controls,
+[data-sheet-covers] .map-status-stack {
   visibility: hidden;
 }
 

@@ -15,7 +15,25 @@
   border: 1px solid var(--border);
   border-radius: var(--r-surface) var(--r-surface) 0 0;
   box-shadow: var(--shadow-float);
-  transition: transform var(--dur) var(--ease);
+  opacity: 1;
+  transition:
+    transform var(--dur-sheet) var(--ease-spring),
+    max-height var(--dur-sheet) var(--ease-spring),
+    height var(--dur-sheet) var(--ease-spring),
+    opacity 180ms var(--ease-out);
+
+  @starting-style {
+    opacity: 0;
+  }
+}
+/* Raise the sheet and active popover container above sibling stacking contexts while a popover is open. */
+.sheet:has(.popover) {
+  z-index: 35;
+}
+.sheet__grab:has(.popover),
+.sheet__body:has(.popover) {
+  position: relative;
+  z-index: 5;
 }
 .sheet.is-dragging {
   transition: none;
@@ -63,8 +81,8 @@
     max-height: none;
   }
 }
-/* Landscape phones: dock at the side so the road ahead stays visible. */
-@media (orientation: landscape) and (max-height: 520px) {
+/* Landscape phones & automotive head units: dock at the side so the road ahead stays visible. */
+@media (orientation: landscape) and (max-height: 560px) {
   .sheet,
   .sheet--expanded {
     top: calc(var(--safe-top) + 8px);
@@ -128,14 +146,38 @@
   gap: 12px;
   border-top: 1px solid var(--border);
   padding-top: 12px;
+  opacity: 1;
+  translate: 0 0;
+  transition: opacity 180ms var(--ease-out), translate 220ms var(--ease-spring);
+
+  @starting-style {
+    opacity: 0;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    @starting-style {
+      translate: 0 8px;
+    }
+  }
 }
 .sheet__extra {
   padding: 20px 16px 4px;
+  opacity: 1;
+  translate: 0 0;
+  transition: opacity 180ms var(--ease-out), translate 220ms var(--ease-spring);
+
+  @starting-style {
+    opacity: 0;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    @starting-style {
+      translate: 0 8px;
+    }
+  }
 }
 
 /* Landscape phones are short: a header (travel modes, title, Start) can be taller than the panel. The panel then
    scrolls as one piece — a vertical swipe scrolls it instead of resizing it; the handle still cycles by tap. */
-@media (orientation: landscape) and (max-height: 520px) {
+@media (orientation: landscape) and (max-height: 560px) {
   .sheet {
     overflow-y: auto;
     overscroll-behavior: contain;

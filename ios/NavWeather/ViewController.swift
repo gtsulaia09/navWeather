@@ -44,6 +44,7 @@ class ViewController: UIViewController, WKScriptMessageHandler, CLLocationManage
         contentController.add(self, name: "nativeHaptics")
         contentController.add(self, name: "nativeWakeLock")
         contentController.add(self, name: "nativeTTS")
+        contentController.add(self, name: "nativeCarPlay")
 
         let config = WKWebViewConfiguration()
         config.userContentController = contentController
@@ -90,9 +91,24 @@ class ViewController: UIViewController, WKScriptMessageHandler, CLLocationManage
             handleWakeLockMessage(body)
         case "nativeTTS":
             handleTTSMessage(body)
+        case "nativeCarPlay":
+            CarPlayCoordinator.shared.handleWebMessage(body)
         default:
             break
         }
+    }
+
+    func notifyCarPlayStatus(connected: Bool) {
+        let flag = connected ? "true" : "false"
+        let script = "window.__navweather_native_carplay_status && window.__navweather_native_carplay_status(\(flag));"
+        webView?.evaluateJavaScript(script, completionHandler: nil)
+    }
+
+    func sendCarPlayCommand(_ payload: [String: Any]) {
+        guard let json = try? JSONSerialization.data(withJSONObject: payload),
+              let jsonString = String(data: json, encoding: .utf8) else { return }
+        let script = "window.__navweather_native_carplay_command && window.__navweather_native_carplay_command(\(jsonString));"
+        webView?.evaluateJavaScript(script, completionHandler: nil)
     }
 
     private func handleLocationMessage(_ body: [String: Any]) {

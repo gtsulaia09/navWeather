@@ -138,6 +138,49 @@ export class PlacesTiles {
     return out;
   }
 
+  /** Features of one layer inside `[west, south, east, north]`, bounded to at most 16 tiles around the centre. */
+  async featuresInBbox<T = TilePoint>(layer: TileLayer, bbox: [number, number, number, number], signal?: AbortSignal): Promise<T[]> {
+    const index = await this.loadIndex(signal);
+    const meta = index?.layers[layer];
+    if (!meta) return [];
+    const [w, s, e, n] = bbox;
+    let [x0, y0] = tileOf([w, n], meta.z);
+    let [x1, y1] = tileOf([e, s], meta.z);
+    if (x1 - x0 > 3) {
+      const cx = Math.floor((x0 + x1) / 2);
+      x0 = cx - 1;
+      x1 = cx + 2;
+    }
+    if (y1 - y0 > 3) {
+      const cy = Math.floor((y0 + y1) / 2);
+      y0 = cy - 1;
+      y1 = cy + 2;
+    }
+    const present = presentSet(meta);
+    const wanted: string[] = [];
+    for (let x = x0; x <= x1; x++) {
+      for (let y = y0; y <= y1; y++) {
+        const k = `${x}/${y}`;
+        if (present.has(k)) wanted.push(k);
+      }
+    }
+    if (!wanted.length) return [];
+    const seen = new Set<string>();
+    const out: T[] = [];
+    const lists = await Promise.all(wanted.map((t) => this.tile(layer, meta.z, t, signal)));
+    for (const list of lists) {
+      for (const f of list as (T & { 0: string; 1: number; 2: number })[]) {
+        if (seen.has(f[0])) continue;
+        if (typeof f[1] === 'number' && typeof f[2] === 'number') {
+          if (f[1] < w || f[1] > e || f[2] < s || f[2] > n) continue;
+        }
+        seen.add(f[0]);
+        out.push(f);
+      }
+    }
+    return out;
+  }
+
   private tile(layer: TileLayer, z: number, xy: string, signal?: AbortSignal): Promise<unknown[]> {
     const key = `${layer}/${z}/${xy}`;
     let p = this.cache.get(key);

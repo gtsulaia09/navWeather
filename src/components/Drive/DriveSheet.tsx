@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { useDismiss } from '../../hooks/useDismiss';
+import { usePopoverPlacement } from '../../hooks/usePopoverPlacement';
 import { config } from '../../config';
 import { formatDistance, formatDuration } from '../../i18n/format';
 import { useMessages, useSettings } from '../../state/settings';
@@ -124,14 +125,16 @@ function SpeedMenu() {
   const speed = useAppStore((s) => s.sim.speed);
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const popRef = useRef<HTMLDivElement>(null);
   useDismiss(ref, open, () => setOpen(false));
+  const pop = usePopoverPlacement(ref, popRef, open, 'up');
   return (
     <div className="speedmenu" ref={ref}>
       <button className="roundbtn tabular" aria-haspopup="menu" aria-expanded={open} aria-label={m.ui.speed(speed)} onClick={() => setOpen((o) => !o)}>
         {speed}×
       </button>
       {open ? (
-        <div className="speedmenu__pop" role="menu">
+        <div ref={popRef} className="speedmenu__pop popover" data-v={pop.vertical} style={pop.style} role="menu">
           {config.simulation.speeds.map((v) => (
             <button
               key={v}

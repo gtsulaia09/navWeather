@@ -81,11 +81,11 @@ function Switch({ label, checked, onChange, hint }: { label: string; checked: bo
 }
 
 /** Settings — only preferences, stored on this device. */
-export function SettingsDialog() {
+export function SettingsDialog({ closing = false }: { closing?: boolean } = {}) {
   const open = useAppStore((s) => s.settingsOpen);
   const m = useMessages();
   const s = useSettings();
-  if (!open) return null;
+  if (!open && !closing) return null;
   const S = m.settings;
   const close = () => useAppStore.getState().setSettingsOpen(false);
   const up = (patch: Partial<Settings>) => {
@@ -105,7 +105,7 @@ export function SettingsDialog() {
   ];
 
   return (
-    <Dialog label={S.title} onClose={close} size="large">
+    <Dialog label={S.title} onClose={close} size="large" closing={closing}>
       <div className="set-head">
         <h2>{S.title}</h2>
         <button className="icon-btn" onClick={close} aria-label={m.ui.close}>
@@ -159,7 +159,9 @@ export function SettingsDialog() {
 
       <Section title={S.sectionVoice}>
         <Switch label={S.voiceGuidance} checked={s.voice} onChange={(voice) => up({ voice })} hint={S.voiceRecognitionNote} />
-        {s.voice ? <VoiceSettings /> : null}
+        <div className={`set-collapse${s.voice ? ' is-open' : ''}`} aria-hidden={!s.voice}>
+          <div className="set-collapse__inner">{s.voice ? <VoiceSettings /> : null}</div>
+        </div>
       </Section>
 
       <Section title={S.weatherAlerts}>

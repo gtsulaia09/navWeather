@@ -20,7 +20,7 @@
     width: 400px;
   }
 }
-@media (orientation: landscape) and (max-height: 520px) {
+@media (orientation: landscape) and (max-height: 560px) {
   .search {
     left: calc(min(380px, 46vw) + var(--safe-left) + 16px);
     right: calc(var(--safe-right) + 8px);
@@ -31,11 +31,24 @@
 
 .search__card {
   position: relative;
+  z-index: 3;
   padding: 6px;
   border-radius: var(--r-surface);
   background: var(--surface);
   border: 1px solid var(--border);
   box-shadow: var(--shadow-float);
+  opacity: 1;
+  translate: 0 0;
+  transition: opacity 180ms var(--ease-out), translate 220ms var(--ease-spring);
+
+  @starting-style {
+    opacity: 0;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    @starting-style {
+      translate: 0 -8px;
+    }
+  }
 }
 .search__fields {
   display: flex;
@@ -151,10 +164,27 @@
   padding: 4px;
   list-style: none;
   background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: var(--r-surface);
   box-shadow: var(--shadow-float);
-  max-height: min(45dvh, 340px);
+  max-height: min(42dvh, calc(100dvh - var(--inset-top, 120px) - var(--visible-bottom, 0px) - 20px), 340px);
   overflow-y: auto;
+  overscroll-behavior: contain;
+  opacity: 1;
+  translate: 0 0;
+  scale: 1;
+  transform-origin: 50% 0;
+  transition: opacity 150ms var(--ease-out), translate 180ms var(--ease-spring), scale 180ms var(--ease-spring);
+
+  @starting-style {
+    opacity: 0;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    @starting-style {
+      translate: 0 -6px;
+      scale: 0.98;
+    }
+  }
 }
 .suggestion {
   display: flex;
@@ -164,6 +194,7 @@
   padding: 6px 10px;
   border-radius: var(--r-control);
   cursor: pointer;
+  transition: background var(--dur-fast) var(--ease);
 }
 .suggestion.is-active {
   background: var(--surface-2);
@@ -208,9 +239,19 @@
   padding: 0 14px;
   border-radius: var(--r-control);
   background: var(--surface);
+  border: 1px solid var(--border);
   box-shadow: var(--shadow-float);
   font-weight: 600;
   color: var(--text);
+  scale: 1;
+  transition: background var(--dur) var(--ease), scale var(--dur-fast) var(--ease-spring);
+
+  @starting-style {
+    opacity: 0;
+  }
+}
+.routeline:active {
+  scale: 0.97;
 }
 .routeline__title {
   white-space: nowrap;

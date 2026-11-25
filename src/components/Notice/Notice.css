@@ -8,26 +8,45 @@
   pointer-events: none;
   padding: 0 12px;
 }
-@media (min-width: 900px) {
-  /* Centre over the visible map beside the desktop side panel rather than colliding with the search card. */
+/* Match BottomSheet's desktop side-panel breakpoint (1024 px): at 900–1023 px insets.left is 0 while .search sits at top-left. */
+@media (min-width: 1024px) and (min-height: 560px) {
+  .notice-wrap {
+    left: var(--inset-left, 416px);
+    top: 16px !important;
+  }
+}
+@media (orientation: landscape) and (max-height: 560px) {
   .notice-wrap {
     left: var(--inset-left, 0px);
-    top: 16px !important;
   }
 }
 .notice {
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  max-width: 520px;
+  max-width: min(520px, 100%);
   min-height: 44px;
-  padding: 0 0 0 14px;
+  padding: 6px 0 6px 14px;
   border-radius: var(--r-control);
   background: var(--surface-inverse);
   color: var(--on-inverse);
   box-shadow: var(--shadow-float);
   font-size: 15px;
   pointer-events: auto;
+  opacity: 1;
+  translate: 0 0;
+  scale: 1;
+  transition: opacity 180ms var(--ease-out), translate 220ms var(--ease-spring), scale 180ms var(--ease-spring);
+
+  @starting-style {
+    opacity: 0;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    @starting-style {
+      translate: 0 -8px;
+      scale: 0.96;
+    }
+  }
 }
 .notice--error {
   background: var(--danger-fill);

@@ -75,7 +75,11 @@
 
   --tap: 44px;
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-spring: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --dur: 200ms;
+  --dur-fast: 140ms;
+  --dur-sheet: 280ms;
 
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
@@ -93,6 +97,8 @@
 @media (prefers-reduced-motion: reduce) {
   :root {
     --dur: 0ms;
+    --dur-fast: 0ms;
+    --dur-sheet: 0ms;
   }
 }
 

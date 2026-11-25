@@ -1,10 +1,17 @@
 .layers {
   position: relative;
 }
+.layers:has(.popover) {
+  z-index: 5;
+}
 .layers__pop {
   right: calc(100% + 8px);
   bottom: 0;
   width: 220px;
+}
+.layers__pop[data-v='down'] {
+  top: 0;
+  bottom: auto;
 }
 .layers__pop .popover__row {
   display: flex;
@@ -27,7 +34,28 @@
   padding: 6px 10px 8px;
   border-radius: var(--r-surface);
   background: var(--surface);
+  border: 1px solid var(--border);
   box-shadow: var(--shadow-float);
+  opacity: 1;
+  translate: 0 0;
+  transition:
+    opacity 180ms var(--ease-out),
+    translate 220ms var(--ease-spring);
+
+  @starting-style {
+    opacity: 0;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    @starting-style {
+      translate: 0 10px;
+    }
+  }
+}
+@media (orientation: landscape) and (max-height: 560px) {
+  .layerbar {
+    bottom: calc(var(--safe-bottom) + 72px);
+    right: calc(var(--safe-right) + 12px);
+  }
 }
 .layerbar__top {
   display: flex;

@@ -23,9 +23,28 @@ export interface SurfaceAlert {
   inSeconds: number;
 }
 
+export interface SurfaceRouteOption {
+  index: number;
+  name: string;
+  durationS: number;
+  distanceM: number;
+  weatherNote: string;
+  selected: boolean;
+}
+
+export interface SurfaceSavedPlace {
+  id: string;
+  name: string;
+  subtitle: string;
+  slot: string;
+  coordinate: [number, number];
+}
+
 export interface CompanionSnapshot {
   active: boolean;
+  originName?: string | null;
   destinationName: string | null;
+  weatherSummary?: string | null;
   etaMs: number | null;
   remainingDistanceM: number | null;
   remainingDurationS: number | null;
@@ -45,12 +64,35 @@ export interface CompanionSnapshot {
     atMs: number;
     distanceM: number;
   } | null;
+  /** Simplified route polyline ([lon, lat]) for native CarPlay / Android Auto map rendering. */
+  routeCoordinates?: [number, number][];
+  /** Weather-coloured stretches along the planned route. */
+  weatherSegments?: { coordinates: [number, number][]; cls: string }[];
+  /** Current vehicle position & heading while navigating or simulating. */
+  vehicle?: { coordinate: [number, number]; headingDeg?: number; speedMps?: number } | null;
+  /** Candidate routes with travel time & weather summary for CarPlay route selection. */
+  routeOptions?: SurfaceRouteOption[];
+  /** Saved & recent destinations for 1-tap CarPlay destination selection. */
+  savedPlaces?: SurfaceSavedPlace[];
+  units?: 'metric' | 'imperial';
+  locale?: string;
   updatedAtMs: number;
 }
+
+export type CarSurfaceCommand =
+  | { action: 'routeTo'; place: { id: string; name: string; label?: string; coordinate: [number, number] } }
+  | { action: 'selectRouteOption'; index: number }
+  | { action: 'startNavigation' }
+  | { action: 'stopNavigation' }
+  | { action: 'dismissAlert' }
+  | { action: 'searchNearby'; category: string }
+  | { action: 'requestSync' };
 
 export interface CarSurfaceBridge {
   readonly name: string;
   readonly connected: boolean;
+  /** Full state sync (planning preview, saved places, route options, and active navigation). */
+  syncState?(snapshot: CompanionSnapshot): void;
   updateNavigation(snapshot: CompanionSnapshot): void;
   endNavigation(): void;
 }
@@ -110,12 +152,20 @@ export const noopWristCompanionBridge: WristCompanionBridge = {
 
 let carBridge: CarSurfaceBridge = noopCarSurfaceBridge;
 let wristBridge: WristCompanionBridge = noopWristCompanionBridge;
+let carCommandListener: ((cmd: CarSurfaceCommand) => void) | null = null;
 
 export function getCarSurfaceBridge(): CarSurfaceBridge {
   return carBridge;
 }
 export function setCarSurfaceBridge(bridge: CarSurfaceBridge | null): void {
   carBridge = bridge ?? noopCarSurfaceBridge;
+}
+
+export function setCarCommandListener(listener: ((cmd: CarSurfaceCommand) => void) | null): void {
+  carCommandListener = listener;
+}
+export function dispatchCarSurfaceCommand(cmd: CarSurfaceCommand): void {
+  carCommandListener?.(cmd);
 }
 
 export function getWristCompanionBridge(): WristCompanionBridge {

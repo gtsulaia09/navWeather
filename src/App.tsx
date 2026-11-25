@@ -10,6 +10,8 @@ import { VoiceControls } from './components/Voice/VoiceControls';
 import { useAppTimers } from './hooks/useAppTimers';
 import { useApplyTheme } from './hooks/useEffectiveTheme';
 import { useNetworkStatus } from './hooks/useNetworkStatus';
+import { useAnimatedPresence } from './hooks/useAnimatedPresence';
+import { useCarSurfaceSync } from './hooks/useCarSurfaceSync';
 import { useVisibleViewport } from './hooks/useVisibleViewport';
 import { useSimulationLoop } from './hooks/useSimulationLoop';
 import { useWakeLock } from './hooks/useWakeLock';
@@ -80,6 +82,7 @@ function MainApp() {
   useDisplayPointNaming();
   useInsetVars();
   useVisibleViewport();
+  useCarSurfaceSync();
   useIdleChunkWarmup();
   const driving = useAppStore((s) => s.mode !== 'planning');
   const shareStatus = useLiveShare((s) => s.status);
@@ -92,6 +95,8 @@ function MainApp() {
   const arrived = useAppStore((s) => s.arrival !== null);
   const hasPlan = useAppStore((s) => s.plan !== null);
   const settingsOpen = useAppStore((s) => s.settingsOpen);
+  const settingsAnim = useAnimatedPresence(settingsOpen, 190);
+  const showShareStatus = shareStatus === 'active' || shareStatus === 'paused';
   const m = useMessages();
 
   return (
@@ -108,13 +113,17 @@ function MainApp() {
         </Suspense>
       ) : null}
       <VoiceControls />
-      {!driving ? <MapWeatherChip /> : null}
-      {!driving && !arrived ? <LayerTimeline /> : null}
-      {shareStatus === 'active' || shareStatus === 'paused' ? (
-        <Suspense fallback={null}>
-          <ShareStatus />
-        </Suspense>
+      {showShareStatus || !driving ? (
+        <div className="map-status-stack">
+          {showShareStatus ? (
+            <Suspense fallback={null}>
+              <ShareStatus />
+            </Suspense>
+          ) : null}
+          {!driving ? <MapWeatherChip /> : null}
+        </div>
       ) : null}
+      {!driving && !arrived ? <LayerTimeline /> : null}
       <Notice />
       {arrived ? (
         <Suspense fallback={null}>
@@ -129,9 +138,9 @@ function MainApp() {
       ) : (
         <PlanSheet />
       )}
-      {settingsOpen ? (
+      {settingsAnim.mounted ? (
         <Suspense fallback={null}>
-          <SettingsDialog />
+          <SettingsDialog closing={settingsAnim.closing} />
         </Suspense>
       ) : null}
       <LocationPrimer />

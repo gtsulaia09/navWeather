@@ -109,11 +109,29 @@
   padding: 6px 12px 12px;
   border-radius: var(--r-surface);
   background: var(--surface);
+  border: 1px solid var(--border);
   box-shadow: var(--shadow-float);
+  opacity: 1;
+  translate: var(--pop-shift-x, 0px) 0;
+  scale: 1;
+  transition: opacity 160ms var(--ease-out), scale 180ms var(--ease-spring);
+
+  @starting-style {
+    opacity: 0;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    @starting-style {
+      scale: 0.96;
+    }
+  }
 }
 .departure__pop {
   top: calc(100% + 4px);
   left: 0;
+}
+.departure__pop[data-v='up'] {
+  top: auto;
+  bottom: calc(100% + 4px);
 }
 .popover__row {
   display: flex;

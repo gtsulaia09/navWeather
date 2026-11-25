@@ -137,6 +137,54 @@ describe('places tiles', () => {
     expect(await new TilePlacesProvider(tiles, 'en', fallback).getPlacesNearRoute([TBILISI, MTSKHETA], { includeVillages: true })).toHaveLength(1);
     expect(await new TilePlacesProvider(tiles, 'en').getPlacesNearRoute([TBILISI, MTSKHETA], { includeVillages: true })).toEqual([]);
   });
+
+  it('serves ambient Georgia POIs (incl. Fresco) by zoom tier and localizes ka / ru / en without hitting fallback', async () => {
+    const idx = files['/tiles/index.json'] as TilesIndex;
+    idx.layers.supermarket = { z: 11, tiles: [key(TBILISI, 11)] };
+    idx.layers.cafe = { z: 11, tiles: [key(TBILISI, 11)] };
+    files[`/tiles/supermarket/11/${key(TBILISI, 11)}.json`] = {
+      v: 1,
+      e: [
+        // Like real Georgia OSM nodes: Georgian in `name`, English in `name:en`, no `name:ka` or `name:ru`.
+        ['w223802508', 44.8025, 41.6938, { shop: 'supermarket', name: 'ფრესკო', 'name:en': 'Fresco', brand: 'ფრესკო', 'brand:en': 'Fresco', opening_hours: '24/7' }],
+      ],
+    };
+    files[`/tiles/cafe/11/${key(TBILISI, 11)}.json`] = {
+      v: 1,
+      e: [['n500', 44.8018, 41.6934, { amenity: 'cafe', name: 'შავი ლომი', 'name:en': 'Shavi Lomi' }]],
+    };
+
+    const fallbackCalled = vi.fn(async () => [] as Awaited<ReturnType<PoiProvider['search']>>);
+    const fallback: PoiProvider = { name: 'never', search: fallbackCalled };
+    const tiles = new PlacesTiles('/tiles');
+    const provider = new TilePoiProvider(tiles, 'en', fallback);
+    const bbox: [number, number, number, number] = [44.78, 41.68, 44.82, 41.71];
+
+    // Zoomed out (< 11): no ambient POIs
+    expect(await provider.searchBounds(bbox, 10)).toEqual([]);
+
+    // District zoom (12.2): supermarkets (Fresco) and fuel appear, cafes wait until street zoom
+    const midEn = await provider.searchBounds(bbox, 12.2, { language: 'en' });
+    expect(midEn.some((p) => p.category === 'supermarket' && p.name === 'Fresco')).toBe(true);
+    expect(midEn.some((p) => p.category === 'cafe')).toBe(false);
+
+    // Georgian UI keeps Georgian `name` (`ფრესკო`) even without `name:ka`
+    const midKa = await provider.searchBounds(bbox, 12.2, { language: 'ka' });
+    expect(midKa.find((p) => p.category === 'supermarket')?.name).toBe('ფრესკო');
+
+    // Russian UI transliterates Georgian `name` (`Фреско`) before falling back to English
+    const midRu = await provider.searchBounds(bbox, 12.2, { language: 'ru' });
+    expect(midRu.find((p) => p.category === 'supermarket')?.name).toBe('Фреско');
+
+    // Street zoom (14): cafes also appear
+    const streetKa = await provider.searchBounds(bbox, 14, { language: 'ka' });
+    expect(streetKa.find((p) => p.category === 'cafe')?.name).toBe('შავი ლომი');
+
+    // Georgian settlement name also preserved without `name:ka`
+    const settlementsKa = await new TilePlacesProvider(tiles, 'ka').getPlacesNearRoute([TBILISI, MTSKHETA], { includeVillages: false, language: 'ka' });
+    expect(settlementsKa[0]?.name).toBe('თბილისი');
+    expect(fallbackCalled).not.toHaveBeenCalled();
+  });
 });
 
 describe('Long Trip stop places from our tiles (Worker side)', () => {

@@ -67,6 +67,52 @@ export function firstTopLabelLayerId(layers: readonly { id: string; type: string
   return undefined;
 }
 
+const POI_ICON_MATCH: maplibregl.ExpressionSpecification = [
+  'match',
+  ['get', 'category'],
+  'restaurant',
+  'poi-restaurant',
+  'cafe',
+  'poi-cafe',
+  'fuel',
+  'poi-fuel',
+  'ev_charging',
+  'poi-ev_charging',
+  'hotel',
+  'poi-hotel',
+  'parking',
+  'poi-parking',
+  'pharmacy',
+  'poi-pharmacy',
+  'hospital',
+  'poi-hospital',
+  'rest_area',
+  'poi-rest_area',
+  'supermarket',
+  'poi-supermarket',
+  'atm',
+  'poi-atm',
+  'attraction',
+  'poi-attraction',
+  'car_wash',
+  'poi-car_wash',
+  'car_repair',
+  'poi-car_repair',
+  'toilets',
+  'poi-toilets',
+  'poi-default',
+];
+
+/** Pick a non-italic font stack already present in the loaded style so custom symbol layers never request missing PBF fonts. */
+function resolveStyleFontStack(layers: readonly maplibregl.LayerSpecification[] | undefined): string[] {
+  for (const l of layers ?? []) {
+    if (l.type !== 'symbol' || !l.layout) continue;
+    const tf = l.layout['text-font'];
+    if (Array.isArray(tf) && typeof tf[0] === 'string' && !/Italic/i.test(tf[0])) return tf as string[];
+  }
+  return ['Noto Sans Regular'];
+}
+
 /** Route + weather layers, inserted below the basemap's labels so place names stay readable. */
 export function addRouteLayers(map: MLMap) {
   registerMapIcons(map);
@@ -75,10 +121,14 @@ export function addRouteLayers(map: MLMap) {
   const danger = cssVar('--danger-fill', '#c62828');
   const surface = cssVar('--surface', '#ffffff');
 
-  const beforeId = firstTopLabelLayerId(map.getStyle().layers);
+  const style = map.getStyle();
+  const styleLayers = style.layers;
+  const hasGlyphs = Boolean(style.glyphs);
+  const beforeId = firstTopLabelLayerId(styleLayers);
+  const labelFont = resolveStyleFontStack(styleLayers);
   // lineMetrics → line-progress, so the driven part is a gradient stop, not a re-uploaded line.
   if (!map.getSource('route')) map.addSource('route', { type: 'geojson', data: EMPTY_FC, lineMetrics: true });
-  for (const id of ['route-weather', 'endpoints', 'focus', 'pois', 'me-accuracy', 'cameras', 'hazards', 'incidents', 'alternatives', 'transit', 'transit-stops']) {
+  for (const id of ['route-weather', 'endpoints', 'focus', 'ambient-pois', 'pois', 'me-accuracy', 'cameras', 'hazards', 'incidents', 'alternatives', 'transit', 'transit-stops']) {
     if (!map.getSource(id)) map.addSource(id, { type: 'geojson', data: EMPTY_FC });
   }
   const lineLayout = { 'line-join': 'round', 'line-cap': 'round' } as const;
@@ -270,50 +320,71 @@ export function addRouteLayers(map: MLMap) {
     },
   });
   const textColor = cssVar('--text', '#111418');
+  const textSecondary = cssVar('--text-2', '#454c56');
+  // Ambient Georgia POIs from our static `/data/places/v1` tiles: collision-managed so named supermarkets (Fresco),
+  // fuel, pharmacies, cafes, hotels, and landmarks appear smoothly as you zoom in without overlapping each other.
+  map.addLayer({
+    id: 'ambient-pois',
+    type: 'symbol',
+    source: 'ambient-pois',
+    minzoom: 11,
+    layout: {
+      'symbol-sort-key': ['coalesce', ['get', 'rank'], 5],
+      'icon-image': POI_ICON_MATCH,
+      'icon-size': ['interpolate', ['linear'], ['zoom'], 11, 0.52, 13, 0.66, 15, 0.8, 17, 0.92],
+      'icon-padding': 3,
+      ...(hasGlyphs
+        ? {
+            'text-font': labelFont,
+            'text-field': ['step', ['zoom'], '', 12.2, ['coalesce', ['get', 'name'], '']] as maplibregl.ExpressionSpecification,
+            'text-size': ['interpolate', ['linear'], ['zoom'], 12.2, 11, 16, 12.5] as maplibregl.ExpressionSpecification,
+            'text-variable-anchor': ['top', 'bottom', 'left', 'right'] as ('top' | 'bottom' | 'left' | 'right')[],
+            'text-radial-offset': 1.15,
+            'text-justify': 'auto' as const,
+            'text-max-width': 9,
+            'text-optional': true,
+          }
+        : {}),
+    },
+    ...(hasGlyphs
+      ? {
+          paint: {
+            'text-color': textSecondary,
+            'text-halo-color': surface,
+            'text-halo-width': 1.7,
+          },
+        }
+      : {}),
+  });
   map.addLayer({
     id: 'pois',
     type: 'symbol',
     source: 'pois',
     layout: {
-      'icon-image': [
-        'match',
-        ['get', 'category'],
-        'restaurant',
-        'poi-restaurant',
-        'cafe',
-        'poi-cafe',
-        'fuel',
-        'poi-fuel',
-        'ev_charging',
-        'poi-ev_charging',
-        'hotel',
-        'poi-hotel',
-        'parking',
-        'poi-parking',
-        'pharmacy',
-        'poi-pharmacy',
-        'hospital',
-        'poi-hospital',
-        'rest_area',
-        'poi-rest_area',
-        'supermarket',
-        'poi-supermarket',
-        'poi-default',
-      ],
+      'icon-image': POI_ICON_MATCH,
       'icon-size': ['interpolate', ['linear'], ['zoom'], 7, 0.72, 11, 0.9, 15, 1.08],
       'icon-allow-overlap': true,
-      'text-field': ['step', ['zoom'], '', 11, ['coalesce', ['get', 'name'], '']],
-      'text-size': 12,
-      'text-offset': [0, 1.45],
-      'text-anchor': 'top',
-      'text-max-width': 10,
-      'text-optional': true,
+      ...(hasGlyphs
+        ? {
+            'text-font': labelFont,
+            'text-field': ['step', ['zoom'], '', 11, ['coalesce', ['get', 'name'], '']] as maplibregl.ExpressionSpecification,
+            'text-size': 12,
+            'text-offset': [0, 1.45] as [number, number],
+            'text-anchor': 'top' as const,
+            'text-max-width': 10,
+            'text-optional': true,
+          }
+        : {}),
     },
-    paint: {
-      'text-color': textColor,
-      'text-halo-color': surface,
-      'text-halo-width': 1.8,
-    },
+    ...(hasGlyphs
+      ? {
+          paint: {
+            'text-color': textColor,
+            'text-halo-color': surface,
+            'text-halo-width': 1.8,
+          },
+        }
+      : {}),
   });
   map.addLayer({
     id: 'cameras',
@@ -324,17 +395,32 @@ export function addRouteLayers(map: MLMap) {
       'icon-image': 'map-camera',
       'icon-size': ['interpolate', ['linear'], ['zoom'], 8, 0.68, 12, 0.88, 15, 1.05],
       'icon-allow-overlap': true,
-      'text-field': ['step', ['zoom'], '', 12, ['case', ['>', ['coalesce', ['get', 'kmh'], 0], 0], ['concat', ['to-string', ['get', 'kmh']]], '']],
-      'text-size': 11,
-      'text-offset': [0, 1.35],
-      'text-anchor': 'top',
-      'text-optional': true,
+      ...(hasGlyphs
+        ? {
+            'text-font': labelFont,
+            'text-field': [
+              'step',
+              ['zoom'],
+              '',
+              12,
+              ['case', ['>', ['coalesce', ['get', 'kmh'], 0], 0], ['concat', ['to-string', ['get', 'kmh']]], ''],
+            ] as maplibregl.ExpressionSpecification,
+            'text-size': 11,
+            'text-offset': [0, 1.35] as [number, number],
+            'text-anchor': 'top' as const,
+            'text-optional': true,
+          }
+        : {}),
     },
-    paint: {
-      'text-color': textColor,
-      'text-halo-color': surface,
-      'text-halo-width': 1.8,
-    },
+    ...(hasGlyphs
+      ? {
+          paint: {
+            'text-color': textColor,
+            'text-halo-color': surface,
+            'text-halo-width': 1.8,
+          },
+        }
+      : {}),
   });
   map.addLayer({
     id: 'hazards',

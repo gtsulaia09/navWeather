@@ -8,7 +8,20 @@
   align-items: center;
   pointer-events: auto;
   transform-origin: 50% 100%;
-  transition: transform var(--dur) var(--ease);
+  scale: 1;
+  opacity: 1;
+  transition:
+    scale var(--dur) var(--ease-spring),
+    opacity 160ms var(--ease-out);
+
+  @starting-style {
+    opacity: 0;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    @starting-style {
+      scale: 0.85;
+    }
+  }
 }
 /* Invisible hit area so the small pill still has a ≥44px touch target. */
 .wmarker::before {
@@ -28,6 +41,10 @@
   box-shadow: var(--shadow-marker);
   color: var(--text);
   white-space: nowrap;
+  transition:
+    box-shadow var(--dur) var(--ease),
+    background var(--dur) var(--ease),
+    border-color var(--dur) var(--ease);
 }
 .wmarker__temp {
   font-weight: 700;
@@ -49,11 +66,16 @@
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
 }
 .wmarker.is-highlighted {
-  transform: scale(1.06);
+  scale: 1.06;
 }
 .wmarker.is-selected {
-  transform: scale(1.1);
+  scale: 1.1;
   z-index: 2;
+}
+@media (prefers-reduced-motion: reduce) {
+  .wmarker {
+    transition: none;
+  }
 }
 .wmarker.is-selected .wmarker__pill {
   box-shadow: 0 0 0 2px var(--accent), var(--shadow-marker);

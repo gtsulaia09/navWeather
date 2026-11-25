@@ -7,7 +7,19 @@
   /* Inside what is visible: the on-screen keyboard covers the bottom (--visible-*, useVisibleViewport). */
   padding: calc(max(var(--safe-top), var(--visible-top, 0px)) + 12px) calc(var(--safe-right) + 12px)
     calc(max(var(--safe-bottom), var(--visible-bottom, 0px)) + 12px) calc(var(--safe-left) + 12px);
-  background: rgba(10, 12, 16, 0.45);
+  background: rgba(10, 12, 16, 0.48);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  opacity: 1;
+  transition: opacity 180ms var(--ease-out);
+
+  @starting-style {
+    opacity: 0;
+  }
+}
+.dialog-backdrop[data-closing] {
+  opacity: 0;
+  pointer-events: none;
 }
 @media (min-width: 600px) {
   .dialog-backdrop {
@@ -24,6 +36,34 @@
   background: var(--surface);
   border: 1px solid var(--border);
   box-shadow: var(--shadow-float);
+  opacity: 1;
+  translate: 0 0;
+  transition:
+    opacity 180ms var(--ease-out),
+    translate 220ms var(--ease-spring);
+
+  @starting-style {
+    opacity: 0;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    @starting-style {
+      translate: 0 16px;
+    }
+  }
+}
+.dialog[data-closing] {
+  opacity: 0;
+  @media (prefers-reduced-motion: no-preference) {
+    translate: 0 12px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dialog-backdrop,
+  .dialog {
+    transition-duration: 90ms;
+    translate: none;
+  }
 }
 .dialog:focus {
   /* Focused itself on open (touch screens): no ring around the whole dialog. */

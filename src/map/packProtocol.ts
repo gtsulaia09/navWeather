@@ -20,6 +20,29 @@ interface Req {
 }
 
 const EMPTY = new ArrayBuffer(0);
+const KNOWN_FONTS = new Set(['Noto Sans Regular', 'Noto Sans Medium', 'Noto Sans Italic']);
+const isHtml = (res: Response) => (res.headers.get('content-type') ?? '').includes('text/html');
+
+/** Adapt a Protomaps EN/RU style into native Georgian (`ka`) labels when no pre-built `style-*-ka.json` exists yet. */
+function adaptStyleForGeorgian(raw: unknown): unknown {
+  if (!raw || typeof raw !== 'object' || !Array.isArray((raw as { layers?: unknown[] }).layers)) return raw;
+  const doc = raw as { layers: Record<string, unknown>[] };
+  return {
+    ...doc,
+    layers: doc.layers.map((layer) => {
+      if (layer.type !== 'symbol' || !layer.layout || typeof layer.layout !== 'object') return layer;
+      const layout = { ...(layer.layout as Record<string, unknown>) };
+      if ('text-field' in layout) {
+        layout['text-field'] = ['coalesce', ['get', 'name:ka'], ['get', 'pgf:name'], ['get', 'name'], ['get', 'name:en']];
+      }
+      // Noto Sans Italic lacks Georgian glyphs (26-byte stub PBF): switch italic stacks to Regular so water/park labels render.
+      if (Array.isArray(layout['text-font'])) {
+        layout['text-font'] = (layout['text-font'] as string[]).map((f) => (f === 'Noto Sans Italic' ? 'Noto Sans Regular' : f));
+      }
+      return { ...layer, layout };
+    }),
+  };
+}
 
 export function createPackProtocol(opts: PackProtocolOptions) {
   const base = opts.baseUrl.replace(/\/+$/, '');
@@ -54,7 +77,7 @@ export function createPackProtocol(opts: PackProtocolOptions) {
     // would otherwise abort the pack for all 85 sibling tiles in the same pack (B-49).
     p = fetch(`${base}/${packPath(build, rz, rx, ry)}`)
       .then(async (res) => {
-        if (!res.ok) throw new Error(`pack ${res.status}`);
+        if (!res.ok || isHtml(res)) throw new Error(`pack ${res.status}`);
         const buf = await res.arrayBuffer();
         return { buf, dir: readPackDirectory(buf) };
       })
@@ -86,13 +109,15 @@ export function createPackProtocol(opts: PackProtocolOptions) {
 
   async function style(theme: 'light' | 'dark', lang: string): Promise<unknown> {
     const idx = await loadIndex();
-    const url = idx ? `${base}/${idx.value.build}/style-${theme}-${idx.value.langs.includes(lang) ? lang : 'en'}.json` : opts.fallbackStyle(theme);
+    const hasLang = idx?.value.langs.includes(lang) ?? false;
+    const url = idx ? `${base}/${idx.value.build}/style-${theme}-${hasLang ? lang : 'en'}.json` : opts.fallbackStyle(theme);
     const res = await fetch(url);
-    if (!res.ok) {
+    if (!res.ok || isHtml(res)) {
       if (!idx) throw new Error(`map style ${res.status}`);
       return (await fetch(opts.fallbackStyle(theme))).json();
     }
-    return res.json();
+    const json = await res.json();
+    return idx && lang === 'ka' && !hasLang ? adaptStyleForGeorgian(json) : json;
   }
 
   /** MapLibre `addProtocol` handler. */
@@ -107,11 +132,23 @@ export function createPackProtocol(opts: PackProtocolOptions) {
       return { data: await style(parts[1] === 'dark' ? 'dark' : 'light', parts[2] ?? 'en') };
     }
     if (parts[0] === 'assets') {
-      // Font stacks arrive URL-encoded or not depending on the caller: normalise every segment.
+      if (parts[1] === 'fonts' && parts.length >= 4) {
+        const rawStack = decodeURIComponent(parts[2]);
+        const range = decodeURIComponent(parts[3]);
+        // Normalize composite or unsupported font stacks (and Georgian italic stub range) to Noto Sans Regular.
+        const chosen =
+          KNOWN_FONTS.has(rawStack) && !(rawStack === 'Noto Sans Italic' && range === '4096-4351.pbf')
+            ? rawStack
+            : 'Noto Sans Regular';
+        const fontUrl = `${base}/assets/fonts/${encodeURIComponent(chosen)}/${encodeURIComponent(range)}`;
+        const res = await fetch(fontUrl, { signal: ctrl.signal });
+        if (!res.ok || isHtml(res)) return { data: EMPTY };
+        return { data: await res.arrayBuffer() };
+      }
+      // Other assets (sprites): normalise every segment and reject SPA HTML fallbacks.
       const rest = parts.slice(1).map((s) => encodeURIComponent(decodeURIComponent(s)).replace(/%40/g, '@')).join('/');
       const res = await fetch(`${base}/assets/${rest}`, { signal: ctrl.signal });
-      if (!res.ok) {
-        if (rest.startsWith('fonts/')) return { data: EMPTY }; // a missing glyph range: no labels in that script
+      if (!res.ok || isHtml(res)) {
         throw new Error(`basemap asset ${res.status}`);
       }
       return { data: params.type === 'json' ? await res.json() : await res.arrayBuffer() };

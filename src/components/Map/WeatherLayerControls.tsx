@@ -7,6 +7,7 @@ import { deviceTimeZone, formatLocalTime } from '../../utils/timezone';
 import { CloseIcon, LayersIcon, PauseIcon, PlayIcon } from '../Icons/Icons';
 import { layerTime } from './useWeatherLayer';
 import { useDismiss } from '../../hooks/useDismiss';
+import { usePopoverPlacement } from '../../hooks/usePopoverPlacement';
 import './WeatherLayer.css';
 
 /** Map button: choose a forecast layer (off / precipitation / temperature). */
@@ -15,7 +16,9 @@ export function LayersButton() {
   const layer = useExplore((s) => s.layer);
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const popRef = useRef<HTMLDivElement>(null);
   useDismiss(ref, open, () => setOpen(false));
+  const pop = usePopoverPlacement(ref, popRef, open, 'up');
   const options: ['off' | LayerKind, string][] = [
     ['off', m.layers.off],
     ['precip', m.layers.precip],
@@ -27,7 +30,7 @@ export function LayersButton() {
         <LayersIcon size={22} />
       </button>
       {open ? (
-        <div className="popover layers__pop" role="menu" aria-label={m.layers.title}>
+        <div ref={popRef} className="popover layers__pop" data-v={pop.vertical} style={pop.style} role="menu" aria-label={m.layers.title}>
           {options.map(([id, label]) => (
             <button
               key={id}

@@ -22,12 +22,14 @@ const BLANK_STYLE = JSON.stringify({
   sources: {},
   layers: [{ id: 'background', type: 'background', paint: { 'background-color': '#eceef1' } }],
 });
-const stubOpenFreeMap = (ctx: import('@playwright/test').BrowserContext) =>
-  ctx.route(/tiles\.openfreemap\.org/, (r) =>
+const stubOpenFreeMap = async (ctx: import('@playwright/test').BrowserContext) => {
+  await ctx.route('**/data/basemap/**', (r) => r.abort());
+  await ctx.route(/tiles\.openfreemap\.org/, (r) =>
     /\/styles\//.test(r.request().url())
       ? r.fulfill({ status: 200, contentType: 'application/json', body: BLANK_STYLE })
       : r.abort(),
   );
+};
 // Where the example road starts (Tbilisi, our geocoder's city point).
 const TBILISI = { latitude: 41.6936, longitude: 44.8014, accuracy: 8 };
 

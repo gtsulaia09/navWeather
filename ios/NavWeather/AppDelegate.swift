@@ -1,5 +1,21 @@
 import UIKit
 import AVFoundation
+import CarPlay
+
+/// Shared runtime owning the single WKWebView + CoreLocation + AVSpeechSynthesizer engine so CarPlay works
+/// immediately even when connected while the iPhone screen is locked and no phone UIWindowScene has opened yet.
+@MainActor
+final class AppRuntime {
+    static let shared = AppRuntime()
+
+    lazy var viewController: ViewController = {
+        let vc = ViewController()
+        vc.loadViewIfNeeded()
+        return vc
+    }()
+
+    private init() {}
+}
 
 @main
 class AppDelegate: UIResponder, UIApplicationDelegate {
@@ -7,11 +23,14 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
     ) -> Bool {
-        // Voice guidance keeps speaking in the background and lowers other audio while it talks. Only the category is
-        // set here: activating the session at launch blocked the main thread (Xcode's "AVAudioSession Hang Risk") and
-        // ducked the user's music for as long as the app was open. ViewController activates it around each prompt.
+        // Voice guidance keeps speaking in the background and over CarPlay's voice channel while ducking music/podcasts.
+        // Only the category is set here: activating at launch blocked the main thread; ViewController activates per prompt.
         do {
-            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio, options: [.duckOthers])
+            try AVAudioSession.sharedInstance().setCategory(
+                .playback,
+                mode: .spokenAudio,
+                options: [.duckOthers, .interruptSpokenAudioAndMixWithOthers]
+            )
         } catch {
             print("Failed to set AVAudioSession category: \(error)")
         }
@@ -23,7 +42,12 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         configurationForConnecting connectingSceneSession: UISceneSession,
         options: UIScene.ConnectionOptions
     ) -> UISceneConfiguration {
-        let configuration = UISceneConfiguration(name: nil, sessionRole: connectingSceneSession.role)
+        if connectingSceneSession.role == .carTemplateApplication {
+            let carConfig = UISceneConfiguration(name: "CarPlay Configuration", sessionRole: connectingSceneSession.role)
+            carConfig.delegateClass = CarPlaySceneDelegate.self
+            return carConfig
+        }
+        let configuration = UISceneConfiguration(name: "Default Configuration", sessionRole: connectingSceneSession.role)
         configuration.delegateClass = SceneDelegate.self
         return configuration
     }
@@ -41,7 +65,7 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     ) {
         guard let windowScene = scene as? UIWindowScene else { return }
         let window = UIWindow(windowScene: windowScene)
-        window.rootViewController = ViewController()
+        window.rootViewController = AppRuntime.shared.viewController
         window.makeKeyAndVisible()
         self.window = window
     }

@@ -8,6 +8,7 @@
 import { setLocationProvider, type LocationProvider, type RawPosition, type RawPositionError } from './location';
 import { setHapticsProvider, type HapticsProvider, type HapticKind } from './haptics';
 import { setWakeLockProvider, type WakeLockProvider, type WakeLockHandle } from './wakeLock';
+import { dispatchCarSurfaceCommand, setCarSurfaceBridge, type CarSurfaceBridge, type CarSurfaceCommand, type CompanionSnapshot } from './surfaces';
 import { setTtsProvider, type TextToSpeechProvider } from '../voice/providers';
 import { speakable } from '../voice/speakable';
 
@@ -19,11 +20,14 @@ declare global {
         nativeHaptics?: { postMessage: (msg: unknown) => void };
         nativeWakeLock?: { postMessage: (msg: unknown) => void };
         nativeTTS?: { postMessage: (msg: unknown) => void };
+        nativeCarPlay?: { postMessage: (msg: unknown) => void };
       };
     };
     __navweather_native_location_update?: (pos: RawPosition) => void;
     __navweather_native_location_error?: (err: RawPositionError) => void;
     __navweather_native_tts_end?: (id: number) => void;
+    __navweather_native_carplay_status?: (connected: boolean) => void;
+    __navweather_native_carplay_command?: (cmd: CarSurfaceCommand) => void;
   }
 }
 
@@ -184,6 +188,42 @@ export function initNativeIosBridge(): boolean {
     };
 
     setTtsProvider(nativeTts);
+  }
+
+  // 5. Native CarPlay Surface Bridge (CPTemplateApplicationSceneDelegate + CPMapTemplate + CPNavigationSession)
+  if (handlers.nativeCarPlay) {
+    let connected = false;
+    window.__navweather_native_carplay_status = (next: boolean) => {
+      connected = Boolean(next);
+      if (connected) dispatchCarSurfaceCommand({ action: 'requestSync' });
+    };
+    window.__navweather_native_carplay_command = (cmd: CarSurfaceCommand) => {
+      if (cmd && typeof cmd === 'object' && 'action' in cmd) {
+        dispatchCarSurfaceCommand(cmd);
+      }
+    };
+
+    const postSnapshot = (snapshot: CompanionSnapshot) => {
+      handlers.nativeCarPlay?.postMessage({ action: 'sync', snapshot });
+    };
+
+    const nativeCarPlayBridge: CarSurfaceBridge = {
+      name: 'ios-native-carplay',
+      get connected() {
+        return connected;
+      },
+      syncState(snapshot) {
+        postSnapshot(snapshot);
+      },
+      updateNavigation(snapshot) {
+        postSnapshot(snapshot);
+      },
+      endNavigation() {
+        handlers.nativeCarPlay?.postMessage({ action: 'endNavigation' });
+      },
+    };
+    setCarSurfaceBridge(nativeCarPlayBridge);
+    handlers.nativeCarPlay.postMessage({ action: 'ready' });
   }
 
   return true;

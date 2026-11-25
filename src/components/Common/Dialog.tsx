@@ -16,17 +16,19 @@ export function initialFocusTarget(dialog: HTMLElement, touch: boolean): HTMLEle
   return first;
 }
 
-/** Modal dialog: initial focus, focus trap, Escape, and focus returned on close. */
+/** Modal dialog: initial focus, focus trap, Escape, smooth entry/exit, and focus returned on close. */
 export function Dialog({
   label,
   onClose,
   children,
   size = 'small',
+  closing = false,
 }: {
   label: string;
   onClose: () => void;
   children: ReactNode;
   size?: 'small' | 'large';
+  closing?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   // Latest onClose without re-running the focus setup: callers often pass a new
@@ -78,8 +80,20 @@ export function Dialog({
     };
   }, []);
   return (
-    <div className="dialog-backdrop" onPointerDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div ref={ref} className={`dialog dialog--${size}`} role="dialog" aria-modal="true" aria-label={label} tabIndex={-1}>
+    <div
+      className="dialog-backdrop"
+      data-closing={closing ? '' : undefined}
+      onPointerDown={(e) => !closing && e.target === e.currentTarget && onClose()}
+    >
+      <div
+        ref={ref}
+        className={`dialog dialog--${size}`}
+        data-closing={closing ? '' : undefined}
+        role="dialog"
+        aria-modal="true"
+        aria-label={label}
+        tabIndex={-1}
+      >
         {children}
       </div>
     </div>

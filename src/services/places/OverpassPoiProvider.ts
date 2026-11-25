@@ -1,4 +1,4 @@
-import { localizeScript } from '../../i18n/script';
+import { hasGeorgian, localizeScript } from '../../i18n/script';
 import type { LngLat } from '../../types/geo';
 import { cumulativeDistances } from '../../utils/distance';
 import { overpassQuery } from '../overpass';
@@ -98,10 +98,24 @@ export function buildPoiQuery(category: PoiCategory, corridor: LngLat[], corrido
   return `[out:json][timeout:15];(${parts.join('')});out center tags 300;`;
 }
 
+function localizedTag(t: Record<string, string>, prefix: 'name' | 'brand' | 'operator', language: string): string | undefined {
+  const direct = t[`${prefix}:${language}`];
+  if (direct) return localizeScript(direct, language);
+  const raw = t[prefix];
+  if (language === 'ka') {
+    if (raw && hasGeorgian(raw)) return raw;
+    return raw ?? t[`${prefix}:en`];
+  }
+  if (language === 'ru') {
+    if (raw && hasGeorgian(raw)) return localizeScript(raw, 'ru');
+    return t[`${prefix}:en`] ?? (raw ? localizeScript(raw, 'ru') : undefined);
+  }
+  return t[`${prefix}:en`] ?? (prefix === 'name' ? t.int_name : undefined) ?? (raw ? localizeScript(raw, language) : undefined);
+}
+
 /** Brand (or operator) in the UI language when mapped, else transliterated like names. */
 function brandOf(t: Record<string, string>, language: string): string | undefined {
-  const raw = t[`brand:${language}`] ?? t['brand:en'] ?? t.brand ?? t[`operator:${language}`] ?? t['operator:en'] ?? t.operator;
-  return raw ? localizeScript(raw, language) : undefined;
+  return localizedTag(t, 'brand', language) ?? localizedTag(t, 'operator', language);
 }
 
 export function parsePois(elements: OverpassElement[], category: PoiCategory, language: string): Poi[] {
@@ -118,7 +132,7 @@ export function parsePois(elements: OverpassElement[], category: PoiCategory, la
     out.push({
       id,
       category,
-      name: t[`name:${language}`] ?? t['name:en'] ?? (t.name ? localizeScript(t.name, language) : undefined),
+      name: localizedTag(t, 'name', language),
       brand: brandOf(t, language),
       coordinate: [lon, lat],
       openingHours: t.opening_hours,

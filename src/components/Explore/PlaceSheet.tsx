@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Attribution } from '../Common/Attribution';
 import { useDismiss } from '../../hooks/useDismiss';
+import { usePopoverPlacement } from '../../hooks/usePopoverPlacement';
 import { dailySummary, nextHours } from '../../algorithms/placeForecast';
 import { matchForecastToTime } from '../../algorithms/weatherMatching';
 import { conditionText, formatDistance, formatDuration, formatSpeed, formatTemp } from '../../i18n/format';
@@ -111,7 +112,9 @@ function SaveMenu({ place }: { place: Place }) {
   const m = useMessages();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLSpanElement>(null);
+  const popRef = useRef<HTMLDivElement>(null);
   useDismiss(ref, open, () => setOpen(false));
+  const pop = usePopoverPlacement(ref, popRef, open, 'up');
   useSavedPlaces((s) => s.saved); // re-render on change
   const slots = useSavedPlaces.getState().slotsOf(place);
   const toggle = (slot: SavedSlot) => useSavedPlaces.getState().toggle(place, slot);
@@ -127,7 +130,7 @@ function SaveMenu({ place }: { place: Place }) {
         {m.explore.save}
       </button>
       {open ? (
-        <div className="popover savemenu__pop" role="menu" aria-label={m.explore.saveAs}>
+        <div ref={popRef} className="popover savemenu__pop" data-v={pop.vertical} style={pop.style} role="menu" aria-label={m.explore.saveAs}>
           {rows.map(([slot, label, icon]) => (
             <button key={slot} className="popover__row" role="menuitemcheckbox" aria-checked={slots.includes(slot)} onClick={() => toggle(slot)}>
               {icon}

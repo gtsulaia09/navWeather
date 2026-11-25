@@ -30,6 +30,9 @@ export function createCarPlayBridge(nativeModule: NativeCarPlayModule | null): C
     get connected() {
       return nativeModule?.isConnected() ?? false;
     },
+    syncState(snapshot: CompanionSnapshot) {
+      if (snapshot.active) this.updateNavigation(snapshot);
+    },
     updateNavigation(snapshot: CompanionSnapshot) {
       if (!nativeModule || !snapshot.active) return;
       if (snapshot.nextManeuver) {

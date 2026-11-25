@@ -32,6 +32,7 @@ test.beforeEach(async ({ context, page }) => {
     const base = new URL(page.url() === 'about:blank' ? (process.env.BASE_URL ?? 'http://localhost:5173') : page.url());
     if (u.host !== base.host && !ALLOWED_HOSTS.has(u.host)) foreign.push(`${u.host}${u.pathname}`);
   });
+  await context.route('**/data/basemap/**', (r) => r.abort());
   await context.route(/tiles\.openfreemap\.org/, (r) =>
     /\/styles\//.test(r.request().url())
       ? r.fulfill({ status: 200, contentType: 'application/json', body: BLANK_STYLE })
@@ -309,5 +310,39 @@ test.describe('iPhone Safari, portrait', () => {
       return { app: app.userSelect || app.webkitUserSelect, field: field.userSelect || field.webkitUserSelect };
     });
     expect(styles).toEqual({ app: 'none', field: 'text' });
+  });
+
+  test('Fresco in Georgia is searchable and popovers/layers never clip or overlap map controls', async ({ page }) => {
+    const ambientPlaces = page.waitForResponse((r) => r.url().includes('/data/places/v1/') && r.status() === 200);
+    await page.goto('/');
+    await ambientPlaces;
+    const search = page.getByRole('combobox', { name: 'Search a place or address' });
+    await search.fill('Fresco');
+    const frescoOpt = page.getByRole('option', { name: /Fresco/i }).first();
+    await expect(frescoOpt).toBeVisible();
+    await frescoOpt.click();
+
+    // Save popover stays strictly within the viewport on narrow phones
+    const saveBtn = page.getByRole('button', { name: 'Save' });
+    await expect(saveBtn).toBeVisible();
+    await saveBtn.click();
+    const saveMenu = page.getByRole('menu', { name: /Save/i });
+    await expect(saveMenu).toBeVisible();
+    const popBox = (await saveMenu.boundingBox())!;
+    expect(popBox.x).toBeGreaterThanOrEqual(4);
+    expect(popBox.x + popBox.width).toBeLessThanOrEqual(402 - 4);
+    expect(popBox.y).toBeGreaterThanOrEqual(4);
+    expect(popBox.y + popBox.height).toBeLessThanOrEqual(714 - 4);
+    await page.keyboard.press('Escape');
+
+    // Close place card, turn on forecast layer, and verify .layerbar never overlaps right-hand .voice buttons
+    await page.locator('.phead__close').click();
+    const layersBtn = page.getByRole('button', { name: 'Map layers' });
+    await expect(layersBtn).toBeVisible();
+    await layersBtn.click();
+    await page.getByRole('menuitemradio', { name: 'Precipitation' }).click();
+    const bar = (await page.locator('.layerbar').boundingBox())!;
+    const voice = (await page.locator('.voice').boundingBox())!;
+    expect(bar.x + bar.width).toBeLessThanOrEqual(voice.x);
   });
 });

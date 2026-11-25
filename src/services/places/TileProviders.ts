@@ -104,6 +104,37 @@ export class TilePoiProvider implements PoiProvider {
     const features = (await this.tiles.features(category, [center], r, options.signal)).filter((f) => haversineM(center, [f[1], f[2]]) <= r);
     return parsePois(features.map(toElement), category, options.language ?? this.language);
   }
+
+  async searchBounds(bbox: [number, number, number, number], zoom: number, options: { signal?: AbortSignal; language?: string } = {}): Promise<Poi[]> {
+    if (zoom < 11) return [];
+    const index = await this.tiles.loadIndex(options.signal);
+    if (!index) return [];
+    const center: LngLat = [(bbox[0] + bbox[2]) / 2, (bbox[1] + bbox[3]) / 2];
+    const corners: LngLat[] = [
+      center,
+      [bbox[0], bbox[1]],
+      [bbox[2], bbox[1]],
+      [bbox[0], bbox[3]],
+      [bbox[2], bbox[3]],
+    ];
+    if (!corners.some((c) => this.tiles.covers(index, c))) return [];
+    const language = options.language ?? this.language;
+    const categories: PoiCategory[] = ['attraction', 'hospital', 'fuel', 'ev_charging', 'rest_area'];
+    if (zoom >= 11.8) categories.push('supermarket', 'hotel', 'pharmacy');
+    if (zoom >= 13.4) categories.push('restaurant', 'cafe', 'atm', 'parking', 'car_repair', 'car_wash');
+    if (zoom >= 15.2) categories.push('toilets');
+
+    const lists = await Promise.all(
+      categories.map(async (cat) => {
+        const pts = await this.tiles.featuresInBbox(cat, bbox, options.signal);
+        return parsePois(pts.map(toElement), cat, language);
+      }),
+    );
+    // Keep named/branded POIs at broader zooms so streets don't clutter; at street zoom (≥14.8) include essential unnamed icons too.
+    const essentialUnnamed = new Set<PoiCategory>(['fuel', 'ev_charging', 'hospital', 'atm', 'parking', 'toilets']);
+    const merged = dedupe(lists).filter((p) => Boolean(p.name || p.brand) || (zoom >= 14.8 && essentialUnnamed.has(p.category)));
+    return merged.slice(0, 350);
+  }
 }
 
 export class TileSpeedLimitProvider implements SpeedLimitProvider {

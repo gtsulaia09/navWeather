@@ -32,6 +32,15 @@
   gap: 8px;
   pointer-events: none;
 }
+/* Narrow phones: fit cleanly between SpeedSign on the left and the FAB column on the right without overlapping either. */
+@media (max-width: 440px) {
+  .map-controls {
+    left: calc(var(--safe-left) + 76px);
+    right: calc(var(--safe-right) + 72px);
+    transform: none;
+    justify-content: center;
+  }
+}
 .map-fab {
   display: inline-flex;
   align-items: center;
@@ -40,11 +49,30 @@
   padding: 0 16px;
   border-radius: var(--r-control);
   background: var(--surface);
+  border: 1px solid var(--border);
   box-shadow: var(--shadow-float);
   font-weight: 600;
   font-size: 15px;
   color: var(--accent);
   pointer-events: auto;
+  opacity: 1;
+  scale: 1;
+  transition:
+    opacity 160ms var(--ease-out),
+    scale var(--dur-fast) var(--ease-spring),
+    background var(--dur) var(--ease);
+
+  @starting-style {
+    opacity: 0;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    @starting-style {
+      scale: 0.92;
+    }
+  }
+}
+.map-fab:active {
+  scale: 0.95;
 }
 
 /* Vehicle */
@@ -101,7 +129,7 @@
     top: 8px;
   }
 }
-@media (orientation: landscape) and (max-height: 520px) {
+@media (orientation: landscape) and (max-height: 560px) {
   .map-controls {
     bottom: calc(var(--safe-bottom) + 12px);
   }
@@ -119,8 +147,27 @@
   height: 44px;
   border-radius: 50%;
   background: var(--surface);
+  border: 1px solid var(--border);
   color: var(--text);
   box-shadow: var(--shadow-float);
+  opacity: 1;
+  scale: 1;
+  transition: opacity 160ms var(--ease-out), scale var(--dur-fast) var(--ease-spring);
+
+  @starting-style {
+    opacity: 0;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    @starting-style {
+      scale: 0.85;
+    }
+  }
+}
+.compass:active {
+  scale: 0.92;
+}
+.compass svg {
+  transition: transform 160ms var(--ease-out);
 }
 @media (min-width: 900px) {
   .compass {
@@ -144,6 +191,11 @@
   overflow: hidden;
   text-overflow: ellipsis;
   cursor: pointer;
+  scale: 1;
+  transition: scale var(--dur-fast) var(--ease-spring), color var(--dur) var(--ease), border-color var(--dur) var(--ease);
+}
+.altlabel:active {
+  scale: 0.95;
 }
 /* Invisible hit area so map labels keep a ≥44px touch target (REQ-A11Y-003, DP-11.11). */
 .altlabel::before {

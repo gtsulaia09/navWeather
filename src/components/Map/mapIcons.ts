@@ -172,6 +172,67 @@ const ICON_SPECS: Record<string, { bg: string; shape?: 'circle' | 'triangle' | '
       ctx.fill();
     },
   },
+  'poi-atm': {
+    bg: '#0f766e',
+    draw(ctx, c) {
+      ctx.font = '800 23px system-ui, -apple-system, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('₾', c, c + 1.5);
+    },
+  },
+  'poi-attraction': {
+    bg: '#c026d3',
+    draw(ctx, c) {
+      ctx.beginPath();
+      for (let i = 0; i < 10; i++) {
+        const r = i % 2 === 0 ? 12 : 5.2;
+        const a = (i * Math.PI) / 5 - Math.PI / 2;
+        const x = c + r * Math.cos(a);
+        const y = c + r * Math.sin(a);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.closePath();
+      ctx.fill();
+    },
+  },
+  'poi-car_wash': {
+    bg: '#0284c7',
+    draw(ctx, c) {
+      ctx.lineWidth = 3;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(c, c - 12);
+      ctx.quadraticCurveTo(c + 9, c, c + 7, c + 6);
+      ctx.arc(c, c + 6, 7, 0, Math.PI);
+      ctx.quadraticCurveTo(c - 9, c, c, c - 12);
+      ctx.fill();
+    },
+  },
+  'poi-car_repair': {
+    bg: '#475569',
+    draw(ctx, c) {
+      ctx.lineWidth = 3.5;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(c - 9, c + 9);
+      ctx.lineTo(c + 4, c - 4);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(c + 6, c - 6, 5, 0.4, Math.PI * 1.6);
+      ctx.stroke();
+    },
+  },
+  'poi-toilets': {
+    bg: '#64748b',
+    draw(ctx, c) {
+      ctx.font = '800 16px system-ui, -apple-system, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('WC', c, c + 1);
+    },
+  },
   'poi-default': {
     bg: '#0a6cff',
     draw(ctx, c) {

@@ -24,7 +24,7 @@ import { BANDS, encodePack, MAX_ZOOM, packMembers, packPath, tileRange, WORLD_MA
 const PMTILES_VERSION = '1.31.2';
 const ASSETS_ZIP = 'https://github.com/protomaps/basemaps-assets/archive/refs/heads/main.zip';
 const REGIONS = { georgia: [39.9, 40.95, 46.8, 43.7] };
-const LANGS = ['en', 'ru'];
+const LANGS = ['en', 'ru', 'ka'];
 const FONTS = ['Noto Sans Regular', 'Noto Sans Medium', 'Noto Sans Italic'];
 const ATTRIBUTION = '<a href="https://protomaps.com">Protomaps</a> © <a href="https://openstreetmap.org/copyright">OpenStreetMap</a>';
 

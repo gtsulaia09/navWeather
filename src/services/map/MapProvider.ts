@@ -5,7 +5,7 @@ export type MapTheme = 'light' | 'dark';
 /** Basemap source. Swap for a commercial provider without touching the map UI. */
 export interface MapProvider {
   readonly name: string;
-  getStyleUrl(theme: MapTheme): string;
+  getStyleUrl(theme: MapTheme, lang?: string): string;
   /** A custom URL scheme the map must register before loading the style (MapLibre `addProtocol`). */
   readonly protocol?: { name: string; load: (params: { url: string; type?: string }, ctrl: AbortController) => Promise<{ data: unknown }> };
 }
@@ -26,8 +26,8 @@ export class PackMapProvider implements MapProvider {
     this.protocol = { name: 'navpack', load: createPackProtocol({ baseUrl, fallbackStyle: (t) => fallback[t] }) };
   }
 
-  getStyleUrl(theme: MapTheme): string {
-    return `navpack://style/${theme}/${this.lang}`;
+  getStyleUrl(theme: MapTheme, lang?: string): string {
+    return `navpack://style/${theme}/${lang ?? this.lang}`;
   }
 }
 
@@ -38,7 +38,7 @@ export class StyleUrlMapProvider implements MapProvider {
     private dark: string,
   ) {}
 
-  getStyleUrl(theme: MapTheme): string {
+  getStyleUrl(theme: MapTheme, _lang?: string): string {
     return theme === 'dark' ? this.dark : this.light;
   }
 }

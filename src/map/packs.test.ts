@@ -78,4 +78,47 @@ describe('navpack protocol', () => {
     const load = createPackProtocol({ baseUrl: '/b', fallbackStyle: (t) => `https://fallback/${t}` });
     expect((await load({ url: 'navpack://style/dark/en', type: 'json' }, ctrl())).data).toEqual({ version: 8, name: 'fallback' });
   });
+
+  it('adapts Georgian (`ka`) basemap labels, normalizes unknown/italic font stacks, and rejects HTML SPA responses', async () => {
+    const glyphBytes = new Uint8Array([10, 20, 30]);
+    const calls: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        calls.push(url);
+        if (url === '/b/index.json') return json(index);
+        if (url === '/b/m1/style-light-en.json') {
+          return json({
+            version: 8,
+            layers: [
+              { id: 'r-water', type: 'symbol', layout: { 'text-field': ['get', 'name:en'], 'text-font': ['Noto Sans Italic'] } },
+            ],
+          });
+        }
+        if (url === '/b/assets/fonts/Noto%20Sans%20Regular/4096-4351.pbf') {
+          return new Response(glyphBytes, { headers: { 'content-type': 'application/x-protobuf' } });
+        }
+        // Simulate Vite dev server returning index.html for a missing glyph range
+        if (url.includes('9999-10255.pbf')) {
+          return new Response('<!doctype html><html></html>', { status: 200, headers: { 'content-type': 'text/html' } });
+        }
+        return new Response('nope', { status: 404 });
+      }),
+    );
+    const load = createPackProtocol({ baseUrl: '/b', fallbackStyle: (t) => `https://fallback/${t}` });
+    const kaStyle = (await load({ url: 'navpack://style/light/ka', type: 'json' }, ctrl())).data as { layers: { layout: Record<string, unknown> }[] };
+    expect(kaStyle.layers[0].layout['text-font']).toEqual(['Noto Sans Regular']);
+    expect(kaStyle.layers[0].layout['text-field']).toEqual(['coalesce', ['get', 'name:ka'], ['get', 'pgf:name'], ['get', 'name'], ['get', 'name:en']]);
+
+    // Italic Georgian range (4096-4351.pbf) and default MapLibre font stacks redirect to Noto Sans Regular
+    const g1 = (await load({ url: 'navpack://assets/fonts/Noto%20Sans%20Italic/4096-4351.pbf' }, ctrl())).data as ArrayBuffer;
+    expect(Array.from(new Uint8Array(g1))).toEqual([10, 20, 30]);
+    const g2 = (await load({ url: 'navpack://assets/fonts/Open%20Sans%20Regular,Arial%20Unicode%20MS%20Regular/4096-4351.pbf' }, ctrl())).data as ArrayBuffer;
+    expect(Array.from(new Uint8Array(g2))).toEqual([10, 20, 30]);
+
+    // HTML SPA fallback returns empty ArrayBuffer instead of corrupting MapLibre's PBF parser
+    const htmlFallback = (await load({ url: 'navpack://assets/fonts/Noto%20Sans%20Regular/9999-10255.pbf' }, ctrl())).data as ArrayBuffer;
+    expect(htmlFallback.byteLength).toBe(0);
+    expect(calls.some((u) => u.includes('Noto%20Sans%20Regular/4096-4351.pbf'))).toBe(true);
+  });
 });

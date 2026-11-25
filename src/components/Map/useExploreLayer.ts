@@ -254,9 +254,10 @@ export function useExploreLayer(mapRef: RefObject<MLMap | null>, styleVersion: n
 
     const onClick = (e: MapMouseEvent) => {
       if (e.originalEvent.target !== map.getCanvas()) return; // markers handle their own clicks
-      // A tap on an alternative route selects it (RouteMap handles that), not a pin.
+      // A tap on an alternative route or a POI selects it, not an unnamed coordinate pin.
       if (map.getLayer('alt-hit') && map.queryRenderedFeatures(e.point, { layers: ['alt-hit'] }).length) return;
-      if (map.getLayer('pois') && map.queryRenderedFeatures(e.point, { layers: ['pois'] }).length) return;
+      const poiLayers = ['pois', 'ambient-pois'].filter((id) => Boolean(map.getLayer(id)));
+      if (poiLayers.length && map.queryRenderedFeatures(e.point, { layers: poiLayers }).length) return;
       const app = useAppStore.getState();
       if (app.mode !== 'planning') return;
       if (app.selectedPointId) {

@@ -78,11 +78,29 @@ const STREET = /^(motorway|trunk|primary|secondary|tertiary|unclassified|residen
 
 const clean = (s) => (typeof s === 'string' ? s.replace(/\s+/g, ' ').trim() : '');
 
-function namesOf(t, base = t.name) {
+function namesOf(t, base = t.name || t.brand || t['brand:en'] || t.operator) {
   const local = clean(base);
-  const en = clean(t['name:en']) || clean(t.int_name) || (hasGeorgian(local) ? localizeScript(local, 'en') : local);
-  const ru = clean(t['name:ru']) || (hasGeorgian(local) ? localizeScript(local, 'ru') : local);
-  const all = new Set([local, en, ru, clean(t['name:ka']), clean(t.int_name), clean(t.old_name), clean(t.alt_name)].filter(Boolean));
+  const en = clean(t['name:en']) || clean(t.int_name) || clean(t['brand:en']) || (hasGeorgian(local) ? localizeScript(local, 'en') : local);
+  const ru = clean(t['name:ru']) || clean(t['brand:ru']) || (hasGeorgian(local) ? localizeScript(local, 'ru') : local);
+  // Georgian `ფ` romanizes to `p` on road signs (`Poti`), while foreign brands spell it `f`/`ph` (`Fresco` = `ფრესკო`).
+  const fAlias = local.includes('ფ') ? localizeScript(local, 'en').replace(/p/gi, (m) => (m === 'P' ? 'F' : 'f')) : '';
+  const all = new Set(
+    [
+      local,
+      en,
+      ru,
+      fAlias,
+      clean(t['name:ka']),
+      clean(t.int_name),
+      clean(t.old_name),
+      clean(t.alt_name),
+      clean(t.brand),
+      clean(t['brand:en']),
+      clean(t['brand:ru']),
+      clean(t['brand:ka']),
+      clean(t.operator),
+    ].filter(Boolean),
+  );
   return { local, en, ru, all: [...all].join(' ') };
 }
 
@@ -127,7 +145,7 @@ export function createGeocodeCollector() {
         }, { city: clean(t['addr:city']) });
         if (!t.name) return;
       }
-      if (t.name) {
+      if (t.name || t.brand || t['brand:en']) {
         const key = POI_KEYS.find((k) => t[k] && t[k] !== 'no' && !(k === 'building' && t[k] === 'yes'));
         if (key) add(`${type}${id}`, t[key], BIG_POI[t[key]] ?? 6, lon, lat, namesOf(t));
       }

@@ -66,7 +66,7 @@ Target scale: Google-Maps-class (ADR-015).
 | REQ-CORE-004 | Forecast matched to each sample's ETA in its own time zone | P0 | VERIFIED | `algorithms/weatherMatching.ts`, `utils/timezone.ts`; tests |
 | REQ-CORE-005 | Route weather timeline, groups, summary, per-road comparison | P0 | VERIFIED | `state/derive.ts`, `algorithms/weatherGrouping.ts`, `components/Plan/*` |
 | REQ-CORE-006 | Weather alerts before significant weather, deduplicated | P0 | VERIFIED | `intelligence/weatherAlerts.ts`, `intelligence/driverAlerts.ts`; tests |
-| REQ-CORE-007 | Explore map: search, place card with weather now / at arrival / 7 days | P1 | VERIFIED | `state/explore.ts`, `components/Explore/*` |
+| REQ-CORE-007 | Explore map: search, ambient local places/POIs on map (zoom-tiered from static regional tiles), place card with weather now / at arrival / 7 days | P1 | VERIFIED (2026-11-25: `useAmbientPois` + `TilePoiProvider.searchBounds` shows Georgia supermarkets incl. Fresco, fuel, EV, pharmacies, cafes, hotels, ATMs, attractions in `en`/`ru`/`ka` with zero third-party calls) | `state/explore.ts`, `components/Explore/*`, `components/Map/useAmbientPois.ts`, `services/places/TileProviders.ts` |
 | REQ-CORE-008 | Best time to leave (next 12 h compared by weather) | P1 | VERIFIED | `algorithms/departurePlanner.ts` |
 | REQ-CORE-009 | Travel modes: car, walk, bike, public transport (timetabled), flight (labelled estimate) | P1 | VERIFIED | `types/travel.ts`, `services/routing/*`; `travelModes.test.ts`, `TransitousProvider.test.ts` |
 | REQ-CORE-010 | Live location sharing (latest position only, expiring) | P2 | VERIFIED | `worker/liveShare.ts`, `share/*`; `liveShare.test.ts`, `scripts/share-smoke.mjs` |
@@ -111,7 +111,7 @@ decision: [ADR-013](architecture/decisions/ADR-013-trip-planner.md).
 | REQ-PLAT-001 | Web (desktop, tablet, iPhone, Android), installable PWA | P0 | IMPLEMENTED |
 | REQ-PLAT-002 | iOS / iPadOS native app (React Native + shared core) | P2 | BLOCKED for App Store / TestFlight by Apple Developer Program fee (\$99/yr, ADR-015); free routes: installable PWA on every iOS/iPadOS device, plus personal builds on owner's own devices with a free Apple ID (re-signed every 7 days, limited app count) |
 | REQ-PLAT-003 | Android native app (phones, tablets, foldables — React Native + shared core) | P2 | PLANNED via free channels (direct APK / F-Droid; open-source repo); Google Play (\$25 once) BLOCKED by fee (ADR-015) until owner decides |
-| REQ-PLAT-004 | Apple CarPlay (navigation entitlement, `CPMapTemplate`, voice first) | P3 | BLOCKED for distribution by paid Apple Developer account + CarPlay entitlement (ADR-015); free route: Xcode CarPlay simulator only until owner decides to pay |
+| REQ-PLAT-004 | Apple CarPlay (navigation entitlement, `CPMapTemplate`, voice first) | P3 | IMPLEMENTED in `ios/NavWeather/CarPlaySceneDelegate.swift` + `nativeIosBridge.ts` + `useCarSurfaceSync.ts` (`CPMapTemplate`, `CPNavigationSession`, `CPListTemplate`, single-alert `CPNavigationAlert`, live route/weather map); store distribution & retail head-unit entitlement BLOCKED by paid Apple Developer Program (\$99/yr, ADR-015); free route: Xcode CarPlay external display simulator |
 | REQ-PLAT-005 | Android Auto (Car App Library, `NavigationTemplate`, voice first) | P3 | BLOCKED for Play distribution by Google Play fee (ADR-015); free route: Android Auto Desktop Head Unit (DHU) and non-Play sideload with phone developer "Unknown sources" setting |
 | REQ-PLAT-006 | Wearables (Apple Watch, Wear OS companion: next maneuver, ETA, next weather event), vehicle integrations, public API | P3 | FUTURE — Wear OS free via sideloading; watchOS distribution BLOCKED by Apple fee (Xcode simulator free) |
 
@@ -284,7 +284,7 @@ While driving: one banner, voice first, large targets, nothing to read for long
 
 | ID | Requirement | Priority | Status |
 | --- | --- | --- | --- |
-| REQ-UX-001 | Desktop side panel; phone bottom sheet (not a shrunken desktop) | P0 | VERIFIED (2026-11-23 visual audit across 375×812, 390×844, 768×1024, 1280×800 and 844×390 landscape, light/dark, EN/RU; B-43, B-44, B-47, B-50 fixed) |
+| REQ-UX-001 | Desktop side panel; phone bottom sheet (not a shrunken desktop); automotive landscape panel; smooth compositor animations (`@starting-style`, reduced-motion safe) and viewport-clamped popovers/stacks with zero overlapping controls | P0 | VERIFIED (2026-11-25: `.map-status-stack`, vertical portrait FAB column, `usePopoverPlacement`, `useAnimatedPresence`, automotive `≤560px` landscape panel; E2E verified across 320–1280 px) |
 | REQ-UX-002 | While moving: no typing, no long lists, Report = 5 large buttons, voice push-to-talk | P0 | IMPLEMENTED |
 | REQ-UX-003 | Navigation camera at street level, heading-up, auto re-centre | P1 | IMPLEMENTED |
 | REQ-UX-004 | Every source shows its freshness (Forecast / Estimated / Scheduled / Stale / Simulated / Not available) | P0 | VERIFIED (2026-11-23: explicit `data-missing` / `data-stale` messages + dev data hints in routing, search, weather and place cards; B-46) |
@@ -330,9 +330,12 @@ Model: [COST_AND_SCALE](operations/COST_AND_SCALE.md); free stack: [FREE_STACK_P
 
 ## 21. CarPlay requirements
 
-CarPlay navigation needs Apple's CarPlay navigation entitlement, the CarPlay framework's map templates and voice
-guidance through the system audio session. Not possible from a web app. See [MOBILE_STRATEGY](mobile/MOBILE_STRATEGY.md).
-Status: BLOCKED (REQ-PLAT-004).
+CarPlay navigation uses `CPTemplateApplicationSceneDelegate`, `CPMapTemplate`, `CPNavigationSession`, `CPListTemplate`,
+single-banner `CPNavigationAlert`, and voice guidance over `.spokenAudio` — implemented in
+`ios/NavWeather/CarPlaySceneDelegate.swift`, `src/platform/nativeIosBridge.ts`, and `src/hooks/useCarSurfaceSync.ts`
+(working immediately in Xcode's CarPlay external display simulator and whenever signed with Apple's CarPlay navigation
+entitlement; store distribution stays BLOCKED by the \$99/yr Apple Developer fee per ADR-015). See
+[MOBILE_STRATEGY](mobile/MOBILE_STRATEGY.md).
 
 ## 22. Android Auto requirements
 

@@ -23,6 +23,7 @@ import { LocateIcon } from '../Icons/Icons';
 import { exposureLine, roadNames } from '../Plan/RouteOptions';
 import { WeatherMarker } from '../WeatherMarker/WeatherMarker';
 import { add3dBuildings, addRouteLayers, EMPTY_FC, fillMissingStyleImages, lineFeature, pointFeature, routeGradient, setData } from './mapLayers';
+import { useAmbientPois } from './useAmbientPois';
 import { useExploreLayer } from './useExploreLayer';
 import { useLiveLayer } from './useLiveLayer';
 import { useWeatherLayer } from './useWeatherLayer';
@@ -77,8 +78,10 @@ export default function RouteMap({ viewer = false }: { viewer?: boolean }) {
   const [userMoved, setUserMoved] = useState(false);
   const { theme } = useEffectiveTheme();
   const m = useMessages();
+  const language = useSettings((s) => s.language);
   const dark = theme === 'dark';
   const initialDark = useRef(dark);
+  const initialLang = useRef(language);
   const reduced = useReducedMotion();
   const batterySaver = useSettings((s) => s.batterySaver);
   const insets = useLayoutStore((s) => s.insets);
@@ -118,9 +121,9 @@ export default function RouteMap({ viewer = false }: { viewer?: boolean }) {
     try {
       map = new MLMap({
         container: container.current,
-        style: getProviders().map.getStyleUrl(initialDark.current ? 'dark' : 'light'),
-        center: [43.4, 42.0],
-        zoom: 6.2,
+        style: getProviders().map.getStyleUrl(initialDark.current ? 'dark' : 'light', initialLang.current),
+        center: [44.793, 41.715],
+        zoom: 11.8,
         attributionControl: false, // placed top-right so the sheet never hides it
         pitchWithRotate: false,
         fadeDuration: 150,
@@ -169,17 +172,17 @@ export default function RouteMap({ viewer = false }: { viewer?: boolean }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ---- Light/dark basemap ---------------------------------------------------
-  const firstTheme = useRef(true);
+  // ---- Light/dark & language basemap ----------------------------------------
+  const firstStyleSync = useRef(true);
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    if (firstTheme.current) {
-      firstTheme.current = false;
+    if (firstStyleSync.current) {
+      firstStyleSync.current = false;
       return;
     }
-    map.setStyle(getProviders().map.getStyleUrl(dark ? 'dark' : 'light'));
-  }, [dark]);
+    map.setStyle(getProviders().map.getStyleUrl(dark ? 'dark' : 'light', language));
+  }, [dark, language]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -700,6 +703,7 @@ export default function RouteMap({ viewer = false }: { viewer?: boolean }) {
     }
   };
 
+  useAmbientPois(mapRef, styleVersion, viewer);
   useExploreLayer(mapRef, styleVersion, { viewer, reduced });
   useLiveLayer(mapRef, styleVersion, { enabled: viewer, reduced });
   useWeatherLayer(mapRef, styleVersion);

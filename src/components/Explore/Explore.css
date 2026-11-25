@@ -187,7 +187,28 @@
 }
 .place-pin svg {
   display: block;
+  transform-origin: 50% 100%;
   filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.35));
+  @media (prefers-reduced-motion: no-preference) {
+    animation: pin-drop 340ms var(--ease-spring);
+  }
+}
+@keyframes pin-drop {
+  0% {
+    translate: 0 -18px;
+    scale: 0.65;
+    opacity: 0;
+  }
+  70% {
+    translate: 0 1px;
+    scale: 1.05;
+    opacity: 1;
+  }
+  100% {
+    translate: 0 0;
+    scale: 1;
+    opacity: 1;
+  }
 }
 .me-dot {
   position: relative;
@@ -289,6 +310,10 @@ button.me-dot::after {
   bottom: calc(100% + 6px);
   width: 220px;
 }
+.savemenu__pop[data-v='down'] {
+  top: calc(100% + 6px);
+  bottom: auto;
+}
 .savemenu__pop .popover__row {
   display: flex;
   align-items: center;
@@ -305,9 +330,10 @@ button.me-dot::after {
 .wxchip {
   position: absolute;
   z-index: 14;
-  /* Below the map attribution line on phones. */
+  /* Below the map attribution line on phones when rendered outside .map-status-stack. */
   top: calc(var(--inset-top, 64px) + 40px);
-  left: calc(var(--safe-left) + 12px);
+  left: calc(var(--inset-left, 0px) + var(--safe-left) + 12px);
+  max-width: calc(100vw - var(--inset-left, 0px) - var(--safe-left) - var(--safe-right) - 68px);
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -319,6 +345,29 @@ button.me-dot::after {
   box-shadow: var(--shadow-float);
   color: var(--text);
   font-size: 14px;
+  opacity: 1;
+  translate: 0 0;
+  scale: 1;
+  transition:
+    opacity 180ms var(--ease-out),
+    translate 220ms var(--ease-spring),
+    scale 180ms var(--ease-spring);
+
+  @starting-style {
+    opacity: 0;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    @starting-style {
+      translate: 0 -6px;
+      scale: 0.95;
+    }
+  }
+}
+.map-status-stack .wxchip {
+  position: relative;
+  top: auto;
+  left: auto;
+  max-width: 100%;
 }
 .wxchip__temp {
   font-weight: 700;
@@ -347,7 +396,7 @@ button.me-dot::after {
 .aqi--extremelyPoor { background: #7d2181; }
 @media (min-width: 1024px) and (min-height: 560px) {
   /* Beside the side panel, over the map. */
-  .wxchip {
+  :not(.map-status-stack) > .wxchip {
     top: 16px;
     left: calc(var(--inset-left, 416px) + 16px);
   }
@@ -371,6 +420,12 @@ button.me-dot::after {
   color: #fff;
   font: 800 15px/1 var(--font);
   cursor: pointer;
+  scale: 1;
+  transition: scale var(--dur-fast) var(--ease-spring);
+}
+.parking-pin:active,
+.saved-pin:active {
+  scale: 0.92;
 }
 .parking-pin::after {
   content: '';
@@ -389,6 +444,21 @@ button.me-dot::after {
   box-shadow: var(--shadow-marker);
   color: #fff;
   cursor: pointer;
+  scale: 1;
+  transition: scale var(--dur-fast) var(--ease-spring);
+}
+@media (hover: hover) {
+  .parking-pin:hover,
+  .saved-pin:hover {
+    scale: 1.1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .parking-pin,
+  .saved-pin {
+    transition: none;
+    scale: 1;
+  }
 }
 .saved-pin::after {
   content: '';
@@ -415,6 +485,8 @@ button.me-dot::after {
   initial-value: 0px;
 }
 .nearby-chips {
+  position: relative;
+  z-index: 1;
   display: flex;
   gap: 6px;
   /* 4 px of the gap moved inside the scroller, so the chips' taller hit areas aren't clipped by it. */

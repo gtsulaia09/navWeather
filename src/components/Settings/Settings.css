@@ -1,6 +1,18 @@
 /* Settings: titled cards of rows; short choices as segmented controls. */
 .set-section {
   margin: 0 0 18px;
+  opacity: 1;
+  translate: 0 0;
+  transition: opacity 220ms var(--ease-out), translate 260ms var(--ease-spring);
+
+  @starting-style {
+    opacity: 0;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    @starting-style {
+      translate: 0 8px;
+    }
+  }
 }
 .set-title {
   margin: 0 4px 8px;
@@ -13,12 +25,41 @@
 .set-card {
   border-radius: var(--r-surface);
   background: var(--surface-2);
-  overflow: hidden;
+  border: 1px solid var(--border);
 }
 .set-card > .set-row {
   padding-inline: 16px;
 }
-.set-card > .set-row + .set-row {
+.set-card > .set-row:first-child {
+  border-radius: var(--r-surface) var(--r-surface) 0 0;
+}
+.set-card > .set-row:last-child {
+  border-radius: 0 0 var(--r-surface) var(--r-surface);
+}
+.set-card > .set-row:only-child {
+  border-radius: var(--r-surface);
+}
+.set-card > .set-row + .set-row,
+.set-card > .set-collapse.is-open {
+  border-top: 1px solid var(--border);
+}
+.set-collapse {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition: grid-template-rows 240ms var(--ease-spring), opacity 180ms var(--ease-out);
+}
+.set-collapse.is-open {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+.set-collapse__inner {
+  overflow: hidden;
+}
+.set-collapse__inner > .set-row {
+  padding-inline: 16px;
+}
+.set-collapse__inner > .set-row + .set-row {
   border-top: 1px solid var(--border);
 }
 
@@ -29,12 +70,15 @@
   gap: 16px;
   min-height: 56px;
   padding-block: 8px;
+  transition: background var(--dur-fast) var(--ease);
 }
 .set-row__label {
   display: flex;
   flex-direction: column;
+  flex: 1 1 auto;
   min-width: 0;
   font-size: 16px;
+  overflow-wrap: break-word;
 }
 .set-row small {
   margin-top: 2px;
@@ -81,7 +125,15 @@
   font-size: 15px;
   color: var(--text-2);
   white-space: nowrap;
-  transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
+  scale: 1;
+  transition:
+    background var(--dur) var(--ease-spring),
+    color var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease-spring),
+    scale var(--dur-fast) var(--ease-spring);
+}
+.seg__opt:active {
+  scale: 0.96;
 }
 .seg__opt.is-on {
   background: var(--surface);
@@ -139,6 +191,15 @@
   font-size: 15px;
   color: var(--text-2);
   background: var(--surface);
+  scale: 1;
+  transition:
+    background var(--dur) var(--ease-spring),
+    color var(--dur) var(--ease),
+    border-color var(--dur) var(--ease),
+    scale var(--dur-fast) var(--ease-spring);
+}
+.chips .chip:active {
+  scale: 0.95;
 }
 .chips .chip.is-on {
   border-color: transparent;
@@ -163,7 +224,7 @@
   background: var(--surface-3);
   border: 1px solid var(--border-strong);
   cursor: pointer;
-  transition: background var(--dur) var(--ease);
+  transition: background 220ms var(--ease-spring), border-color 220ms var(--ease);
 }
 .set-row--switch input[role='switch']::after {
   content: '';
@@ -174,25 +235,35 @@
   height: 24px;
   border-radius: 50%;
   background: #fff;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
-  transition: transform var(--dur) var(--ease);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.32);
+  transition: translate 240ms var(--ease-spring), width 140ms var(--ease);
+}
+.set-row--switch input[role='switch']:active::after {
+  width: 27px;
 }
 .set-row--switch input[role='switch']:checked {
   background: var(--accent-fill);
   border-color: transparent;
 }
 .set-row--switch input[role='switch']:checked::after {
-  transform: translateX(20px);
+  translate: 20px 0;
+}
+.set-row--switch input[role='switch']:checked:active::after {
+  translate: 17px 0;
 }
 .set-row--switch input[role='switch']:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 @media (prefers-reduced-motion: reduce) {
+  .set-section,
+  .set-collapse,
   .set-row--switch input[role='switch'],
   .set-row--switch input[role='switch']::after,
-  .seg__opt {
+  .seg__opt,
+  .chips .chip {
     transition: none;
+    scale: 1;
   }
 }
 

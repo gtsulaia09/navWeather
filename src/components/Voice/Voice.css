@@ -9,12 +9,20 @@
   gap: 8px;
   pointer-events: none;
 }
+.voice:has(.popover) {
+  z-index: 36;
+}
 .voice > * {
   pointer-events: auto;
 }
+/* Vertical column in portrait/desktop so the right stack stays 52 px wide and never overlaps .layerbar or Recenter. */
 .voice__buttons {
   display: flex;
+  flex-direction: column;
+  flex-wrap: wrap-reverse;
+  align-items: flex-end;
   gap: 8px;
+  max-height: calc(100dvh - var(--inset-top, 64px) - var(--inset-bottom, 200px) - 24px);
 }
 .fab {
   display: grid;
@@ -26,14 +34,28 @@
   color: var(--text);
   border: 1px solid var(--border);
   box-shadow: var(--shadow-float);
-  transition: background var(--dur) var(--ease), color var(--dur) var(--ease), transform 120ms var(--ease);
+  scale: 1;
+  opacity: 1;
+  transition:
+    background var(--dur) var(--ease),
+    color var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease),
+    scale var(--dur-fast) var(--ease-spring),
+    opacity 180ms var(--ease-out);
+
+  @starting-style {
+    opacity: 0;
+  }
 }
 .fab:active:not(:disabled) {
-  transform: scale(0.95);
+  scale: 0.93;
 }
 @media (prefers-reduced-motion: reduce) {
+  .voice {
+    transition: none;
+  }
   .fab:active:not(:disabled) {
-    transform: none;
+    scale: 1;
   }
 }
 .fab--mic.is-listening {
@@ -51,7 +73,7 @@
   font-size: 15px;
   box-shadow: var(--shadow-float);
 }
-@media (orientation: landscape) and (max-height: 520px) {
+@media (orientation: landscape) and (max-height: 560px) {
   /* A landscape phone is short (292 px in Safari on an iPhone, under its tab bar): a column of 4–5 buttons ran up
      under the turn banner and the search bar. Here they line up along the bottom of the map instead, wrapping
      only if the map beside the side panel is too narrow; a spoken answer's caption sits above them. */
@@ -63,6 +85,9 @@
     align-items: flex-end;
     align-content: flex-end;
     max-width: calc(100vw - var(--inset-left, 0px) - var(--safe-right) - 24px);
+  }
+  .voice__buttons {
+    flex-direction: row;
   }
   .voice__caption {
     flex-basis: 100%;

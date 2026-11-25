@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { analyzeRouteConditions } from '../../algorithms/routeConditions';
+import { usePopoverPlacement } from '../../hooks/usePopoverPlacement';
 import { useMessages } from '../../state/settings';
 import { useAppStore, type Departure } from '../../state/store';
 import {
@@ -27,7 +28,9 @@ export function DepartureSelector() {
   const [pickerMode, setPickerMode] = useState<'depart' | 'arrive'>('depart');
   const [arriveHint, setArriveHint] = useState<string | null>(null);
   const ref = useRef<HTMLDivElement>(null);
+  const popRef = useRef<HTMLDivElement>(null);
   const firstOption = useRef<HTMLButtonElement>(null);
+  const pop = usePopoverPlacement(ref, popRef, open, 'down');
 
   useEffect(() => {
     if (!open) return;
@@ -78,7 +81,7 @@ export function DepartureSelector() {
       </button>
       {arriveHint ? <span className="departure__sla tabular">{arriveHint}</span> : null}
       {open ? (
-        <div className="popover departure__pop" role="dialog" aria-label={m.ui.departure}>
+        <div ref={popRef} className="popover departure__pop" data-v={pop.vertical} style={pop.style} role="dialog" aria-label={m.ui.departure}>
           <div className="departure__tabs" role="tablist">
             <button
               type="button"

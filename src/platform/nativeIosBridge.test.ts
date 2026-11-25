@@ -4,6 +4,7 @@ import { initNativeIosBridge } from './nativeIosBridge';
 import { getLocationProvider, setLocationProvider } from './location';
 import { getHapticsProvider, setHapticsProvider } from './haptics';
 import { getWakeLockProvider, setWakeLockProvider } from './wakeLock';
+import { buildCompanionSnapshot, getCarSurfaceBridge, setCarCommandListener, setCarSurfaceBridge } from './surfaces';
 import { getCustomTtsProvider, setTtsProvider } from '../voice/providers';
 import { classifyLocationError } from '../services/location';
 import { createProviders } from '../services/providers';
@@ -13,10 +14,11 @@ function installWebkitHandlers() {
   const nativeHaptics = { postMessage: vi.fn() };
   const nativeWakeLock = { postMessage: vi.fn() };
   const nativeTTS = { postMessage: vi.fn() };
+  const nativeCarPlay = { postMessage: vi.fn() };
   window.webkit = {
-    messageHandlers: { nativeLocation, nativeHaptics, nativeWakeLock, nativeTTS },
+    messageHandlers: { nativeLocation, nativeHaptics, nativeWakeLock, nativeTTS, nativeCarPlay },
   };
-  return { nativeLocation, nativeHaptics, nativeWakeLock, nativeTTS };
+  return { nativeLocation, nativeHaptics, nativeWakeLock, nativeTTS, nativeCarPlay };
 }
 
 describe('initNativeIosBridge', () => {
@@ -25,10 +27,14 @@ describe('initNativeIosBridge', () => {
     delete window.__navweather_native_location_update;
     delete window.__navweather_native_location_error;
     delete window.__navweather_native_tts_end;
+    delete window.__navweather_native_carplay_status;
+    delete window.__navweather_native_carplay_command;
     setLocationProvider(null);
     setHapticsProvider(null);
     setWakeLockProvider(null);
     setTtsProvider(null);
+    setCarSurfaceBridge(null);
+    setCarCommandListener(null);
   });
 
   it('returns false outside WKWebView', () => {
@@ -129,5 +135,43 @@ describe('initNativeIosBridge', () => {
     expect(nativeWakeLock.postMessage).toHaveBeenCalledWith({ active: true });
     await handle?.release();
     expect(nativeWakeLock.postMessage).toHaveBeenCalledWith({ active: false });
+  });
+
+  it('wires nativeCarPlay bidirectionally for CarPlay navigation, route preview, and touch commands', () => {
+    const { nativeCarPlay } = installWebkitHandlers();
+    const commands: unknown[] = [];
+    setCarCommandListener((cmd) => commands.push(cmd));
+    initNativeIosBridge();
+
+    expect(nativeCarPlay.postMessage).toHaveBeenCalledWith({ action: 'ready' });
+    const bridge = getCarSurfaceBridge();
+    expect(bridge.name).toBe('ios-native-carplay');
+    expect(bridge.connected).toBe(false);
+
+    window.__navweather_native_carplay_status?.(true);
+    expect(bridge.connected).toBe(true);
+    expect(commands).toEqual([{ action: 'requestSync' }]);
+
+    const snap = buildCompanionSnapshot({
+      active: true,
+      destinationName: 'Batumi',
+      progress: null,
+      guidance: null,
+      nowMs: 1_700_000_000_000,
+    });
+    bridge.syncState?.(snap);
+    expect(nativeCarPlay.postMessage).toHaveBeenCalledWith({ action: 'sync', snapshot: snap });
+
+    window.__navweather_native_carplay_command?.({
+      action: 'routeTo',
+      place: { id: 'ge:batumi', name: 'Batumi', coordinate: [41.6367, 41.6461] },
+    });
+    expect(commands).toContainEqual({
+      action: 'routeTo',
+      place: { id: 'ge:batumi', name: 'Batumi', coordinate: [41.6367, 41.6461] },
+    });
+
+    bridge.endNavigation();
+    expect(nativeCarPlay.postMessage).toHaveBeenCalledWith({ action: 'endNavigation' });
   });
 });
