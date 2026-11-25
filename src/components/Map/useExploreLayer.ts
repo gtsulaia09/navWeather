@@ -6,6 +6,7 @@ import { currentMessages } from '../../state/settings';
 import { useAppStore } from '../../state/store';
 import type { LngLat } from '../../types/geo';
 import { circleFeature, EMPTY_FC, setData } from './mapLayers';
+import { Glide } from './smoothFollow';
 
 const PIN_SVG =
   '<svg viewBox="0 0 30 40" width="30" height="40" aria-hidden="true"><path d="M15 39s12-12.6 12-23A12 12 0 0 0 3 16c0 10.4 12 23 12 23z" fill="#d93025" stroke="#fff" stroke-width="2"/><circle cx="15" cy="16" r="4.5" fill="#fff"/></svg>';
@@ -35,6 +36,17 @@ export function useExploreLayer(mapRef: RefObject<MLMap | null>, styleVersion: n
     if (!map || !ready) return;
     let dot: Marker | null = null;
     let flyPending = useExplore.getState().locate === 'pending';
+    // The dot glides from fix to fix instead of hopping (smoothFollow.ts).
+    const glide = new Glide();
+    let glideRaf = 0;
+    let lastFixAt = -1;
+    const glideTick = (now: number) => {
+      glideRaf = 0;
+      const p = glide.at(now);
+      if (!dot || !p) return;
+      dot.setLngLat(p);
+      if (glide.progress(now) < 1) glideRaf = requestAnimationFrame(glideTick);
+    };
 
     const render = () => {
       const ex = useExplore.getState();
@@ -62,8 +74,17 @@ export function useExploreLayer(mapRef: RefObject<MLMap | null>, styleVersion: n
         }
         el.innerHTML = '<span class="me-dot__pulse"></span><span class="me-dot__cone"></span><span class="me-dot__core"></span>';
         dot = new Marker({ element: el }).setLngLat(fix.coordinate).addTo(map);
+        glide.reset();
+        lastFixAt = -1;
       }
-      dot.setLngLat(fix.coordinate);
+      if (fix.timestampMs !== lastFixAt) {
+        lastFixAt = fix.timestampMs;
+        if (opts.reduced) dot.setLngLat(fix.coordinate);
+        else {
+          glide.push(fix.coordinate, performance.now());
+          if (!glideRaf) glideRaf = requestAnimationFrame(glideTick);
+        }
+      }
       const el = dot.getElement();
       if (!opts.viewer) el.setAttribute('aria-label', currentMessages().ui.currentLocation);
       el.classList.toggle('has-heading', fix.headingDeg !== undefined && (fix.speedMps ?? 0) > 0.5);
@@ -75,7 +96,8 @@ export function useExploreLayer(mapRef: RefObject<MLMap | null>, styleVersion: n
 
     const camera = (fix: LngLat, first: boolean) => {
       if (first) map.flyTo({ center: fix, zoom: Math.max(map.getZoom(), 15.5), duration: opts.reduced ? 0 : 900 });
-      else map.easeTo({ center: fix, duration: opts.reduced ? 0 : 500 });
+      // Following: the camera moves with the dot's glide (same time, same linear pace), so the dot stays put.
+      else map.easeTo({ center: fix, duration: opts.reduced ? 0 : Math.max(300, glide.durationMs), easing: (t) => t });
     };
 
     render();
@@ -116,6 +138,7 @@ export function useExploreLayer(mapRef: RefObject<MLMap | null>, styleVersion: n
       unsubLocate();
       unsubMode();
       window.clearInterval(staleTimer);
+      cancelAnimationFrame(glideRaf);
       dot?.remove();
     };
     // styleVersion: the accuracy source is re-created with every basemap style.

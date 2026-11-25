@@ -189,3 +189,99 @@ summary,
     border: 1px solid ButtonText;
   }
 }
+
+/* ---- Motion utilities -------------------------------------------------------------------------------------------
+   Rows of a list (and children of .stagger) rise in one after another when they appear. Only opacity and
+   translate move (compositor), at most 8 steps of delay so a long list is never slow to show. An animation, not a
+   transition: it runs once when the row is inserted and leaves the rows' own transitions (hover, active) alone. */
+.rows > li,
+.stagger > * {
+  animation: rise-in var(--dur-enter) var(--ease-spring) both;
+  animation-delay: calc(var(--i, 0) * var(--stagger));
+}
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    translate: 0 6px;
+  }
+}
+:is(.rows > li, .stagger > *):nth-child(2) {
+  --i: 1;
+}
+:is(.rows > li, .stagger > *):nth-child(3) {
+  --i: 2;
+}
+:is(.rows > li, .stagger > *):nth-child(4) {
+  --i: 3;
+}
+:is(.rows > li, .stagger > *):nth-child(5) {
+  --i: 4;
+}
+:is(.rows > li, .stagger > *):nth-child(6) {
+  --i: 5;
+}
+:is(.rows > li, .stagger > *):nth-child(7) {
+  --i: 6;
+}
+:is(.rows > li, .stagger > *):nth-child(n + 8) {
+  --i: 7;
+}
+
+/* Something that just changed its content (a new instruction, a new number) fades through, keyed in React. */
+.swap-in {
+  animation: swap-in var(--dur-enter) var(--ease-out) both;
+}
+@keyframes swap-in {
+  from {
+    opacity: 0;
+    translate: 0 4px;
+  }
+}
+
+/* Tappable rows answer the finger with a quick tint (no layout change). */
+.rows :where(button, a[href]):not(:disabled):active {
+  background-color: var(--surface-2);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rows > li,
+  .stagger > *,
+  .swap-in {
+    animation: none;
+  }
+}
+
+/* ---- Sliding selection (useSlidingThumb) --------------------------------------------------------------------------
+   The chosen option's highlight is one pseudo-element that moves between options. Options keep a transparent
+   background; set --thumb-bg / --thumb-r / --thumb-shadow on the track. */
+.thumb-track {
+  position: relative;
+  isolation: isolate;
+}
+.thumb-track::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  left: 0;
+  top: 0;
+  width: var(--thumb-w, 0px);
+  height: var(--thumb-h, 0px);
+  translate: var(--thumb-x, 0px) var(--thumb-y, 0px);
+  opacity: var(--thumb-o, 0);
+  border-radius: var(--thumb-r, 9px);
+  background: var(--thumb-bg, var(--surface));
+  box-shadow: var(--thumb-shadow, none);
+  pointer-events: none;
+}
+.thumb-track[data-thumb-ready]::before {
+  transition:
+    translate 360ms var(--ease-spring),
+    width 360ms var(--ease-spring),
+    height 360ms var(--ease-spring),
+    opacity var(--dur) var(--ease);
+}
+@media (prefers-reduced-motion: reduce) {
+  .thumb-track[data-thumb-ready]::before {
+    transition: none;
+  }
+}

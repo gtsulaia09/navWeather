@@ -22,6 +22,18 @@ final class CarPlayCoordinator: NSObject, CPMapTemplateDelegate {
     private var locale: String = "en"
     private var useImperial = false
 
+    // Route geometry is sent only when it changes (`routeKey`); updates in between reuse it.
+    private var routeKey: String?
+    private var routeCoordinates: Any?
+    private var weatherSegments: Any?
+
+    // CarPlay templates are only touched when what they show changes: re-presenting trip previews, rebuilding the
+    // bar buttons or replacing the maneuver on every position update made the car screen flicker and stutter.
+    private var tripSignature = ""
+    private var barSignature = ""
+    private var maneuverSignature = ""
+    private var currentManeuver: CPManeuver?
+
     private override init() {
         super.init()
     }
@@ -33,6 +45,10 @@ final class CarPlayCoordinator: NSObject, CPMapTemplateDelegate {
     func connect(interfaceController: CPInterfaceController, window: CPWindow?) {
         self.interfaceController = interfaceController
         self.carWindow = window
+        tripSignature = ""
+        barSignature = ""
+        maneuverSignature = ""
+        currentManeuver = nil
 
         // Ensure the shared WebView + CoreLocation + AVSpeechSynthesizer engine is running even if iPhone is locked.
         let vc = AppRuntime.shared.viewController
@@ -63,6 +79,11 @@ final class CarPlayCoordinator: NSObject, CPMapTemplateDelegate {
         navigationSession?.finishTrip()
         navigationSession = nil
         activeTrip = nil
+        tripSignature = ""
+        barSignature = ""
+        maneuverSignature = ""
+        currentManeuver = nil
+        routeKey = nil
         activeAlertId = nil
         isPanning = false
         mapTemplate = nil
@@ -96,7 +117,16 @@ final class CarPlayCoordinator: NSObject, CPMapTemplateDelegate {
         }
     }
 
-    private func applySnapshot(_ snap: [String: Any]) {
+    private func applySnapshot(_ incoming: [String: Any]) {
+        var snap = incoming
+        let key = incoming["routeKey"] as? String
+        if incoming["routeCoordinates"] != nil || key != routeKey {
+            routeKey = key
+            routeCoordinates = incoming["routeCoordinates"]
+            weatherSegments = incoming["weatherSegments"]
+        }
+        if let coords = routeCoordinates { snap["routeCoordinates"] = coords }
+        if let segs = weatherSegments { snap["weatherSegments"] = segs }
         lastSnapshot = snap
         if let loc = snap["locale"] as? String { locale = loc }
         if let u = snap["units"] as? String { useImperial = (u == "imperial") }
@@ -166,6 +196,12 @@ final class CarPlayCoordinator: NSObject, CPMapTemplateDelegate {
 
     private func updateRoutePreview(originName: String?, destinationName: String?, weatherSummary: String?, snap: [String: Any]) {
         guard let template = mapTemplate else { return }
+        let options = (snap["routeOptions"] as? [[String: Any]] ?? []).map { opt in
+            "\(opt["index"] ?? ""):\(opt["name"] ?? ""):\(opt["durationS"] ?? ""):\(opt["weatherNote"] ?? "")"
+        }.joined(separator: "|")
+        let signature = "\(routeKey ?? "-")|\(originName ?? "")|\(destinationName ?? "")|\(weatherSummary ?? "")|\(options)|\(locale)|\(useImperial)"
+        if signature == tripSignature { return }
+        tripSignature = signature
         guard let trip = makeTrip(originName: originName, destinationName: destinationName, weatherSummary: weatherSummary, snap: snap) else {
             template.hideTripPreviews()
             activeTrip = nil
@@ -192,6 +228,9 @@ final class CarPlayCoordinator: NSObject, CPMapTemplateDelegate {
         let trip = activeTrip ?? makeTrip(originName: originName, destinationName: destinationName, weatherSummary: weatherSummary, snap: snap)
         guard let trip else { return }
         activeTrip = trip
+        tripSignature = ""
+        maneuverSignature = ""
+        currentManeuver = nil
         navigationSession = template.startNavigationSession(for: trip)
     }
 
@@ -208,17 +247,28 @@ final class CarPlayCoordinator: NSObject, CPMapTemplateDelegate {
             let modifier = next["modifier"] as? String
             let stepDist = (next["distanceM"] as? NSNumber)?.doubleValue ?? 0
 
-            let maneuver = CPManeuver()
-            maneuver.instructionVariants = [instruction]
-            if let img = maneuverSymbol(type: type, modifier: modifier) {
-                maneuver.symbolImage = img
-            }
             let stepEst = makeEstimates(distanceM: stepDist, durationS: max(0, stepDist / 14.0))
-            maneuver.initialTravelEstimates = stepEst
-            session.upcomingManeuvers = [maneuver]
-            session.updateEstimates(stepEst, for: maneuver)
-        } else {
+            let signature = "\(instruction)|\(type)|\(modifier ?? "")"
+            if signature != maneuverSignature || currentManeuver == nil {
+                // A new maneuver: the guidance card changes once.
+                let maneuver = CPManeuver()
+                maneuver.instructionVariants = [instruction]
+                if let img = maneuverSymbol(type: type, modifier: modifier) {
+                    maneuver.symbolImage = img
+                }
+                maneuver.initialTravelEstimates = stepEst
+                session.upcomingManeuvers = [maneuver]
+                currentManeuver = maneuver
+                maneuverSignature = signature
+            }
+            // The same maneuver getting closer: only its distance and time count down.
+            if let maneuver = currentManeuver {
+                session.updateEstimates(stepEst, for: maneuver)
+            }
+        } else if currentManeuver != nil {
             session.upcomingManeuvers = []
+            currentManeuver = nil
+            maneuverSignature = ""
         }
     }
 
@@ -259,6 +309,9 @@ final class CarPlayCoordinator: NSObject, CPMapTemplateDelegate {
     private func endNavigationSession() {
         navigationSession?.finishTrip()
         navigationSession = nil
+        currentManeuver = nil
+        maneuverSignature = ""
+        tripSignature = ""
         if activeAlertId != nil {
             mapTemplate?.dismissNavigationAlert(animated: false) { _ in }
             activeAlertId = nil
@@ -270,6 +323,9 @@ final class CarPlayCoordinator: NSObject, CPMapTemplateDelegate {
     private func updateBarButtons() {
         guard let template = mapTemplate else { return }
         let active = lastSnapshot["active"] as? Bool ?? false
+        let signature = "\(active)|\(isPanning)|\(locale)"
+        if signature == barSignature { return }
+        barSignature = signature
 
         let destBtn = CPBarButton(title: tr("Places", "Куда", "ადგილები")) { [weak self] _ in
             self?.presentDestinationsList()
@@ -551,6 +607,8 @@ final class CarPlayMapViewController: UIViewController, MKMapViewDelegate {
     private var vehicleAnnotation: VehicleAnnotation?
     private var followVehicle = true
     private var lastRouteSignature = ""
+    private var lastVehicleUpdate: CFTimeInterval = 0
+    private var lastWeatherText = ""
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -588,17 +646,22 @@ final class CarPlayMapViewController: UIViewController, MKMapViewDelegate {
 
     func applySnapshot(_ snap: [String: Any]) {
         let active = snap["active"] as? Bool ?? false
-        if let wx = snap["weatherSummary"] as? String, !wx.isEmpty {
-            weatherPill.text = "  \(wx)  "
-            weatherPill.isHidden = false
-        } else {
-            weatherPill.isHidden = true
+        let wx = (snap["weatherSummary"] as? String) ?? ""
+        if wx != lastWeatherText {
+            lastWeatherText = wx
+            UIView.transition(with: weatherPill, duration: 0.25, options: [.transitionCrossDissolve, .beginFromCurrentState]) {
+                self.weatherPill.text = wx.isEmpty ? nil : "  \(wx)  "
+                self.weatherPill.isHidden = wx.isEmpty
+            }
         }
 
-        let coords = CarPlayCoordinator.shared.parseCoordinates(snap["routeCoordinates"])
-        let signature = coords.isEmpty ? "" : "\(coords.count):\(coords.first!.latitude),\(coords.first!.longitude)-\(coords.last!.latitude),\(coords.last!.longitude)"
+        let signature = (snap["routeKey"] as? String) ?? {
+            let coords = CarPlayCoordinator.shared.parseCoordinates(snap["routeCoordinates"])
+            return coords.isEmpty ? "" : "\(coords.count):\(coords.first!.latitude),\(coords.first!.longitude)-\(coords.last!.latitude),\(coords.last!.longitude)"
+        }()
         if signature != lastRouteSignature {
             lastRouteSignature = signature
+            let coords = CarPlayCoordinator.shared.parseCoordinates(snap["routeCoordinates"])
             rebuildRouteOverlays(coords: coords, weatherSegments: snap["weatherSegments"] as? [[String: Any]] ?? [])
             if !active, let poly = routeOverlay {
                 mapView.setVisibleMapRect(poly.boundingMapRect, edgePadding: UIEdgeInsets(top: 44, left: 44, bottom: 56, right: 44), animated: true)
@@ -609,23 +672,45 @@ final class CarPlayMapViewController: UIViewController, MKMapViewDelegate {
            let pair = veh["coordinate"] as? [NSNumber], pair.count >= 2 {
             let coord = CLLocationCoordinate2D(latitude: pair[1].doubleValue, longitude: pair[0].doubleValue)
             let heading = (veh["headingDeg"] as? NSNumber)?.doubleValue ?? 0
+            // Glide over the time this update took to arrive, linearly: the car reaches each fix as the next one
+            // comes in, instead of hopping and stopping (and the camera moves with it, on the same curve).
+            let now = CACurrentMediaTime()
+            let gap = lastVehicleUpdate > 0 ? now - lastVehicleUpdate : 0
+            lastVehicleUpdate = now
+            let duration = min(1.2, max(0.25, gap))
+            let follow = active && followVehicle
             if let existing = vehicleAnnotation {
-                UIView.animate(withDuration: 0.35, delay: 0, options: [.curveLinear, .beginFromCurrentState]) {
-                    existing.coordinate = coord
-                }
                 existing.headingDeg = heading
+                UIView.animate(withDuration: duration, delay: 0, options: [.curveLinear, .beginFromCurrentState, .allowUserInteraction]) {
+                    existing.coordinate = coord
+                    if follow {
+                        self.mapView.camera = MKMapCamera(lookingAtCenter: coord, fromDistance: 850, pitch: 45, heading: heading)
+                    }
+                }
             } else {
                 let ann = VehicleAnnotation(coordinate: coord)
                 ann.headingDeg = heading
                 vehicleAnnotation = ann
                 mapView.addAnnotation(ann)
+                if follow {
+                    mapView.setCamera(MKMapCamera(lookingAtCenter: coord, fromDistance: 850, pitch: 45, heading: heading), animated: true)
+                }
             }
-
-            if active && followVehicle {
-                let cam = MKMapCamera(lookingAtCenter: coord, fromDistance: 850, pitch: 45, heading: heading)
-                mapView.setCamera(cam, animated: true)
-            }
+            updateVehicleArrow()
         }
+    }
+
+    /// The car's arrow points along its heading on the map (straight up while the camera follows it heading-up).
+    private func updateVehicleArrow() {
+        guard let ann = vehicleAnnotation, let view = mapView.view(for: ann) else { return }
+        let degrees = ann.headingDeg - mapView.camera.heading
+        UIView.animate(withDuration: 0.3, delay: 0, options: [.beginFromCurrentState, .curveEaseOut]) {
+            view.transform = CGAffineTransform(rotationAngle: CGFloat(degrees * .pi / 180))
+        }
+    }
+
+    func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
+        updateVehicleArrow()
     }
 
     func pan(direction: CPMapTemplate.PanDirection) {
@@ -715,6 +800,10 @@ final class CarPlayMapViewController: UIViewController, MKMapViewDelegate {
             let v = mapView.dequeueReusableAnnotationView(withIdentifier: id) ?? MKAnnotationView(annotation: annotation, reuseIdentifier: id)
             v.annotation = annotation
             v.image = UIImage(systemName: "location.north.circle.fill")?.withTintColor(.systemBlue, renderingMode: .alwaysOriginal)
+            v.layer.shadowColor = UIColor.black.cgColor
+            v.layer.shadowOpacity = 0.3
+            v.layer.shadowRadius = 3
+            v.layer.shadowOffset = CGSize(width: 0, height: 1)
             v.bounds = CGRect(x: 0, y: 0, width: 30, height: 30)
             return v
         }

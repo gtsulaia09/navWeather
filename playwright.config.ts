@@ -20,6 +20,9 @@ export default defineConfig({
     locale: 'en-GB',
     timezoneId: 'Asia/Tbilisi',
     viewport: { width: 1280, height: 800 },
+    // Layout checks read positions the moment after a tap; with reduced motion the sheet, the floating buttons and
+    // the dialogs settle at once (the app honours the setting), so no check catches something mid-slide.
+    reducedMotion: 'reduce',
     trace: 'retain-on-failure',
   },
 });

@@ -62,6 +62,10 @@
 [data-sheet-covers] .map-controls,
 [data-sheet-covers] .map-status-stack {
   visibility: hidden;
+  opacity: 0;
+  transition:
+    opacity var(--dur-exit) var(--ease),
+    visibility 0s linear var(--dur-exit);
 }
 
 /* Unexpected error: a calm page with one way forward. */

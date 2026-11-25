@@ -1,15 +1,21 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
-import { loadInitialLocale } from './state/settings';
+import { loadInitialLocale, useSettings } from './state/settings';
 import { initNativeIosBridge } from './platform/nativeIosBridge';
 import { installNativeDecompression } from './platform/decompress';
+import { updatePerfTier } from './platform/perfTier';
 import './styles/tokens.css';
 import './styles/base.css';
 
 initNativeIosBridge();
 // Map tiles and data files decode in the browser's native code instead of blocking the UI thread.
 installNativeDecompression();
+// Weak devices and battery saver draw cheaper pixels (no live blur, lighter shadows, lighter map) — same motion.
+updatePerfTier(useSettings.getState().batterySaver);
+useSettings.subscribe((s, prev) => {
+  if (s.batterySaver !== prev.batterySaver) updatePerfTier(s.batterySaver);
+});
 
 // The saved language's text (if not English) loads first, so the UI never flashes English.
 void loadInitialLocale().finally(() => {

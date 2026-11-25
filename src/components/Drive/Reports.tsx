@@ -53,7 +53,7 @@ export function ReportDialog() {
     <Dialog label={m.reports.title} onClose={close}>
       <h2>{m.reports.title}</h2>
       {simulating ? <p className="report__sim">{m.reports.simulated}</p> : null}
-      <ul className="report__kinds">
+      <ul className="report__kinds stagger">
         {REPORT_KINDS.map((k) => (
           <li key={k}>
             <button

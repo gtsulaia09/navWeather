@@ -84,3 +84,46 @@
   display: grid;
   gap: 8px;
 }
+
+/* Weak devices: dim only — a live blur of the moving map behind is repainted every frame. */
+:root[data-perf='lite'] .dialog-backdrop {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  background: rgba(10, 12, 16, 0.56);
+}
+
+/* Phones: a large dialog (Settings) is a sheet that slides up from the bottom edge and back down when closed. */
+@media (max-width: 599px) {
+  .dialog-backdrop:has(> .dialog--large) {
+    padding: calc(max(var(--safe-top), var(--visible-top, 0px)) + 10px) 0 var(--visible-bottom, 0px);
+  }
+  .dialog--large {
+    width: 100%;
+    max-height: 100%;
+    border-radius: 22px 22px 0 0;
+    border-bottom: 0;
+    transition:
+      opacity 160ms var(--ease-out),
+      translate var(--dur-sheet) var(--ease-sheet);
+
+    @starting-style {
+      opacity: 1;
+      translate: 0 100%;
+    }
+  }
+  .dialog--large[data-closing] {
+    opacity: 1;
+    translate: 0 100%;
+    transition: translate 300ms var(--ease-in);
+  }
+}
+@media (max-width: 599px) and (prefers-reduced-motion: reduce) {
+  .dialog--large,
+  .dialog--large[data-closing] {
+    translate: none;
+    transition: opacity 90ms linear;
+  }
+  .dialog--large[data-closing] {
+    opacity: 0;
+  }
+}

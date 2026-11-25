@@ -1,4 +1,6 @@
+import { useRef } from 'react';
 import { formatDuration } from '../../i18n/format';
+import { useSlidingThumb } from '../../hooks/useSlidingThumb';
 import { useMessages } from '../../state/settings';
 import { useAppStore } from '../../state/store';
 import { TRAVEL_MODES, type TravelMode } from '../../types/travel';
@@ -17,8 +19,11 @@ export function TravelModeBar() {
   const m = useMessages();
   const travelMode = useAppStore((s) => s.travelMode);
   const durationS = useAppStore((s) => (s.plan ? s.plan.timed.totalTimeS : null));
+  const track = useRef<HTMLDivElement>(null);
+  // The highlight slides to the chosen way (and stretches when its duration appears).
+  useSlidingThumb(track, `${travelMode}|${durationS !== null}`);
   return (
-    <div className="tmodes" role="radiogroup" aria-label={m.travel.label}>
+    <div ref={track} className="tmodes thumb-track" role="radiogroup" aria-label={m.travel.label}>
       {TRAVEL_MODES.map((k) => {
         const Icon = ICONS[k];
         const isDisabled = DISABLED_MODES.has(k);
@@ -42,7 +47,11 @@ export function TravelModeBar() {
             }}
           >
             <Icon size={20} />
-            {on && durationS !== null ? <span className="tmode__time tabular">{formatDuration(durationS, m)}</span> : null}
+            {on && durationS !== null ? (
+              <span key={travelMode} className="tmode__time tabular swap-in">
+                {formatDuration(durationS, m)}
+              </span>
+            ) : null}
           </button>
         );
       })}

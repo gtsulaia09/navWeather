@@ -2,7 +2,14 @@
   position: absolute;
   z-index: 13;
   right: calc(var(--safe-right) + 12px);
-  bottom: calc(var(--inset-bottom, 200px) + 12px);
+  /* Sits on the sheet's edge and glides with it (translate, on the same curve as the sheet) instead of jumping
+     when the sheet changes height. */
+  bottom: 12px;
+  translate: 0 calc(-1 * var(--inset-bottom, 200px));
+  opacity: 1;
+  transition:
+    translate var(--dur-sheet) var(--ease-sheet),
+    opacity var(--dur-exit) var(--ease);
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -79,6 +86,7 @@
      only if the map beside the side panel is too narrow; a spoken answer's caption sits above them. */
   .voice {
     bottom: calc(var(--safe-bottom) + 12px);
+    translate: none;
     flex-direction: row;
     flex-wrap: wrap;
     justify-content: flex-end;

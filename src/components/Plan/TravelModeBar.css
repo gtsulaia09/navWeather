@@ -3,6 +3,9 @@
   flex-wrap: wrap;
   gap: 6px;
   padding: 2px 0 8px;
+  /* The chosen way's pill slides between modes (useSlidingThumb). */
+  --thumb-bg: var(--accent-soft);
+  --thumb-r: 20px;
 }
 .tmode {
   display: inline-flex;
@@ -15,10 +18,17 @@
   border-radius: 20px;
   color: var(--text-2);
   background: transparent;
-  transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
+  scale: 1;
+  transition:
+    background var(--dur) var(--ease),
+    color var(--dur) var(--ease),
+    scale var(--dur-fast) var(--ease-spring);
+}
+.tmode:active:not(:disabled) {
+  scale: 0.94;
 }
 @media (hover: hover) {
-  .tmode:hover:not(:disabled) {
+  .tmode:hover:not(:disabled):not(.is-on) {
     background: var(--surface-2);
   }
 }
@@ -30,7 +40,7 @@
 }
 .tmode.is-on {
   color: var(--accent);
-  background: var(--accent-soft);
+  background: transparent;
   font-weight: 650;
 }
 .tmode:focus-visible {

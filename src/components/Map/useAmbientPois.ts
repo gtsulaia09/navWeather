@@ -45,13 +45,22 @@ export function useAmbientPois(mapRef: RefObject<MLMap | null>, styleVersion: nu
   const activeRouteCategory = useAppStore((s) => s.poi?.category ?? null);
   const activeNearbyCategory = useExplore((s) => s.nearby?.category ?? null);
   const byIdRef = useRef(new Map<string, Poi>());
+  /** What the layer shows now: an unchanged set is not sent again (that re-placed and re-faded every icon). */
+  const shownKey = useRef('');
 
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !styleVersion) return;
+    const show = (key: string, fc: GeoJSON.FeatureCollection) => {
+      if (key === shownKey.current) return;
+      shownKey.current = key;
+      setData(map, 'ambient-pois', fc);
+    };
+    // A new basemap style re-creates the source empty: send the set again.
+    shownKey.current = '\u0000';
     if (viewer || mode !== 'planning') {
       byIdRef.current.clear();
-      setData(map, 'ambient-pois', EMPTY_FC);
+      show('', EMPTY_FC);
       return;
     }
 
@@ -64,7 +73,7 @@ export function useAmbientPois(mapRef: RefObject<MLMap | null>, styleVersion: nu
       const zoom = map.getZoom();
       if (zoom < 11) {
         byIdRef.current.clear();
-        setData(map, 'ambient-pois', EMPTY_FC);
+        show('', EMPTY_FC);
         return;
       }
       ctrl?.abort();
@@ -92,7 +101,7 @@ export function useAmbientPois(mapRef: RefObject<MLMap | null>, styleVersion: nu
             );
           }
           byIdRef.current = nextById;
-          setData(map, 'ambient-pois', { type: 'FeatureCollection', features });
+          show(`${language}|${[...nextById.keys()].join(',')}`, { type: 'FeatureCollection', features });
         })
         .catch(() => {
           /* aborted or unavailable */

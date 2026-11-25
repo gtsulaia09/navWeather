@@ -70,6 +70,7 @@
   .drive-signs {
     left: calc(min(380px, 46vw) + var(--safe-left) + 16px);
     bottom: 12px;
+    translate: none;
   }
 }
 
@@ -82,23 +83,24 @@
   box-shadow: var(--shadow-float);
   opacity: 1;
   translate: 0 0;
+  /* Its height never changes with the distance (that re-laid out the map's padding every frame near a turn):
+     a close turn is emphasised by scaling the number and the arrow, on the compositor. */
   transition:
-    padding var(--dur) var(--ease),
-    opacity 180ms var(--ease-out),
-    translate 220ms var(--ease-spring);
+    background-color 300ms var(--ease),
+    opacity var(--dur-enter) var(--ease-out),
+    translate 320ms var(--ease-spring);
 
   @starting-style {
     opacity: 0;
   }
   @media (prefers-reduced-motion: no-preference) {
     @starting-style {
-      translate: 0 -10px;
+      translate: 0 -14px;
     }
   }
 }
 .mbanner.is-close {
-  padding-top: 16px;
-  padding-bottom: 16px;
+  background: color-mix(in srgb, var(--banner) 82%, var(--accent-fill));
 }
 .mbanner__main {
   display: flex;
@@ -122,8 +124,19 @@
   line-height: 1.05;
   letter-spacing: -0.02em;
 }
+.mbanner__dist,
+.mbanner__icon {
+  transform-origin: left center;
+  transition: scale 320ms var(--ease-spring);
+}
+.mbanner__icon {
+  transform-origin: center;
+}
 .mbanner.is-close .mbanner__dist {
-  font-size: 40px;
+  scale: 1.16;
+}
+.mbanner.is-close .mbanner__icon {
+  scale: 1.14;
 }
 .mbanner__instr {
   margin: 2px 0 0;
@@ -249,7 +262,9 @@
   position: absolute;
   z-index: 12;
   left: calc(var(--safe-left) + 12px);
-  bottom: calc(var(--inset-bottom, 200px) + 12px);
+  bottom: 12px;
+  translate: 0 calc(-1 * var(--inset-bottom, 200px));
+  transition: translate var(--dur-sheet) var(--ease-sheet);
   display: flex;
   flex-direction: column;
   align-items: center;

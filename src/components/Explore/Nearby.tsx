@@ -23,7 +23,7 @@ export function NearbyChips() {
   const active = useExplore((s) => s.nearby?.category ?? null);
   if (!getProviders().poi?.searchNear) return null;
   return (
-    <div className="nearby-chips" role="toolbar" aria-label={m.explore.nearbyLabel}>
+    <div className="nearby-chips stagger" role="toolbar" aria-label={m.explore.nearbyLabel}>
       {QUICK_CATEGORIES.map((c) => (
         <button
           key={c}

@@ -305,6 +305,7 @@ While driving: one banner, voice first, large targets, nothing to read for long
 | REQ-PERF-002 | MapLibre in its own lazy chunk; app shell paints first | P1 | VERIFIED |
 | REQ-PERF-003 | Position updates cost no network requests (weather re-matched locally) | P0 | VERIFIED |
 | REQ-PERF-004 | Split rarely used UI (settings, share, live viewer, drive HUD, place card, arrival, Nostr/WebRTC overflow, Long Trip planner) out of the main chunk | P2 | VERIFIED (2026-11-23: app entry JS 720.3 kB / 240.3 kB gz → 379.2 kB / 130.5 kB gz + immutable `react` vendor chunk 69.4 kB gz; entry CSS 53.4 kB → 32.5 kB) |
+| REQ-PERF-005 | Smooth on weak devices: motion only on transform/opacity (sheet detents and drags slid with compositor animations, floating controls glide with the sheet, sliding selection highlights), adaptive rendering tier (`platform/perfTier.ts`: no live blur, lighter shadows, ≤1.5× map pixels, no 3D buildings on weak devices or in battery saver), navigation camera and position dot glide between fixes every frame (`smoothFollow.ts`), turn banner keeps its height, unchanged POI sets not re-sent, CarPlay synced only while a car is connected and route geometry sent only when it changes | P1 | IMPLEMENTED (2026-11-25: unit tests for glide/rubber band/tier/car sync; E2E layout suite runs with reduced motion) |
 
 ## 19. Scalability requirements
 

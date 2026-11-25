@@ -29,12 +29,13 @@ export function ManeuverBanner() {
 
   return (
     <section className={`mbanner${close ? ' is-close' : ''}`} aria-label={instruction}>
-      <div className="mbanner__main">
+      {/* A new maneuver fades through (keyed); the distance counting down does not. */}
+      <div key={`${next.kind}|${next.modifier ?? ''}|${instruction}`} className="mbanner__main swap-in">
         <span className="mbanner__icon">
           {far ? (
             <ManeuverIcon kind="continue" modifier="straight" size={48} />
           ) : (
-            <ManeuverIcon kind={next.kind} modifier={next.modifier} exit={next.exit} size={close ? 56 : 48} />
+            <ManeuverIcon kind={next.kind} modifier={next.modifier} exit={next.exit} size={48} />
           )}
         </span>
         <div className="mbanner__text">

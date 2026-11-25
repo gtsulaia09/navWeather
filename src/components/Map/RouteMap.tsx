@@ -11,6 +11,7 @@ import { createRouteProjector } from '../../algorithms/placesAlongRoute';
 import { formatDuration } from '../../i18n/format';
 import { navigationZoom } from '../../navigation/instructions';
 import { getProviders } from '../../services/providers';
+import { getPerfTier } from '../../platform/perfTier';
 import { useExplore } from '../../state/explore';
 import { useLayoutStore } from '../../state/layout';
 import { selectScrub } from '../../state/scrub';
@@ -27,6 +28,7 @@ import { useAmbientPois } from './useAmbientPois';
 import { useExploreLayer } from './useExploreLayer';
 import { useLiveLayer } from './useLiveLayer';
 import { useWeatherLayer } from './useWeatherLayer';
+import { angleDelta, approach, approachAngle, Glide } from './smoothFollow';
 import '../Explore/Explore.css';
 import './Map.css';
 
@@ -110,6 +112,8 @@ export default function RouteMap({ viewer = false }: { viewer?: boolean }) {
   }, [insets.top, insets.bottom, insets.left]);
   const paddingRef = useRef(padding);
   paddingRef.current = padding;
+  /** Wakes the navigation camera's frame loop (it eases to a new padding itself). Null when it doesn't run. */
+  const kickFollowRef = useRef<(() => void) | null>(null);
 
   // ---- Create the map once ------------------------------------------------
   useEffect(() => {
@@ -126,10 +130,13 @@ export default function RouteMap({ viewer = false }: { viewer?: boolean }) {
         zoom: 11.8,
         attributionControl: false, // placed top-right so the sheet never hides it
         pitchWithRotate: false,
-        fadeDuration: 150,
+        // Weak devices: no label fade (each fade is extra frames of symbol drawing).
+        fadeDuration: getPerfTier() === 'lite' ? 0 : 150,
         // Phones report 3× pixels; drawing the map at 3× costs ~2.25× the GPU/CPU of 2× for detail the eye barely
-        // sees, and made panning stutter on iPhone. Cap at 2×.
-        pixelRatio: Math.min(typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1, 2),
+        // sees, and made panning stutter on iPhone. Cap at 2× (1.5× on weak devices).
+        pixelRatio: Math.min(typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1, getPerfTier() === 'lite' ? 1.5 : 2),
+        // Weak devices keep fewer tiles around: less memory pressure (and fewer GC pauses).
+        maxTileCacheZoomLevels: getPerfTier() === 'lite' ? 3 : 5,
       });
     } catch {
       setMapError(m.ui.mapUnavailable);
@@ -187,6 +194,13 @@ export default function RouteMap({ viewer = false }: { viewer?: boolean }) {
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
+    // Driving with the camera on the car: the camera eases to the new padding itself (no jump when the turn
+    // banner or the sheet changes size).
+    const st0 = useAppStore.getState();
+    if (st0.mode !== 'planning' && st0.followVehicle && kickFollowRef.current) {
+      kickFollowRef.current();
+      return;
+    }
     if (map.isMoving()) {
       const apply = () => map.setPadding(paddingRef.current);
       map.once('moveend', apply);
@@ -581,11 +595,77 @@ export default function RouteMap({ viewer = false }: { viewer?: boolean }) {
     // (the start-of-drive move, a pan, the overview), pick up from where it actually is — not from where it was
     // when this effect ran, or the camera would drift back out to the overview and creep in.
     let steering = false;
+    // Between fixes the car glides and the camera follows it every frame (smoothFollow.ts). Battery saver and
+    // reduced motion keep the old step-per-fix camera: no frame loop.
+    const smooth = !reduced && !batterySaver;
+    const glide = new Glide();
+    const target = { zoom: zoom, heading: undefined as number | undefined, pitch: 45 };
+    let shownHeading: number | null = null;
+    let raf = 0;
+    let lastFrame = 0;
+    let shownPadding: { top: number; bottom: number; left: number; right: number } | null = null;
+
+    const frame = (now: number) => {
+      raf = 0;
+      const s = useAppStore.getState();
+      const marker = vehicleRef.current;
+      const pos = glide.at(now);
+      if (!marker || !pos || !s.vehicle || s.mode === 'planning') {
+        lastFrame = 0;
+        return;
+      }
+      const dt = lastFrame ? Math.min(100, now - lastFrame) : 16;
+      lastFrame = now;
+      marker.setLngLat(pos);
+      let busy = glide.progress(now) < 1;
+      if (target.heading !== undefined) {
+        shownHeading = shownHeading === null ? target.heading : approachAngle(shownHeading, target.heading, dt, 180);
+        marker.setRotation(shownHeading);
+        busy ||= Math.abs(angleDelta(shownHeading, target.heading)) > 0.2;
+      }
+      if (s.followVehicle && !transitioning.current) {
+        if (!steering) {
+          zoom = map.getZoom();
+          bearing = map.getBearing();
+          steering = true;
+        }
+        zoom = approach(zoom, target.zoom, dt, 1100);
+        if (target.heading !== undefined) bearing = approachAngle(bearing, target.heading, dt, 520);
+        const want = paddingRef.current;
+        const mp = map.getPadding();
+        const p = shownPadding ?? { top: mp.top ?? 0, bottom: mp.bottom ?? 0, left: mp.left ?? 0, right: mp.right ?? 0 };
+        shownPadding = {
+          top: approach(p.top, want.top, dt, 220),
+          bottom: approach(p.bottom, want.bottom, dt, 220),
+          left: approach(p.left, want.left, dt, 220),
+          right: approach(p.right, want.right, dt, 220),
+        };
+        map.jumpTo({ center: pos, bearing, zoom, pitch: target.pitch, padding: shownPadding });
+        busy ||=
+          Math.abs(zoom - target.zoom) > 0.004 ||
+          (target.heading !== undefined && Math.abs(angleDelta(bearing, target.heading)) > 0.15) ||
+          Math.abs(shownPadding.top - want.top) + Math.abs(shownPadding.bottom - want.bottom) + Math.abs(shownPadding.left - want.left) > 0.5;
+      } else {
+        steering = false;
+        shownPadding = null;
+      }
+      if (busy) raf = requestAnimationFrame(frame);
+      else lastFrame = 0;
+    };
+    if (smooth) {
+      kickFollowRef.current = () => {
+        if (!raf) raf = requestAnimationFrame(frame);
+      };
+    }
 
     const update = () => {
       const s = useAppStore.getState();
       const v = s.vehicle;
       if (!v || s.mode === 'planning' || !s.plan) {
+        cancelAnimationFrame(raf);
+        raf = 0;
+        glide.reset();
+        shownHeading = null;
         vehicleRef.current?.remove();
         vehicleRef.current = null;
         if (map.getLayer('route-line')) map.setPaintProperty('route-line', 'line-gradient', routeGradient(0));
@@ -598,8 +678,6 @@ export default function RouteMap({ viewer = false }: { viewer?: boolean }) {
         el.setAttribute('aria-hidden', 'true');
         vehicleRef.current = new Marker({ element: el, rotationAlignment: 'map', pitchAlignment: 'map' }).setLngLat(v.coordinate).addTo(map);
       }
-      vehicleRef.current.setLngLat(v.coordinate);
-      if (v.headingDeg !== undefined) vehicleRef.current.setRotation(v.headingDeg);
 
       const now = performance.now();
       const saver = useSettings.getState().batterySaver;
@@ -614,7 +692,23 @@ export default function RouteMap({ viewer = false }: { viewer?: boolean }) {
         map.setPaintProperty('route-line', 'line-gradient', routeGradient(progressFn!(s.progress.distanceAlongM)));
       }
 
-      // Navigation camera: heading-up, zoom out on open road, in near maneuvers.
+      const g = s.guidance;
+      const simFast = s.mode === 'simulating' && s.sim.speed > 10;
+      const targetZoom = navigationZoom(g?.next ? g.distanceToNextM : null, v.speedMps ?? 14) - (simFast ? 1 : 0);
+      const heading = v.headingDeg !== undefined && Number.isFinite(v.headingDeg) ? v.headingDeg : undefined;
+
+      if (smooth) {
+        glide.push(v.coordinate, now);
+        target.zoom = targetZoom;
+        target.heading = heading;
+        target.pitch = 45;
+        if (!raf) raf = requestAnimationFrame(frame);
+        return;
+      }
+
+      // Step per fix (battery saver, reduced motion).
+      vehicleRef.current.setLngLat(v.coordinate);
+      if (heading !== undefined) vehicleRef.current.setRotation(heading);
       if (!s.followVehicle || transitioning.current) {
         steering = false;
         return;
@@ -626,12 +720,9 @@ export default function RouteMap({ viewer = false }: { viewer?: boolean }) {
         bearing = map.getBearing();
         steering = true;
       }
-      const g = s.guidance;
-      const targetZoom = navigationZoom(g?.next ? g.distanceToNextM : null, v.speedMps ?? 14);
-      const simFast = s.mode === 'simulating' && s.sim.speed > 10;
-      zoom += (targetZoom - (simFast ? 1 : 0) - zoom) * (reduced ? 1 : 0.08);
-      if (v.headingDeg !== undefined && Number.isFinite(v.headingDeg)) {
-        const d = ((v.headingDeg - bearing + 540) % 360) - 180;
+      zoom += (targetZoom - zoom) * (reduced ? 1 : 0.08);
+      if (heading !== undefined) {
+        const d = ((heading - bearing + 540) % 360) - 180;
         bearing = (bearing + d * (reduced ? 1 : 0.15) + 360) % 360;
       }
       const pitch = saver || reduced ? 0 : 45;
@@ -641,9 +732,19 @@ export default function RouteMap({ viewer = false }: { viewer?: boolean }) {
     update();
     const unsub = useAppStore.subscribe((s) => s.vehicle, update);
     const unsubMode = useAppStore.subscribe((s) => s.mode, update);
+    // Following again (recenter, end of the start-of-drive move): the frame loop picks the camera up.
+    const unsubFollow = useAppStore.subscribe(
+      (s) => s.followVehicle,
+      (f) => {
+        if (f && smooth && !raf) raf = requestAnimationFrame(frame);
+      },
+    );
     return () => {
+      cancelAnimationFrame(raf);
+      kickFollowRef.current = null;
       unsub();
       unsubMode();
+      unsubFollow();
     };
   }, [styleVersion, reduced, batterySaver]);
 
@@ -756,8 +857,8 @@ export default function RouteMap({ viewer = false }: { viewer?: boolean }) {
   }, [styleVersion, navigating, follow]);
   const showCompass = (bearing !== 0 || tilted) && (!navigating || !follow);
 
-  // 3D buildings only while the map is tilted (and not in battery saver).
-  const show3d = tilted && !batterySaver;
+  // 3D buildings only while the map is tilted (and not in battery saver or on a weak device).
+  const show3d = tilted && !batterySaver && getPerfTier() !== 'lite';
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !styleVersion || !map.getLayer('building-3d')) return;

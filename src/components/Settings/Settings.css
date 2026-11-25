@@ -1,60 +1,119 @@
-/* Settings: titled cards of rows; short choices as segmented controls. */
+/* Settings: grouped cards of rows under a coloured glyph and a title; short choices as segmented controls with a
+   sliding highlight. Everything that moves is transform/opacity (or one small pseudo-element). */
+
 .set-section {
-  margin: 0 0 18px;
+  margin: 0 0 22px;
   opacity: 1;
   translate: 0 0;
-  transition: opacity 220ms var(--ease-out), translate 260ms var(--ease-spring);
+  transition:
+    opacity var(--dur-enter) var(--ease-out),
+    translate 420ms var(--ease-spring);
+  /* Sections rise in one after another when Settings opens. */
+  transition-delay: calc(var(--i, 0) * 34ms + 40ms);
 
   @starting-style {
     opacity: 0;
   }
   @media (prefers-reduced-motion: no-preference) {
     @starting-style {
-      translate: 0 8px;
+      translate: 0 14px;
     }
   }
 }
 .set-title {
-  margin: 0 4px 8px;
-  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 4px 10px;
+  font-size: 15px;
   font-weight: 650;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--text-3);
+  letter-spacing: -0.01em;
+  color: var(--text);
 }
+
+/* The section glyph: a small rounded square in the section's colour, white line icon. */
+.set-ico {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  color: #fff;
+  background: var(--ico, #8e8e93);
+  box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.18), 0 1px 2px rgba(0, 0, 0, 0.18);
+}
+.set-ico svg {
+  stroke-width: 2.2;
+}
+.set-ico--indigo {
+  --ico: linear-gradient(160deg, #7a78ff, #5552e0);
+}
+.set-ico--green {
+  --ico: linear-gradient(160deg, #42d96b, #23b04c);
+}
+.set-ico--orange {
+  --ico: linear-gradient(160deg, #ffb340, #ff8a00);
+}
+.set-ico--blue {
+  --ico: linear-gradient(160deg, #3e9bff, #0a6be8);
+}
+.set-ico--teal {
+  --ico: linear-gradient(160deg, #4fd4e6, #18a7bf);
+}
+.set-ico--gray {
+  --ico: linear-gradient(160deg, #a2a2a8, #7c7c82);
+}
+.set-ico--yellow {
+  --ico: linear-gradient(160deg, #ffd84a, #f5b800);
+  color: #3a2c00;
+}
+
 .set-card {
-  border-radius: var(--r-surface);
+  overflow: clip;
+  border-radius: 16px;
   background: var(--surface-2);
   border: 1px solid var(--border);
 }
-.set-card > .set-row {
+.set-card > .set-row,
+.set-card > .set-note {
   padding-inline: 16px;
 }
-.set-card > .set-row:first-child {
-  border-radius: var(--r-surface) var(--r-surface) 0 0;
-}
-.set-card > .set-row:last-child {
-  border-radius: 0 0 var(--r-surface) var(--r-surface);
-}
-.set-card > .set-row:only-child {
-  border-radius: var(--r-surface);
+.set-card > .set-note {
+  margin: 0;
+  padding-block: 10px;
 }
 .set-card > .set-row + .set-row,
+.set-card > .set-row + .set-note,
+.set-card > .set-note + .set-row,
 .set-card > .set-collapse.is-open {
   border-top: 1px solid var(--border);
 }
+
+/* Voice options fold open under the switch. */
 .set-collapse {
   display: grid;
   grid-template-rows: 0fr;
-  opacity: 0;
-  transition: grid-template-rows 240ms var(--ease-spring), opacity 180ms var(--ease-out);
+  transition: grid-template-rows 320ms var(--ease-spring);
 }
 .set-collapse.is-open {
   grid-template-rows: 1fr;
-  opacity: 1;
 }
 .set-collapse__inner {
   overflow: hidden;
+  min-height: 0;
+}
+.set-collapse__inner > * {
+  opacity: 0;
+  translate: 0 -6px;
+  transition:
+    opacity 200ms var(--ease-out),
+    translate 320ms var(--ease-spring);
+}
+.set-collapse.is-open .set-collapse__inner > * {
+  opacity: 1;
+  translate: 0 0;
+  transition-delay: 60ms;
 }
 .set-collapse__inner > .set-row {
   padding-inline: 16px;
@@ -69,8 +128,13 @@
   justify-content: space-between;
   gap: 16px;
   min-height: 56px;
-  padding-block: 8px;
-  transition: background var(--dur-fast) var(--ease);
+  padding-block: 9px;
+  transition: background-color var(--dur-fast) var(--ease);
+}
+/* A tap on a whole row (switch, field, dropdown) tints it, like a list row. */
+.set-row--switch:active,
+.set-row--select:active {
+  background-color: var(--surface-3);
 }
 .set-row__label {
   display: flex;
@@ -81,32 +145,78 @@
   overflow-wrap: break-word;
 }
 .set-row small {
-  margin-top: 2px;
+  margin-top: 3px;
   font-size: 12.5px;
   line-height: 1.35;
   color: var(--text-3);
 }
-.set-row select,
-.set-row input[type='number'] {
+
+/* Fields: quiet surfaces that light up when focused. */
+.set-row input[type='number'],
+.set-row input[type='text'],
+.set-select select {
   min-height: 40px;
-  max-width: 55%;
-  padding: 0 10px;
-  border-radius: var(--r-control);
+  padding: 0 12px;
+  border-radius: 11px;
   border: 1px solid var(--border-strong);
   background: var(--surface);
   font-size: 16px;
+  outline: none;
+  transition:
+    border-color var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease);
 }
 .set-row input[type='number'] {
   width: 110px;
+  text-align: right;
+}
+.set-row input[type='text'] {
+  width: min(55%, 220px);
+}
+.set-row input:focus-visible,
+.set-select select:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+/* Dropdown with our own chevron. */
+.set-select {
+  position: relative;
+  display: inline-flex;
+  max-width: 58%;
+}
+.set-select select {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  padding-right: 34px;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+.set-select::after {
+  content: '';
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  translate: 0 -50%;
+  background: var(--text-3);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")
+    center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")
+    center / contain no-repeat;
+  pointer-events: none;
 }
 .set-row--note {
   min-height: 0;
+  flex-wrap: wrap;
 }
 .set-row--note .set-note {
   margin: 0;
 }
 
-/* Segmented control: all the choices in view, one tap to change. */
+/* Segmented control: all the choices in view, one tap to change; the white highlight slides to the choice. */
 .seg {
   display: inline-flex;
   flex: none;
@@ -115,7 +225,11 @@
   gap: 2px;
   padding: 3px;
   border-radius: 12px;
-  background: var(--surface-3);
+  background: light-dark(var(--surface-3), #25282e);
+  --thumb-r: 9px;
+  /* Lighter than the track in both themes (a dark thumb read as a hole at night). */
+  --thumb-bg: light-dark(#ffffff, #4a4f58);
+  --thumb-shadow: 0 1px 3px light-dark(rgba(15, 23, 42, 0.16), rgba(0, 0, 0, 0.5)), 0 0 0 0.5px var(--border);
 }
 .seg__opt {
   position: relative;
@@ -123,23 +237,19 @@
   padding: 0 14px;
   border-radius: 9px;
   font-size: 15px;
-  color: var(--text-2);
+  font-weight: 600;
+  color: var(--text-3);
   white-space: nowrap;
   scale: 1;
   transition:
-    background var(--dur) var(--ease-spring),
-    color var(--dur) var(--ease),
-    box-shadow var(--dur) var(--ease-spring),
+    color 220ms var(--ease),
     scale var(--dur-fast) var(--ease-spring);
 }
 .seg__opt:active {
-  scale: 0.96;
+  scale: 0.95;
 }
 .seg__opt.is-on {
-  background: var(--surface);
   color: var(--text);
-  font-weight: 650;
-  box-shadow: var(--shadow-marker);
 }
 .seg__opt:focus-visible {
   outline: 2px solid var(--accent);
@@ -171,11 +281,11 @@
   text-align: center;
 }
 
-/* Toggle chips (several can be on). */
+/* Toggle chips (several can be on): a little pop when switched on. */
 .set-row--chips {
   flex-direction: column;
   align-items: stretch;
-  gap: 8px;
+  gap: 10px;
 }
 .chips {
   display: flex;
@@ -185,97 +295,111 @@
 .chips .chip {
   position: relative;
   min-height: 36px;
-  padding: 0 14px;
+  padding: 0 15px;
   border-radius: 18px;
   border: 1px solid var(--border-strong);
   font-size: 15px;
+  font-weight: 600;
   color: var(--text-2);
   background: var(--surface);
   scale: 1;
   transition:
-    background var(--dur) var(--ease-spring),
-    color var(--dur) var(--ease),
-    border-color var(--dur) var(--ease),
+    background-color 220ms var(--ease),
+    color 220ms var(--ease),
+    border-color 220ms var(--ease),
     scale var(--dur-fast) var(--ease-spring);
 }
 .chips .chip:active {
-  scale: 0.95;
+  scale: 0.94;
 }
 .chips .chip.is-on {
   border-color: transparent;
-  background: var(--accent-soft);
-  color: var(--accent);
-  font-weight: 650;
+  background: var(--accent-fill);
+  color: var(--on-accent);
+  animation: chip-pop 320ms var(--ease-pop);
+}
+@keyframes chip-pop {
+  40% {
+    scale: 1.07;
+  }
 }
 .chips .chip:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
-/* Toggle switch (the checkbox keeps role="switch" for assistive tech). */
+/* Toggle switch (the checkbox keeps role="switch" for assistive tech): the knob springs across. */
 .set-row--switch input[role='switch'] {
   appearance: none;
   flex: none;
   position: relative;
-  width: 50px;
-  height: 30px;
+  width: 51px;
+  height: 31px;
   margin: 0;
-  border-radius: 15px;
+  border-radius: 16px;
   background: var(--surface-3);
   border: 1px solid var(--border-strong);
   cursor: pointer;
-  transition: background 220ms var(--ease-spring), border-color 220ms var(--ease);
+  transition:
+    background-color 260ms var(--ease),
+    border-color 260ms var(--ease);
 }
 .set-row--switch input[role='switch']::after {
   content: '';
   position: absolute;
   top: 2px;
   left: 2px;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
+  width: 25px;
+  height: 25px;
+  border-radius: 13px;
   background: #fff;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.32);
-  transition: translate 240ms var(--ease-spring), width 140ms var(--ease);
+  box-shadow:
+    0 2px 6px rgba(0, 0, 0, 0.22),
+    0 0 0 0.5px rgba(0, 0, 0, 0.06);
+  transition:
+    translate 380ms var(--ease-pop),
+    scale 200ms var(--ease-spring);
+  transform-origin: left center;
 }
-.set-row--switch input[role='switch']:active::after {
-  width: 27px;
+.set-row--switch:active input[role='switch']::after {
+  scale: 1.14 1;
 }
 .set-row--switch input[role='switch']:checked {
-  background: var(--accent-fill);
+  background: light-dark(#34c759, #30d158);
   border-color: transparent;
 }
 .set-row--switch input[role='switch']:checked::after {
   translate: 20px 0;
-}
-.set-row--switch input[role='switch']:checked:active::after {
-  translate: 17px 0;
+  transform-origin: right center;
 }
 .set-row--switch input[role='switch']:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+
 @media (prefers-reduced-motion: reduce) {
   .set-section,
   .set-collapse,
+  .set-collapse__inner > *,
   .set-row--switch input[role='switch'],
   .set-row--switch input[role='switch']::after,
   .seg__opt,
   .chips .chip {
     transition: none;
+    animation: none;
     scale: 1;
   }
 }
 
 /* Narrow screens: a dropdown or a segmented control sits under its label, full width. */
 @media (max-width: 540px) {
-  .set-row:has(> select),
+  .set-row--select,
   .set-row--seg {
     flex-direction: column;
     align-items: stretch;
     gap: 8px;
   }
-  .set-row:has(> select) select {
+  .set-select {
     max-width: none;
     width: 100%;
   }
@@ -302,6 +426,14 @@
 }
 .set-privacy {
   margin: 4px 4px 16px;
+  text-align: center;
+}
+.set-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: 100%;
+  margin-inline: -12px;
 }
 .set-saved {
   gap: 8px;
@@ -319,19 +451,26 @@
 .set-head {
   position: sticky;
   top: -20px;
-  z-index: 1;
+  z-index: 2;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin: -20px -20px 14px;
-  padding: 14px 12px 12px 20px;
+  margin: -20px -20px 16px;
+  padding: 16px 12px 12px 20px;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
 }
 .set-head h2 {
   margin: 0;
-  font-size: 22px;
+  font-size: 26px;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+}
+.set-head .icon-btn {
+  background: var(--surface-2);
+  width: 36px;
+  height: 36px;
 }
 /* Fields scrolled into view (keyboard opening) stop above the sticky footer, not under it. */
 .dialog:has(.set-foot) {
@@ -340,10 +479,14 @@
 .set-foot {
   position: sticky;
   bottom: -20px;
+  z-index: 2;
   margin: 0 -20px -20px;
-  padding: 12px 20px calc(12px + var(--safe-bottom));
-  background: linear-gradient(to bottom, transparent, var(--surface) 28%);
+  padding: 14px 20px calc(14px + var(--safe-bottom));
+  background: linear-gradient(to bottom, transparent, var(--surface) 30%);
 }
 .set-done {
   width: 100%;
+  min-height: 50px;
+  border-radius: 14px;
+  font-size: 17px;
 }

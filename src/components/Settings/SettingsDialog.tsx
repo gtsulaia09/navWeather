@@ -1,19 +1,29 @@
-import { useEffect, useId, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { LOCALES, type Locale } from '../../i18n';
 import { googleVoicesFor } from '../../voice/voices';
 import { useMessages, useSettings, type Settings } from '../../state/settings';
 import { loadDriveExtras, useAppStore } from '../../state/store';
 import { useSavedPlaces } from '../../state/savedPlaces';
 import { Dialog } from '../Common/Dialog';
-import { CloseIcon, SpeakerIcon } from '../Icons/Icons';
+import { BellIcon, CarIcon, CloseIcon, DirectionsIcon, DownloadIcon, PaletteIcon, SpeakerIcon, StarIcon } from '../Icons/Icons';
+import { useSlidingThumb } from '../../hooks/useSlidingThumb';
 import { getProviders } from '../../services/providers';
 import './Settings.css';
 
-/** A titled group of settings, as one card. */
-function Section({ title, children }: { title: string; children: ReactNode }) {
+type Tone = 'indigo' | 'green' | 'orange' | 'blue' | 'teal' | 'gray' | 'yellow';
+
+/** A titled group of settings, as one card, with a coloured glyph like the system's settings. */
+function Section({ title, icon, tone, index = 0, children }: { title: string; icon?: ReactNode; tone?: Tone; index?: number; children: ReactNode }) {
   return (
-    <section className="set-section">
-      <h3 className="set-title">{title}</h3>
+    <section className="set-section" style={{ '--i': index } as CSSProperties}>
+      <h3 className="set-title">
+        {icon ? (
+          <span className={`set-ico set-ico--${tone ?? 'gray'}`} aria-hidden="true">
+            {icon}
+          </span>
+        ) : null}
+        <span>{title}</span>
+      </h3>
       <div className="set-card">{children}</div>
     </section>
   );
@@ -21,29 +31,33 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 
 function Select<T extends string>({ label, value, options, onChange }: { label: string; value: T; options: [T, string][]; onChange(v: T): void }) {
   return (
-    <label className="set-row">
+    <label className="set-row set-row--select">
       <span className="set-row__label">{label}</span>
-      <select value={value} onChange={(e) => onChange(e.target.value as T)}>
-        {options.map(([v, l]) => (
-          <option key={v} value={v}>
-            {l}
-          </option>
-        ))}
-      </select>
+      <span className="set-select">
+        <select value={value} onChange={(e) => onChange(e.target.value as T)}>
+          {options.map(([v, l]) => (
+            <option key={v} value={v}>
+              {l}
+            </option>
+          ))}
+        </select>
+      </span>
     </label>
   );
 }
 
-/** A few short choices side by side — one tap, everything visible (instead of a dropdown). */
+/** A few short choices side by side — one tap, everything visible (instead of a dropdown). The highlight slides. */
 function Segmented<T extends string>({ label, value, options, onChange, hint }: { label: string; value: T; options: [T, string][]; onChange(v: T): void; hint?: string }) {
   const id = useId();
+  const track = useRef<HTMLDivElement>(null);
+  useSlidingThumb(track, value);
   return (
     <div className={`set-row set-row--seg${hint ? ' set-row--stack' : ''}`}>
       <span className="set-row__label">
         <span id={id}>{label}</span>
         {hint ? <small>{hint}</small> : null}
       </span>
-      <div className="seg" role="radiogroup" aria-labelledby={id}>
+      <div ref={track} className="seg thumb-track" role="radiogroup" aria-labelledby={id}>
         {options.map(([v, l]) => (
           <button key={v} type="button" role="radio" aria-checked={v === value} className={`seg__opt${v === value ? ' is-on' : ''}`} onClick={() => onChange(v)}>
             {l}
@@ -113,7 +127,7 @@ export function SettingsDialog({ closing = false }: { closing?: boolean } = {}) 
         </button>
       </div>
 
-      <Section title={S.sectionDisplay}>
+      <Section title={S.sectionDisplay} icon={<PaletteIcon size={17} />} tone="indigo" index={0}>
         <Select<Locale> label={S.language} value={s.language} options={LOCALES.map((l) => [l.id, l.name])} onChange={(language) => up({ language })} />
         <Segmented
           label={S.units}
@@ -157,14 +171,14 @@ export function SettingsDialog({ closing = false }: { closing?: boolean } = {}) 
         />
       </Section>
 
-      <Section title={S.sectionVoice}>
+      <Section title={S.sectionVoice} icon={<SpeakerIcon size={17} />} tone="green" index={1}>
         <Switch label={S.voiceGuidance} checked={s.voice} onChange={(voice) => up({ voice })} hint={S.voiceRecognitionNote} />
         <div className={`set-collapse${s.voice ? ' is-open' : ''}`} aria-hidden={!s.voice}>
           <div className="set-collapse__inner">{s.voice ? <VoiceSettings /> : null}</div>
         </div>
       </Section>
 
-      <Section title={S.weatherAlerts}>
+      <Section title={S.weatherAlerts} icon={<BellIcon size={17} />} tone="orange" index={2}>
         <Segmented
           label={S.alertOutput}
           value={s.alertOutput}
@@ -205,7 +219,7 @@ export function SettingsDialog({ closing = false }: { closing?: boolean } = {}) 
         </Chips>
       </Section>
 
-      <Section title={S.sectionDriving}>
+      <Section title={S.sectionDriving} icon={<CarIcon size={17} />} tone="blue" index={3}>
         <Switch label={S.speedWarnings} checked={s.speedWarnings} onChange={(speedWarnings) => up({ speedWarnings })} hint={m.ui.speedLimitNote} />
         <Switch label={S.speedCameras} checked={s.speedCameras} onChange={(speedCameras) => up({ speedCameras })} hint={S.speedCamerasHint} />
         <Switch label={S.roadHazards} checked={s.roadHazards} onChange={(roadHazards) => up({ roadHazards })} hint={S.roadHazardsHint} />
@@ -330,7 +344,7 @@ function OfflineCacheSettings() {
   };
 
   return (
-    <Section title={t('Offline data & cache', 'Офлайн-данные и кэш', 'ოფლაინ მონაცემები და ქეში')}>
+    <Section title={t('Offline data & cache', 'Офлайн-данные и кэш', 'ოფლაინ მონაცემები და ქეში')} icon={<DownloadIcon size={17} />} tone="gray" index={5}>
       <div className="set-row set-row--note">
         <p className="set-note tabular">
           {cacheInfo
@@ -344,7 +358,7 @@ function OfflineCacheSettings() {
             ? ` · ${t('Forecast updated', 'Прогноз обновлён', 'პროგნოზი განახლდა')}: ${new Date(weatherUpdatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
             : ''}
         </p>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <div className="set-actions">
           <button type="button" className="btn btn-quiet" disabled={busy} onClick={() => void refreshForecast()}>
             {t('Refresh forecast', 'Обновить прогноз', 'პროგნოზის განახლება')}
           </button>
@@ -407,7 +421,7 @@ function SavedPlacesSettings() {
   const label = (slot: string, name: string) =>
     slot === 'home' ? `${m.explore.home} · ${name}` : slot === 'work' ? `${m.explore.work} · ${name}` : slot === 'parking' ? m.parking.title : name;
   return (
-    <Section title={S.savedPlaces}>
+    <Section title={S.savedPlaces} icon={<StarIcon size={17} />} tone="yellow" index={6}>
       {saved.length ? (
         saved.map((p) => (
           <div className="set-row set-saved" key={`${p.slot}:${p.id}`}>
@@ -445,7 +459,7 @@ function TripSettings() {
     return n === null || !Number.isFinite(n) || n <= 0 ? null : n;
   };
   return (
-    <Section title={T.section}>
+    <Section title={T.section} icon={<DirectionsIcon size={17} />} tone="teal" index={4}>
       <Segmented
         label={T.pace}
         value={s.tripPace}

@@ -142,7 +142,7 @@ export function LongTripDashboard() {
         <span className="ltrip__eta-time tabular">{when(appArrival ?? plan.arriveAtMs, tz, m)}</span>
         <span className="ltrip__eta-note">{m.trip.totalTime(formatDuration(plan.estimatedTotalTimeMinutes * 60, m))}</span>
       </div>
-      <ul className="ltrip__tiles">
+      <ul className="ltrip__tiles stagger">
         {tiles.map(([k, v]) => (
           <li key={k}>
             <span className={`ltrip__tile-value tabular${/\d/.test(v) ? '' : ' ltrip__tile-value--text'}`}>{v}</span>

@@ -179,6 +179,27 @@ export const LayersIcon = ({ size, className }: P) => (
     <path d="M12 3l9 5-9 5-9-5 9-5zM3 13l9 5 9-5M3 17.5l9 5 9-5" />
   </svg>
 );
+export const PaletteIcon = ({ size, className }: P) => (
+  <svg {...base(size)} className={className}>
+    <path d="M12 3a9 9 0 1 0 0 18c1.2 0 1.8-.8 1.8-1.7 0-.5-.2-.9-.5-1.2-.3-.4-.5-.8-.5-1.3 0-1 .8-1.8 1.8-1.8H17a4 4 0 0 0 4-4C21 6.6 17 3 12 3z" />
+    <path d="M7.5 11.5h.01M10 7.5h.01M14.5 7.5h.01M17 11h.01" />
+  </svg>
+);
+export const BellIcon = ({ size, className }: P) => (
+  <svg {...base(size)} className={className}>
+    <path d="M18 16V11a6 6 0 1 0-12 0v5l-2 2h16l-2-2zM10 21h4" />
+  </svg>
+);
+export const DownloadIcon = ({ size, className }: P) => (
+  <svg {...base(size)} className={className}>
+    <path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19h14" />
+  </svg>
+);
+export const CheckIcon = ({ size, className }: P) => (
+  <svg {...base(size)} className={className}>
+    <path d="M5 12.5l4.5 4.5L19 7.5" />
+  </svg>
+);
 
 /**
  * Travel-mode glyphs: solid shapes, like a map app's mode tabs (they read

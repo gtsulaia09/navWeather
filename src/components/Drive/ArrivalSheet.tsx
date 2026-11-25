@@ -56,7 +56,7 @@ export function ArrivalSheet() {
           <section>
             <h3 className="label">{A.weather}</h3>
             {a.conditions.length ? (
-              <ul className="arrive__wx">
+              <ul className="arrive__wx stagger">
                 {a.conditions.slice(0, 4).map((c) => (
                   <li key={c.condition}>
                     <WeatherIcon condition={c.condition} size={26} />

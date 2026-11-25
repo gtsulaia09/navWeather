@@ -165,7 +165,7 @@ export function PlaceInput(props: Props) {
         </span>
       ) : null}
       {expanded ? (
-        <ul className="suggestions" id={listId} role="listbox" aria-label={m.ui.suggestions(label)}>
+        <ul className="suggestions stagger" id={listId} role="listbox" aria-label={m.ui.suggestions(label)}>
           {options.map((o, i) => (
             <li
               key={o.kind === 'current' ? 'current' : o.kind === 'map' ? 'map' : `${o.kind}:${o.place.id}`}

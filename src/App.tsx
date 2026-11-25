@@ -95,7 +95,7 @@ function MainApp() {
   const arrived = useAppStore((s) => s.arrival !== null);
   const hasPlan = useAppStore((s) => s.plan !== null);
   const settingsOpen = useAppStore((s) => s.settingsOpen);
-  const settingsAnim = useAnimatedPresence(settingsOpen, 190);
+  const settingsAnim = useAnimatedPresence(settingsOpen, 300);
   const showShareStatus = shareStatus === 'active' || shareStatus === 'paused';
   const m = useMessages();
 

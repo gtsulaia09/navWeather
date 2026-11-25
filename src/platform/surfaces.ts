@@ -64,6 +64,11 @@ export interface CompanionSnapshot {
     atMs: number;
     distanceM: number;
   } | null;
+  /**
+   * Identity of the route geometry below. When it equals the last one sent, `routeCoordinates` and
+   * `weatherSegments` are left out (the surface keeps what it has): they are the heavy part of every update.
+   */
+  routeKey?: string | null;
   /** Simplified route polyline ([lon, lat]) for native CarPlay / Android Auto map rendering. */
   routeCoordinates?: [number, number][];
   /** Weather-coloured stretches along the planned route. */

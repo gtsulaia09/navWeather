@@ -35,6 +35,36 @@ function sampleCoords(coords: LngLat[], maxPoints = 240): [number, number][] {
   return out;
 }
 
+/** Route geometry for the surfaces, computed once per route and weather colouring (not on every update). */
+let geometryCache: {
+  timed: unknown;
+  segments: unknown;
+  key: string;
+  routeCoordinates: [number, number][];
+  weatherSegments: { coordinates: [number, number][]; cls: string }[];
+} | null = null;
+let geometrySeq = 0;
+
+function routeGeometry(): typeof geometryCache {
+  const s = useAppStore.getState();
+  const timed = s.plan?.timed ?? null;
+  if (!timed) return null;
+  if (geometryCache && geometryCache.timed === timed && geometryCache.segments === s.derived.routeSegments) return geometryCache;
+  geometryCache = {
+    timed,
+    segments: s.derived.routeSegments,
+    key: `r${++geometrySeq}`,
+    routeCoordinates: sampleCoords(timed.route.geometry, 240),
+    weatherSegments: s.derived.routeSegments
+      .map((seg) => ({
+        coordinates: sampleCoords(sliceLine(timed.route.geometry, timed.cumDistM, seg.startM, seg.endM), 60),
+        cls: seg.groupClass,
+      }))
+      .filter((seg) => seg.coordinates.length >= 2),
+  };
+  return geometryCache;
+}
+
 function buildSnapshot(): CompanionSnapshot {
   const s = useAppStore.getState();
   const m = currentMessages();
@@ -97,14 +127,7 @@ function buildSnapshot(): CompanionSnapshot {
       coordinate: [q.place.coordinate[0], q.place.coordinate[1]],
     }));
 
-  const weatherSegments = timed
-    ? s.derived.routeSegments
-        .map((seg) => ({
-          coordinates: sampleCoords(sliceLine(timed.route.geometry, timed.cumDistM, seg.startM, seg.endM), 60),
-          cls: seg.groupClass,
-        }))
-        .filter((seg) => seg.coordinates.length >= 2)
-    : undefined;
+  const geometry = routeGeometry();
 
   const base = buildCompanionSnapshot({
     active,
@@ -123,8 +146,9 @@ function buildSnapshot(): CompanionSnapshot {
     weatherSummary: s.derived.summary?.headline
       ? [s.derived.summary.headline, s.derived.summary.detail].filter(Boolean).join(' · ')
       : null,
-    routeCoordinates: timed ? sampleCoords(timed.route.geometry, 240) : undefined,
-    weatherSegments,
+    routeKey: geometry?.key ?? null,
+    routeCoordinates: geometry?.routeCoordinates,
+    weatherSegments: geometry?.weatherSegments,
     vehicle: s.vehicle
       ? {
           coordinate: [s.vehicle.coordinate[0], s.vehicle.coordinate[1]],
@@ -157,30 +181,62 @@ export function useCarSurfaceSync(): void {
     let lastSentAt = 0;
     let timer = 0;
     let wasActive = useAppStore.getState().mode !== 'planning';
+    /** Route geometry the car already has; null after (re)connecting, so it is sent in full. */
+    let carRouteKey: string | null | undefined = undefined;
+    let wristRouteKey: string | null | undefined = undefined;
+    /** The light part of the last snapshot sent: an identical one is not sent again. */
+    let lastLight = '';
 
-    const pushNow = () => {
+    // Only to a surface that is there: the iOS shell always has the CarPlay bridge, but building and posting a
+    // snapshot (route, weather stretches, places) to native code on every change, with no car connected, was
+    // steady main-thread work on the phone — felt as stutters while planning and driving.
+    const carOn = () => {
+      const car = getCarSurfaceBridge();
+      return car.name !== 'none' && car.connected;
+    };
+    const wristOn = () => {
+      const wrist = getWristCompanionBridge();
+      return wrist.name !== 'none' && wrist.connected;
+    };
+
+    const pushNow = (force = false) => {
       window.clearTimeout(timer);
       timer = 0;
       const car = getCarSurfaceBridge();
       const wrist = getWristCompanionBridge();
-      if (car.name === 'none' && wrist.name === 'none') return;
-      lastSentAt = performance.now();
+      const toCar = carOn();
+      const toWrist = wristOn();
+      if (!toCar) carRouteKey = undefined;
+      if (!toWrist) wristRouteKey = undefined;
+      if (!toCar && !toWrist) return;
       const snap = buildSnapshot();
-      if (car.name !== 'none') {
-        if (car.syncState) car.syncState(snap);
-        else if (snap.active) car.updateNavigation(snap);
+      const { routeCoordinates, weatherSegments, ...light } = snap;
+      const lightKey = JSON.stringify({ ...light, updatedAtMs: 0 });
+      const carKnows = !toCar || carRouteKey === snap.routeKey;
+      const wristKnows = !toWrist || wristRouteKey === snap.routeKey;
+      if (!force && lightKey === lastLight && carKnows && wristKnows) return;
+      lastLight = lightKey;
+      lastSentAt = performance.now();
+      const forSurface = (known: string | null | undefined): CompanionSnapshot =>
+        known === snap.routeKey && known !== undefined ? light : { ...light, routeCoordinates, weatherSegments };
+      if (toCar) {
+        const out = forSurface(carRouteKey);
+        carRouteKey = snap.routeKey;
+        if (car.syncState) car.syncState(out);
+        else if (snap.active) car.updateNavigation(out);
         if (wasActive && !snap.active) car.endNavigation();
       }
-      if (wrist.name !== 'none') wrist.pushSnapshot(snap);
+      if (toWrist) {
+        wrist.pushSnapshot(forSurface(wristRouteKey));
+        wristRouteKey = snap.routeKey;
+      }
       wasActive = snap.active;
     };
 
     const schedulePush = () => {
-      const car = getCarSurfaceBridge();
-      const wrist = getWristCompanionBridge();
-      if (car.name === 'none' && wrist.name === 'none') return;
+      if (!carOn() && !wristOn()) return;
       const active = useAppStore.getState().mode !== 'planning';
-      const minGapMs = active ? 450 : 120;
+      const minGapMs = active ? 450 : 200;
       const elapsed = performance.now() - lastSentAt;
       if (elapsed >= minGapMs) {
         pushNow();
@@ -194,7 +250,10 @@ export function useCarSurfaceSync(): void {
       const ex = useExplore.getState();
       switch (cmd.action) {
         case 'requestSync':
-          pushNow();
+          // A (re)connected car: everything again, geometry included.
+          carRouteKey = undefined;
+          wristRouteKey = undefined;
+          pushNow(true);
           break;
         case 'routeTo': {
           const place = {
@@ -229,7 +288,7 @@ export function useCarSurfaceSync(): void {
     };
 
     setCarCommandListener(handleCommand);
-    pushNow();
+    pushNow(true);
 
     const unsubs = [
       useAppStore.subscribe(schedulePush),
