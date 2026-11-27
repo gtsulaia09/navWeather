@@ -17,6 +17,7 @@ describe('navigation command parser', () => {
     ['Find a restaurant with less than 5 minutes detour', { type: 'find_poi', category: 'restaurant', maxDetourMin: 5, near: undefined }],
     ['Find an EV charger ahead', { type: 'find_poi', category: 'ev_charging', maxDetourMin: undefined, near: undefined }],
     ['Find a hotel near Batumi', { type: 'find_poi', category: 'hotel', maxDetourMin: undefined, near: 'Batumi' }],
+    ['Find a car wash nearby', { type: 'find_poi', category: 'car_wash', maxDetourMin: undefined, near: undefined }],
     ['Show another route', { type: 'alternatives' }],
     ['Avoid toll roads', { type: 'avoid', what: 'tolls' }],
     ['Avoid highways', { type: 'avoid', what: 'highways' }],

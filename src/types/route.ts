@@ -50,6 +50,8 @@ export interface RouteStep {
   bearingAfter?: number;
   /** Lanes at the maneuver point — only when the routing data has them. */
   lanes?: Lane[];
+  /** Metres before the maneuver over which `lanes` hold (the mapped road they are tagged on), when known. */
+  lanesApproachM?: number;
   /** Road classes along the step when provided (e.g. 'toll', 'motorway', 'ferry'). */
   classes?: string[];
   drivingSide?: 'left' | 'right';

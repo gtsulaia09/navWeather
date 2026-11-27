@@ -3,7 +3,7 @@ import { en } from '../i18n/en';
 import { ru } from '../i18n/ru';
 import { tbilisiBatumiRoute } from '../test/helpers';
 import { buildTimedRoute } from '../algorithms/routeTiming';
-import { buildManeuvers, computeGuidance, type Maneuver } from './maneuvers';
+import { buildManeuvers, computeGuidance, lanesToShow, type Maneuver } from './maneuvers';
 import {
   announcementStage,
   dueManeuverPrompt,
@@ -134,5 +134,44 @@ describe('announcement timing', () => {
     expect(navigationZoom(null, 1.4)).toBeGreaterThanOrEqual(17); // walking
     expect(navigationZoom(150, 8)).toBeGreaterThanOrEqual(17.75);
     expect(navigationZoom(150, 30)).toBeGreaterThan(17);
+  });
+});
+
+describe('real-drive fixes (2026-11-27)', () => {
+  const base = maneuvers.find((mv) => mv.kind === 'turn') ?? maneuvers[1];
+  const withLanes = (lanesApproachM?: number): Maneuver => ({
+    ...base,
+    modifier: 'right',
+    lanes: [
+      { indications: ['left'], valid: false },
+      { indications: ['straight'], valid: false },
+      { indications: ['straight', 'right'], valid: true },
+    ],
+    lanesApproachM,
+  });
+
+  it('lanes only on the road they are mapped on — not from the junction before it', () => {
+    expect(lanesToShow(withLanes(180), 500)).toBeUndefined();
+    expect(lanesToShow(withLanes(180), 190)).toHaveLength(3);
+    // A very short tagged road still gives a city block to change lanes.
+    expect(lanesToShow(withLanes(20), 90)).toHaveLength(3);
+    // No stretch known (other routers): near the junction only.
+    expect(lanesToShow(withLanes(undefined), 600)).toBeUndefined();
+    expect(lanesToShow(withLanes(undefined), 350)).toHaveLength(3);
+  });
+
+  it('every lane works for the maneuver: nothing to choose, no lanes', () => {
+    const all = { ...withLanes(200), lanes: [{ indications: ['straight'], valid: true }, { indications: ['straight'], valid: true }] };
+    expect(lanesToShow(all, 100)).toBeUndefined();
+  });
+
+  it('the arrival ahead is announced as ahead — never "you have arrived" kilometres early', () => {
+    const arrive = maneuvers.at(-1)!;
+    for (const m of [en, ru]) {
+      const text = instructionText(arrive, m);
+      expect(text).not.toMatch(/have arrived|прибыли/i);
+      expect(spokenPrompt(arrive, 'early', 1600, m, 'metric')).not.toMatch(/have arrived|прибыли/i);
+    }
+    expect(instructionText({ ...arrive, modifier: undefined }, en)).toBe('Arrive at your destination');
   });
 });

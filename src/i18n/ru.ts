@@ -82,8 +82,9 @@ export const ru: Messages = {
       exit ? `На кольце выберите ${ordinal(exit)} съезд${road ? ` на ${road}` : ''}` : 'Въезжайте на кольцо',
     roundaboutTurn: (d: string) => `На кольце поверните ${dir[d] ?? d}`,
     exitRoundabout: (road?: string) => `Съезжайте с кольца${road ? ` на ${road}` : ''}`,
-    arrive: (s?: 'left' | 'right') => (s ? `Пункт назначения ${s === 'left' ? 'слева' : 'справа'}` : 'Вы прибыли в пункт назначения'),
-    arriveStop: (name?: string) => (name ? `Вы прибыли: ${name}` : 'Вы прибыли на остановку'),
+    // До прибытия ("Через 400 м прибытие в пункт назначения"); само прибытие — voice.arrived.
+    arrive: (s?: 'left' | 'right') => (s ? `Пункт назначения ${s === 'left' ? 'слева' : 'справа'}` : 'Прибытие в пункт назначения'),
+    arriveStop: (name?: string) => (name ? `Прибытие: ${name}` : 'Прибытие на остановку'),
   },
 
   voice: {

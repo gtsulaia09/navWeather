@@ -105,3 +105,58 @@ describe('routing on the device', () => {
     await expect(route(engineFor(), { lon: 2.35, lat: 48.85 }, { lon: 2.36, lat: 48.86 })).rejects.toMatchObject({ code: 'not-covered' });
   });
 });
+
+/**
+ * A curved corner (real-drive bug, 2026-11-27): "Exit Road" runs north and bends left through short segments into
+ * "Avenue", which runs west. The last segment before the junction already points almost west, so the angle at the
+ * junction itself looks like straight on — the turn used to become a silent name change, and the banner jumped to
+ * "arrive" 1.6 km early.
+ */
+describe('turns round curved corners', () => {
+  const xy = (x: number, y: number): [number, number] => [44.8 + x / 82_900, 41.7 + y / 111_000];
+  function cornerEngine(opts: { eastToo: boolean; sameName?: boolean }) {
+    const pts: Record<string, [number, number]> = { s: xy(0, 0), j: xy(-20, 325), w: xy(-700, 325), e: xy(400, 325) };
+    const input: RoadFileInput = {
+      header: { kind: 'tile', region: 'test', build: 'b1', z: TILE_Z },
+      nodes: Object.entries(pts)
+        .filter(([k]) => opts.eastToo || k !== 'e')
+        .map(([, [lon, lat]], i) => ({ gid: i + 1, lon, lat, flags: 0 })),
+      ways: [{ id: 20, name: 'Exit Road' }, { id: 21, name: opts.sameName ? 'Exit Road' : 'Avenue' }],
+      edges: [
+        // North, then a tight bend left: (0,300) → (-2,310) → (-6,317) → (-12,322) → junction (-20,325).
+        { a: 0, b: 1, way: 0, lenM: 335, carKmh: 40, access: all, cls: CLASS.secondary, attr: 0, signals: 0, geom: [xy(0, 300), xy(-2, 310), xy(-6, 317), xy(-12, 322)] },
+        { a: 1, b: 2, way: 1, lenM: 680, carKmh: 50, access: all, cls: CLASS.primary, attr: 0, signals: 0, geom: [] },
+        ...(opts.eastToo ? [{ a: 1, b: 3, way: 1, lenM: 420, carKmh: 50, access: all, cls: CLASS.primary, attr: 0, signals: 0, geom: [] }] : []),
+      ],
+      restrictions: [],
+    };
+    const bytes = encodeRoadFile(input);
+    const from = { lon: xy(0, 50)[0], lat: xy(0, 50)[1] };
+    const to = { lon: xy(-600, 325)[0], lat: xy(-600, 325)[1] };
+    const index: RoadsIndex = {
+      version: 1,
+      build: 'b1',
+      regions: [{ id: 'test', name: 'Test', bbox: [44.7, 41.6, 44.9, 41.8], core: 'core.bin.gz', tileZ: TILE_Z, tiles: tilesAround([from, to], 20_000, TILE_Z) }],
+      source: 'test',
+      dataDate: '2026-11-18',
+    };
+    return { engine: new RoadEngine({ index: async () => index, bytes: async () => bytes }), from, to };
+  }
+  const kinds = async (o: { eastToo: boolean; sameName?: boolean }) => {
+    const { engine, from, to } = cornerEngine(o);
+    const [r] = await route(engine, from, to);
+    return r.legs[0].steps.map((s) => `${s.maneuver.type}${s.maneuver.modifier ? ` ${s.maneuver.modifier}` : ''}`);
+  };
+
+  it('onto a renamed road round a curve with no other way to go: "turn left", not a silent new name', async () => {
+    expect(await kinds({ eastToo: false })).toEqual(['depart', 'turn left', 'arrive']);
+  });
+
+  it('at a T-junction whose last segment already points the way: still "turn left"', async () => {
+    expect(await kinds({ eastToo: true })).toEqual(['depart', 'turn left', 'arrive']);
+  });
+
+  it('the same road just bending: nothing to announce', async () => {
+    expect(await kinds({ eastToo: false, sameName: true })).toEqual(['depart', 'arrive']);
+  });
+});

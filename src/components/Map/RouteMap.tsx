@@ -37,6 +37,9 @@ setWorkerUrl(maplibreWorkerUrl);
 /** While driving, the camera returns to the car this long after the last pan/zoom. */
 const RECENTER_AFTER_MS = 12_000;
 
+/** The driver's zoom against the automatic navigation zoom: from far out (whole city) to a little closer in. */
+const clampBias = (z: number) => Math.max(-8, Math.min(4, z));
+
 interface Host {
   id: string;
   el: HTMLDivElement;
@@ -114,6 +117,18 @@ export default function RouteMap({ viewer = false }: { viewer?: boolean }) {
   paddingRef.current = padding;
   /** Wakes the navigation camera's frame loop (it eases to a new padding itself). Null when it doesn't run. */
   const kickFollowRef = useRef<(() => void) | null>(null);
+  /**
+   * Fingers (or a wheel) on the map right now. The navigation camera holds still meanwhile: every camera move stops
+   * MapLibre's gesture handlers, so a camera steering the map each frame made pinch-zoom impossible while the car
+   * moved (real-drive bug 2026-11-27).
+   */
+  const gestureRef = useRef(false);
+  /** When a finger or the wheel last touched the map (performance.now()): a zoom easing just after is the driver's. */
+  const inputAtRef = useRef(-Infinity);
+  /** Zoom the driver pinched to while following, relative to the automatic navigation zoom; kept until Recenter. */
+  const zoomBiasRef = useRef(0);
+  /** The automatic navigation zoom last asked for (without the driver's bias). */
+  const autoZoomRef = useRef<number | null>(null);
 
   // ---- Create the map once ------------------------------------------------
   useEffect(() => {
@@ -153,11 +168,60 @@ export default function RouteMap({ viewer = false }: { viewer?: boolean }) {
       if (!map.isStyleLoaded() && !map.loaded()) setMapError(m.ui.mapUnavailable);
       console.warn('[map]', e.error?.message ?? e);
     });
-    const stopFollow = (e: { originalEvent?: unknown }) => {
-      if (!e.originalEvent) return; // programmatic camera moves
-      setUserMoved(true);
+    // A gesture: from the first finger (or wheel tick) until the last finger lifts (or the wheel rests). The
+    // driver's zoom itself is picked up by the camera loop when the zoom ends (vehicle effect below).
+    let maxTouches = 0;
+    let droppedFollow = false;
+    let wheelTimer = 0;
+    const beginGesture = () => {
+      if (gestureRef.current) return;
+      gestureRef.current = true;
+      maxTouches = 0;
+      droppedFollow = false;
+    };
+    const endGesture = () => {
+      if (!gestureRef.current) return;
+      gestureRef.current = false;
       const s = useAppStore.getState();
-      if (s.mode !== 'planning' && s.followVehicle) s.setFollow(false);
+      if (s.mode === 'planning') return;
+      // A pinch whose fingers drifted a little reads as a drag at first: it was a zoom — keep following the car,
+      // at the zoom the pinch left.
+      if (droppedFollow && maxTouches >= 2) {
+        s.setFollow(true);
+        if (autoZoomRef.current !== null) zoomBiasRef.current = clampBias(map.getZoom() - autoZoomRef.current);
+      }
+      kickFollowRef.current?.();
+    };
+    const onTouch = (e: TouchEvent) => {
+      inputAtRef.current = performance.now();
+      if (e.type === 'touchstart') {
+        beginGesture();
+        maxTouches = Math.max(maxTouches, e.touches.length);
+      } else if (e.touches.length === 0) endGesture();
+    };
+    const onWheel = () => {
+      inputAtRef.current = performance.now();
+      beginGesture();
+      window.clearTimeout(wheelTimer);
+      wheelTimer = window.setTimeout(endGesture, 300);
+    };
+    const canvas = map.getCanvasContainer();
+    canvas.addEventListener('touchstart', onTouch, { passive: true });
+    canvas.addEventListener('touchend', onTouch, { passive: true });
+    canvas.addEventListener('touchcancel', onTouch, { passive: true });
+    canvas.addEventListener('wheel', onWheel, { passive: true });
+    const multiTouch = (ev: unknown) => typeof TouchEvent !== 'undefined' && ev instanceof TouchEvent && ev.touches.length > 1;
+    const stopFollow = (e: { type: string; originalEvent?: unknown }) => {
+      if (!e.originalEvent) return; // programmatic camera moves
+      const s = useAppStore.getState();
+      // Driving: zooming (pinch, wheel, double tap) keeps the camera on the car — only moving or turning the map
+      // leaves it.
+      if (s.mode !== 'planning' && s.followVehicle && (e.type === 'zoomstart' || (e.type === 'dragstart' && multiTouch(e.originalEvent)))) return;
+      setUserMoved(true);
+      if (s.mode !== 'planning' && s.followVehicle) {
+        s.setFollow(false);
+        if (gestureRef.current) droppedFollow = true;
+      }
       if (useExplore.getState().followMe) useExplore.getState().setFollowMe(false);
     };
     map.on('dragstart', stopFollow);
@@ -172,6 +236,11 @@ export default function RouteMap({ viewer = false }: { viewer?: boolean }) {
     });
     mapRef.current = map;
     return () => {
+      window.clearTimeout(wheelTimer);
+      canvas.removeEventListener('touchstart', onTouch);
+      canvas.removeEventListener('touchend', onTouch);
+      canvas.removeEventListener('touchcancel', onTouch);
+      canvas.removeEventListener('wheel', onWheel);
       map.remove();
       mapRef.current = null;
       hostsRef.current.clear();
@@ -604,6 +673,8 @@ export default function RouteMap({ viewer = false }: { viewer?: boolean }) {
     let raf = 0;
     let lastFrame = 0;
     let shownPadding: { top: number; bottom: number; left: number; right: number } | null = null;
+    /** Zoom when the camera started holding for the driver's gesture; null while it steers. */
+    let heldAtZoom: number | null = null;
 
     const frame = (now: number) => {
       raf = 0;
@@ -623,13 +694,25 @@ export default function RouteMap({ viewer = false }: { viewer?: boolean }) {
         marker.setRotation(shownHeading);
         busy ||= Math.abs(angleDelta(shownHeading, target.heading)) > 0.2;
       }
-      if (s.followVehicle && !transitioning.current) {
+      // Fingers on the map, or a wheel / double-tap zoom still easing just after them: hold the camera, or it would
+      // stop the gesture. (A zoom with no input before it — the start-of-drive move — is the app's, not the driver's.)
+      const userZooming = gestureRef.current || (map.isZooming() && performance.now() - inputAtRef.current < 1500);
+      if (s.followVehicle && !transitioning.current && userZooming && heldAtZoom === null) heldAtZoom = map.getZoom();
+      if (s.followVehicle && !transitioning.current && !userZooming) {
+        if (heldAtZoom !== null) {
+          // The driver zoomed while the camera followed: keep that zoom, against the automatic one, for the rest of
+          // the drive (a touch that did not zoom changes nothing).
+          if (Math.abs(map.getZoom() - heldAtZoom) > 0.05) zoomBiasRef.current = clampBias(map.getZoom() - target.zoom);
+          heldAtZoom = null;
+          steering = false;
+        }
         if (!steering) {
           zoom = map.getZoom();
           bearing = map.getBearing();
           steering = true;
         }
-        zoom = approach(zoom, target.zoom, dt, 1100);
+        const wantZoom = target.zoom + zoomBiasRef.current;
+        zoom = approach(zoom, wantZoom, dt, 1100);
         if (target.heading !== undefined) bearing = approachAngle(bearing, target.heading, dt, 520);
         const want = paddingRef.current;
         const mp = map.getPadding();
@@ -642,12 +725,14 @@ export default function RouteMap({ viewer = false }: { viewer?: boolean }) {
         };
         map.jumpTo({ center: pos, bearing, zoom, pitch: target.pitch, padding: shownPadding });
         busy ||=
-          Math.abs(zoom - target.zoom) > 0.004 ||
+          Math.abs(zoom - wantZoom) > 0.004 ||
           (target.heading !== undefined && Math.abs(angleDelta(bearing, target.heading)) > 0.15) ||
           Math.abs(shownPadding.top - want.top) + Math.abs(shownPadding.bottom - want.bottom) + Math.abs(shownPadding.left - want.left) > 0.5;
       } else {
         steering = false;
         shownPadding = null;
+        // Keep the loop alive through a zoom so the camera takes the car back the moment it ends.
+        busy ||= s.followVehicle && userZooming;
       }
       if (busy) raf = requestAnimationFrame(frame);
       else lastFrame = 0;
@@ -695,6 +780,7 @@ export default function RouteMap({ viewer = false }: { viewer?: boolean }) {
       const g = s.guidance;
       const simFast = s.mode === 'simulating' && s.sim.speed > 10;
       const targetZoom = navigationZoom(g?.next ? g.distanceToNextM : null, v.speedMps ?? 14) - (simFast ? 1 : 0);
+      autoZoomRef.current = targetZoom;
       const heading = v.headingDeg !== undefined && Number.isFinite(v.headingDeg) ? v.headingDeg : undefined;
 
       if (smooth) {
@@ -709,18 +795,23 @@ export default function RouteMap({ viewer = false }: { viewer?: boolean }) {
       // Step per fix (battery saver, reduced motion).
       vehicleRef.current.setLngLat(v.coordinate);
       if (heading !== undefined) vehicleRef.current.setRotation(heading);
-      if (!s.followVehicle || transitioning.current) {
+      if (!s.followVehicle || transitioning.current || gestureRef.current) {
         steering = false;
         return;
       }
       if (saver && now - lastCamera < 500) return;
       lastCamera = now;
+      // Not moving the camera itself, yet at another zoom than it last set: the driver zoomed — keep it.
+      if (steering && !map.isMoving() && Math.abs(map.getZoom() - zoom) > 0.05) {
+        zoomBiasRef.current = clampBias(map.getZoom() - targetZoom);
+        zoom = map.getZoom();
+      }
       if (!steering) {
         zoom = map.getZoom();
         bearing = map.getBearing();
         steering = true;
       }
-      zoom += (targetZoom - zoom) * (reduced ? 1 : 0.08);
+      zoom += (targetZoom + zoomBiasRef.current - zoom) * (reduced ? 1 : 0.08);
       if (heading !== undefined) {
         const d = ((heading - bearing + 540) % 360) - 180;
         bearing = (bearing + d * (reduced ? 1 : 0.15) + 360) % 360;
@@ -757,6 +848,8 @@ export default function RouteMap({ viewer = false }: { viewer?: boolean }) {
       if (s.plan && styleVersion) fitRoute(true);
       return;
     }
+    // A new drive starts at the automatic zoom.
+    zoomBiasRef.current = 0;
     const v = s.vehicle;
     if (v) {
       const saver = useSettings.getState().batterySaver;
@@ -786,9 +879,11 @@ export default function RouteMap({ viewer = false }: { viewer?: boolean }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode]);
 
-  const recenter = () => {
+  /** Back to the car. The Recenter button also goes back to the automatic zoom; the return after a pan keeps the driver's. */
+  const recenter = (resetZoom: boolean) => {
     const s = useAppStore.getState();
     s.setFollow(true);
+    if (resetZoom) zoomBiasRef.current = 0;
     const v = s.vehicle;
     const map = mapRef.current;
     if (v && map) {
@@ -796,7 +891,7 @@ export default function RouteMap({ viewer = false }: { viewer?: boolean }) {
       map.once('moveend', () => (transitioning.current = false));
       map.easeTo({
         center: v.coordinate,
-        zoom: Math.max(map.getZoom(), 16.5),
+        zoom: autoZoomRef.current !== null ? autoZoomRef.current + zoomBiasRef.current : Math.max(map.getZoom(), 16.5),
         bearing: v.headingDeg ?? map.getBearing(),
         pitch: reduced ? 0 : 45,
         duration: reduced ? 0 : 500,
@@ -816,7 +911,7 @@ export default function RouteMap({ viewer = false }: { viewer?: boolean }) {
     let t = window.setTimeout(maybeRecenter, RECENTER_AFTER_MS);
     function maybeRecenter() {
       const s = useAppStore.getState();
-      if (s.mode !== 'planning' && !s.followVehicle && !s.selectedPointId && !map!.isMoving()) recenter();
+      if (s.mode !== 'planning' && !s.followVehicle && !s.selectedPointId && !map!.isMoving() && !gestureRef.current) recenter(false);
     }
     const restart = () => {
       window.clearTimeout(t);
@@ -830,6 +925,20 @@ export default function RouteMap({ viewer = false }: { viewer?: boolean }) {
       map.off('moveend', restart);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [navigating, follow, styleVersion]);
+
+  // Driving with the camera on the car: pinch and wheel zoom around the car, not around the fingers — the camera
+  // keeps the car where it is, so the map does not slide away under the pinch.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (navigating && follow) {
+      map.touchZoomRotate.enable({ around: 'center' });
+      map.scrollZoom.enable({ around: 'center' });
+    } else {
+      map.touchZoomRotate.enable();
+      map.scrollZoom.enable();
+    }
   }, [navigating, follow, styleVersion]);
 
   // Compass: visible when the map is rotated or tilted (not while the car camera steers it).
@@ -898,7 +1007,7 @@ export default function RouteMap({ viewer = false }: { viewer?: boolean }) {
       })}
       <div className="map-controls">
         {navigating && !follow ? (
-          <button className="map-fab" onClick={recenter}>
+          <button className="map-fab" onClick={() => recenter(true)}>
             <LocateIcon size={20} />
             <span>{m.ui.recenter}</span>
           </button>

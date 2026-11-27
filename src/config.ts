@@ -110,11 +110,13 @@ export const config = {
   navigation: {
     offRouteMinThresholdM: num('VITE_OFF_ROUTE_MIN_THRESHOLD_M', 30),
     offRouteMaxThresholdM: num('VITE_OFF_ROUTE_MAX_THRESHOLD_M', 100),
-    offRoutePersistSeconds: num('VITE_OFF_ROUTE_PERSIST_SECONDS', 8),
+    // Off-route when beyond the threshold this long; a car whose course turned away from the route needs only two
+    // fixes (routeDeviation.ts `turnedAway`).
+    offRoutePersistSeconds: num('VITE_OFF_ROUTE_PERSIST_SECONDS', 4),
     offRoutePersistReadings: num('VITE_OFF_ROUTE_PERSIST_READINGS', 3),
     /** GPS fixes worse than this are ignored for deviation decisions. */
     maxUsableAccuracyM: num('VITE_MAX_USABLE_GPS_ACCURACY_M', 100),
-    minRecalculationIntervalS: num('VITE_MIN_RECALC_INTERVAL_S', 20),
+    minRecalculationIntervalS: num('VITE_MIN_RECALC_INTERVAL_S', 8),
     /** Starting navigation farther than this from the route asks the user first. */
     farFromRouteM: num('VITE_FAR_FROM_ROUTE_M', 3000),
   },

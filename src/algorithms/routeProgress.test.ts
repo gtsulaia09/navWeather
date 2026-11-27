@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { LngLat } from '../types/geo';
 import { tbilisiBatumiRoute } from '../test/helpers';
 import { buildTimedRoute } from './routeTiming';
-import { createProgressTracker, hasArrived } from './routeProgress';
+import { createProgressTracker, hasArrived, snapVehicle } from './routeProgress';
 
 /** Out-and-back: 4 km east along 42°N, U-turn, back on a carriageway 15 m north. */
 function outAndBack() {
@@ -57,5 +57,42 @@ describe('map matching (progress tracking)', () => {
     expect(hasArrived(p)).toBe(true);
     // Beside the destination but 200 m off the road → not "arrived".
     expect(hasArrived({ ...p, distanceFromRouteM: 200 })).toBe(false);
+  });
+});
+
+describe('the car drawn on the road (real-drive bug 2026-11-27: the car showed beside the road)', () => {
+  const kmLon = 1 / (111.32 * Math.cos((42 * Math.PI) / 180));
+  const fixAt = (eastKm: number, northM: number, heading?: number, speed = 10) => ({
+    coordinate: [42 + eastKm * kmLon, 42 + northM / 111_200] as LngLat,
+    headingDeg: heading,
+    speedMps: speed,
+    accuracyM: 15,
+    timestampMs: 0,
+  });
+
+  it('on the route: the car sits on the line, facing along it — not 20 m off among the buildings', () => {
+    const t = outAndBack();
+    const fix = fixAt(1, -20, 75); // 20 m south of the eastbound carriageway, GPS course a bit off
+    const p = createProgressTracker(t)(fix.coordinate, 0, { headingDeg: 75, accuracyM: 15 });
+    const shown = snapVehicle(t, fix, p, true, 40);
+    expect(shown.coordinate[1]).toBeCloseTo(42, 6);
+    expect(shown.coordinate[0]).toBeCloseTo(42 + 1 * kmLon, 4);
+    expect(shown.headingDeg).toBeCloseTo(90, 0);
+    expect(shown.speedMps).toBe(10);
+  });
+
+  it('possibly leaving the route, or farther than the snap distance: where the GPS puts it', () => {
+    const t = outAndBack();
+    const fix = fixAt(1, -20, 180);
+    const p = createProgressTracker(t)(fix.coordinate, 0, { headingDeg: 180, accuracyM: 15 });
+    expect(snapVehicle(t, fix, p, false, 40)).toBe(fix);
+    expect(snapVehicle(t, fix, p, true, 15)).toBe(fix);
+  });
+
+  it('driving back along the route at speed keeps the car facing the way it goes', () => {
+    const t = outAndBack();
+    const fix = fixAt(1, -3, 270, 12);
+    const shown = snapVehicle(t, fix, { distanceAlongM: 1000, distanceFromRouteM: 3 }, true, 40);
+    expect(shown.headingDeg).toBe(270);
   });
 });

@@ -84,8 +84,8 @@ export const ka: Messages = {
     roundaboutTurn: (dir: string) => `წრიულ მოძრაობაზე მოუხვიეთ ${directionKa[dir] ?? dir}`,
     exitRoundabout: (road?: string) => `გადით წრიული მოძრაობიდან${road ? `: ${road}` : ''}`,
     arrive: (side?: 'left' | 'right') =>
-      side ? `დანიშნულების ადგილი ${side === 'left' ? 'მარცხნივაა' : 'მარჯვნივაა'}` : 'თქვენ მიხვედით დანიშნულების ადგილზე',
-    arriveStop: (name?: string) => (name ? `მიხვედით გაჩერებაზე: ${name}` : 'მიხვედით შუალედურ გაჩერებაზე'),
+      side ? `დანიშნულების ადგილი ${side === 'left' ? 'მარცხნივაა' : 'მარჯვნივაა'}` : 'მიაღწევთ დანიშნულების ადგილს',
+    arriveStop: (name?: string) => (name ? `მიაღწევთ გაჩერებას: ${name}` : 'მიაღწევთ შუალედურ გაჩერებას'),
   },
 
   voice: {

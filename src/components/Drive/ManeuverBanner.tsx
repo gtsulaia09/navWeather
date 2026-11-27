@@ -2,6 +2,7 @@ import { useMessages, useSettings } from '../../state/settings';
 import { useAppStore } from '../../state/store';
 import { formatDistance } from '../../i18n/format';
 import { instructionText } from '../../navigation/instructions';
+import { lanesToShow } from '../../navigation/maneuvers';
 import { LaneArrow, ManeuverIcon } from '../Common/ManeuverIcon';
 
 /** Beyond this, the banner says "continue on …" and shows the turn as "then". */
@@ -25,7 +26,9 @@ export function ManeuverBanner() {
   const road = guidance.currentRoadRef || guidance.currentRoadName;
   const instruction = far ? m.ui.continueOn(road) : turnText;
   const close = d < 300;
-  const validLanes = next.lanes?.filter((l) => l.valid).length ?? 0;
+  // Only the lanes of the road the car is on now, before the junction they lead to.
+  const lanes = far ? undefined : lanesToShow(next, d);
+  const validLanes = lanes?.filter((l) => l.valid).length ?? 0;
 
   return (
     <section className={`mbanner${close ? ' is-close' : ''}`} aria-label={instruction}>
@@ -43,10 +46,10 @@ export function ManeuverBanner() {
           <p className="mbanner__instr">{instruction}</p>
         </div>
       </div>
-      {!far && next.lanes && next.lanes.length > 1 && validLanes > 0 && validLanes < next.lanes.length ? (
-        <div className="mbanner__lanes" role="img" aria-label={`${validLanes} / ${next.lanes.length}`}>
-          {next.lanes.map((l, i) => (
-            <LaneArrow key={i} indications={l.indications} active={l.valid} />
+      {lanes ? (
+        <div className="mbanner__lanes" role="img" aria-label={`${validLanes} / ${lanes.length}`}>
+          {lanes.map((l, i) => (
+            <LaneArrow key={i} indications={l.indications} active={l.valid} toward={next.modifier} />
           ))}
         </div>
       ) : null}

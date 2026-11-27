@@ -9,7 +9,7 @@ import { BottomSheet } from '../BottomSheet/BottomSheet';
 import { CloseIcon, SearchIcon } from '../Icons/Icons';
 
 /** The categories people look for from a map most often. */
-export const QUICK_CATEGORIES: PoiCategory[] = ['fuel', 'cafe', 'restaurant', 'ev_charging', 'hotel', 'pharmacy', 'supermarket', 'parking'];
+export const QUICK_CATEGORIES: PoiCategory[] = ['fuel', 'cafe', 'restaurant', 'ev_charging', 'car_wash', 'hotel', 'pharmacy', 'supermarket', 'parking'];
 
 /** EV chargers: "CCS2 · Type 2 ×2 · up to 150 kW", or that nothing is mapped. */
 export function chargingLine(poi: Poi, m: ReturnType<typeof useMessages>): string | null {

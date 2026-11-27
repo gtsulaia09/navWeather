@@ -9,11 +9,15 @@ const cfg: DeviationConfig = {
   persistSeconds: 8,
 };
 
-function run(readings: { d: number; acc?: number; t: number; speed?: number }[]) {
+function run(readings: { d: number; acc?: number; t: number; speed?: number; off?: number; car?: number }[]) {
   let s = initialDeviationState;
   const statuses: string[] = [];
   for (const r of readings) {
-    s = updateDeviation(s, { distanceFromRouteM: r.d, accuracyM: r.acc, timestampMs: r.t * 1000, roadSpeedMps: r.speed }, cfg);
+    s = updateDeviation(
+      s,
+      { distanceFromRouteM: r.d, accuracyM: r.acc, timestampMs: r.t * 1000, roadSpeedMps: r.speed, headingOffDeg: r.off, speedMps: r.car },
+      cfg,
+    );
     statuses.push(s.status);
   }
   return { s, statuses };
@@ -69,6 +73,34 @@ describe('route deviation detection', () => {
       { d: 130, acc: 140, t: 10 },
     ]);
     expect(s.status).toBe('on-route');
+  });
+
+  it('turned onto another road (course across the route, moving): off-route on the second fix, no timer', () => {
+    // Real drive 2026-11-27: the new route came far too late after turning off.
+    const turned = run([
+      { d: 34, acc: 10, t: 0, off: 85, car: 8 },
+      { d: 42, acc: 10, t: 1, off: 88, car: 8 },
+    ]);
+    expect(turned.statuses).toEqual(['uncertain', 'off-route']);
+    // The same distances driving along the route's direction (GPS drift, a parallel service road): no re-route yet.
+    const along = run([
+      { d: 34, acc: 10, t: 0, off: 5, car: 8 },
+      { d: 42, acc: 10, t: 1, off: 4, car: 8 },
+    ]);
+    expect(along.statuses).toEqual(['on-route', 'uncertain']);
+  });
+
+  it('a course is not trusted at walking pace, nor within the fix accuracy', () => {
+    const slow = run([
+      { d: 40, acc: 10, t: 0, off: 90, car: 1 },
+      { d: 45, acc: 10, t: 1, off: 90, car: 1 },
+    ]);
+    expect(slow.s.status).not.toBe('off-route');
+    const fuzzy = run([
+      { d: 40, acc: 60, t: 0, off: 90, car: 8 },
+      { d: 45, acc: 60, t: 1, off: 90, car: 8 },
+    ]);
+    expect(fuzzy.s.status).toBe('on-route');
   });
 
   it('tolerates poor-but-usable accuracy with a wider threshold', () => {

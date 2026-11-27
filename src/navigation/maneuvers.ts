@@ -34,6 +34,8 @@ export interface Maneuver {
   roadRef?: string;
   destinations?: string;
   lanes?: Lane[];
+  /** Metres before the maneuver over which `lanes` hold, when the routing data says. */
+  lanesApproachM?: number;
   location: LngLat;
   /** Along-route distance of the maneuver point (m). */
   distanceAlongM: number;
@@ -106,6 +108,7 @@ export function buildManeuvers(timed: TimedRoute): Maneuver[] {
         roadRef: s.ref,
         destinations: s.destinations,
         lanes: s.lanes,
+        lanesApproachM: s.lanesApproachM,
         location: s.location,
         distanceAlongM: along,
         approachM: prev ? along - prev.distanceAlongM : along,
@@ -125,6 +128,25 @@ export function buildManeuvers(timed: TimedRoute): Maneuver[] {
     }
   }
   return out;
+}
+
+/** Without a known stretch, lanes are shown this close to the junction. */
+const LANES_DEFAULT_M = 400;
+/** Never earlier than this, however long the tagged road (a motorway exit lane is seen ~1 km ahead). */
+const LANES_MAX_M = 1200;
+
+/**
+ * Lanes to show for the next maneuver at `distanceToNextM`, or none. The lanes describe the road just before the
+ * junction; shown from farther back they would picture a road the car is not on yet (real-drive bug 2026-11-27).
+ */
+export function lanesToShow(next: Maneuver, distanceToNextM: number): Lane[] | undefined {
+  const lanes = next.lanes;
+  if (!lanes || lanes.length < 2) return undefined;
+  const valid = lanes.filter((l) => l.valid).length;
+  if (valid === 0 || valid === lanes.length) return undefined; // every lane works: nothing to choose
+  // At least ~100 m (a city block) so there is time to change lanes, even when the tagged road is very short.
+  const within = next.lanesApproachM !== undefined ? Math.min(LANES_MAX_M, Math.max(100, next.lanesApproachM + 25)) : LANES_DEFAULT_M;
+  return distanceToNextM <= within ? lanes : undefined;
 }
 
 export interface Guidance {

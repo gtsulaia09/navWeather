@@ -8,7 +8,7 @@ import { chargingLine } from '../Explore/Nearby';
 import { CloseIcon } from '../Icons/Icons';
 import './Places.css';
 
-const QUICK: PoiCategory[] = ['restaurant', 'cafe', 'fuel', 'ev_charging', 'hotel', 'parking', 'rest_area', 'pharmacy', 'hospital'];
+const QUICK: PoiCategory[] = ['restaurant', 'cafe', 'fuel', 'ev_charging', 'car_wash', 'hotel', 'parking', 'rest_area', 'pharmacy', 'hospital'];
 const INITIAL_VISIBLE = 6;
 
 /**

@@ -94,19 +94,34 @@ const LANE_ANGLE: Record<string, number> = {
   'sharp left': -120,
 };
 
-/** One lane arrow from its indications (real OSM turn:lanes data). */
-export function LaneArrow({ indications, active, size = 28 }: { indications: string[]; active: boolean; size?: number }) {
-  const main = indications.find((i) => i !== 'none') ?? 'straight';
+const laneFamily = (m: string) => (m.includes('left') ? 'left' : m.includes('right') ? 'right' : m === 'uturn' ? 'uturn' : 'straight');
+
+/**
+ * One lane from its indications (real OSM turn:lanes data). A lane marked for several ways ("straight or right")
+ * shows every arrow, and in a lane that can be used the one for this maneuver (`toward`) stands out — a shared lane
+ * drawn only as "straight" read as the wrong lane for a right turn.
+ */
+export function LaneArrow({ indications, active, toward, size = 28 }: { indications: string[]; active: boolean; toward?: string; size?: number }) {
+  const marked = indications.filter((i) => i !== 'none');
+  const arrows = marked.length ? marked : ['straight'];
+  const want = toward ? laneFamily(toward) : null;
+  const bright = (i: string) => active && (!want || arrows.length === 1 || laneFamily(i) === want);
+  // Dim arrows first, so the bright one is drawn on top where they overlap.
+  const ordered = [...arrows].sort((a, b) => Number(bright(a)) - Number(bright(b)));
   return (
-    <svg viewBox="0 0 48 48" width={size} height={size} aria-hidden="true" focusable="false" style={{ opacity: active ? 1 : 0.35 }}>
-      {main === 'uturn' ? (
-        <>
-          <path d="M30 44 V20 a7 7 0 0 0 -14 0 V32" fill="none" stroke="currentColor" strokeWidth={5} strokeLinecap="round" />
-          <path d="M16 34 L11 27 M16 34 L21 27" stroke="currentColor" strokeWidth={5} strokeLinecap="round" />
-        </>
-      ) : (
-        <Arrow angle={LANE_ANGLE[main] ?? 0} />
-      )}
+    <svg viewBox="0 0 48 48" width={size} height={size} aria-hidden="true" focusable="false">
+      {ordered.map((i) => (
+        <g key={i} opacity={bright(i) ? 1 : 0.35}>
+          {i === 'uturn' ? (
+            <>
+              <path d="M30 44 V20 a7 7 0 0 0 -14 0 V32" fill="none" stroke="currentColor" strokeWidth={5} strokeLinecap="round" />
+              <path d="M16 34 L11 27 M16 34 L21 27" stroke="currentColor" strokeWidth={5} strokeLinecap="round" />
+            </>
+          ) : (
+            <Arrow angle={LANE_ANGLE[i] ?? 0} />
+          )}
+        </g>
+      ))}
     </svg>
   );
 }

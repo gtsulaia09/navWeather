@@ -1,9 +1,9 @@
 import type { LngLat } from '../types/geo';
-import type { RouteProgress } from '../types/navigation';
+import type { RouteProgress, VehicleState } from '../types/navigation';
 import type { TimedRoute } from '../types/route';
 import { bearingDeg, bearingDelta, lowerIndex, type LineProjection } from '../utils/distance';
 import { createRouteProjector } from './placesAlongRoute';
-import { timeAtDistance } from './routeTiming';
+import { positionAtDistance, timeAtDistance } from './routeTiming';
 
 export interface FixContext {
   headingDeg?: number;
@@ -92,6 +92,40 @@ export function edgeSpeedMps(timed: TimedRoute, index: number): number | undefin
   const dt = timed.cumTimeS[i + 1] - timed.cumTimeS[i];
   const dd = timed.cumDistM[i + 1] - timed.cumDistM[i];
   return dt > 0 ? dd / dt : undefined;
+}
+
+/** Direction of the route (degrees) at a geometry edge; undefined on a zero-length edge. */
+export function routeBearingAt(timed: TimedRoute, index: number): number | undefined {
+  const coords = timed.route.geometry;
+  if (coords.length < 2) return undefined;
+  const i = Math.max(0, Math.min(index, coords.length - 2));
+  const a = coords[i];
+  const b = coords[i + 1];
+  return a[0] === b[0] && a[1] === b[1] ? undefined : bearingDeg(a, b);
+}
+
+/** Below this speed a GPS course is noise. */
+const COURSE_MIN_MPS = 3;
+
+/**
+ * Where to draw the car. While it follows the route: ON the road (city GPS is often 10–30 m to the side, which put
+ * the car among the buildings), facing the road's direction. As soon as it may be leaving the route: the raw fix, so
+ * the driver sees it go and the new road is worked out from where the car really is.
+ */
+export function snapVehicle(
+  timed: TimedRoute,
+  fix: VehicleState,
+  at: Pick<RouteProgress, 'distanceAlongM' | 'distanceFromRouteM'>,
+  onRoute: boolean,
+  maxSnapM: number,
+): VehicleState {
+  if (!onRoute || !(at.distanceFromRouteM <= maxSnapM)) return fix;
+  const { coordinate, index } = positionAtDistance(timed, at.distanceAlongM);
+  const road = routeBearingAt(timed, index);
+  const course = fix.headingDeg !== undefined && Number.isFinite(fix.headingDeg) ? fix.headingDeg : undefined;
+  // Driving back along the route (a U-turn) at speed: that is the way the car faces.
+  const reversed = course !== undefined && road !== undefined && (fix.speedMps ?? 0) >= COURSE_MIN_MPS && bearingDelta(road, course) > 100;
+  return { ...fix, coordinate, headingDeg: reversed ? course : (road ?? course) };
 }
 
 /** Arrived = near the end of the route AND actually on it (not beside it). */

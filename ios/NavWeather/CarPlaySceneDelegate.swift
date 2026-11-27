@@ -438,6 +438,7 @@ final class CarPlayCoordinator: NSObject, CPMapTemplateDelegate {
         let cats: [(String, String, String)] = [
             ("fuel", tr("Fuel stations", "АЗС", "ბენზინგასამართი"), "fuelpump.fill"),
             ("ev_charging", tr("EV charging", "Электрозарядки", "დამტენი"), "bolt.car.fill"),
+            ("car_wash", tr("Car washes", "Автомойки", "სამრეცხაოები"), "drop.fill"),
             ("supermarket", tr("Supermarkets (Fresco…)", "Супермаркеты (Fresco…)", "სუპერმარკეტები (Fresco…)"), "cart.fill"),
             ("cafe", tr("Cafes", "Кафе", "კაფე"), "cup.and.saucer.fill"),
             ("restaurant", tr("Restaurants", "Рестораны", "რესტორანი"), "fork.knife"),

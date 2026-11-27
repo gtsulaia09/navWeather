@@ -98,6 +98,23 @@ export function nextSpeedLimitChange(
   return null;
 }
 
+/** Above the limit by more than this (km/h) is "far over" — the same margin the speeding warning uses. */
+export function speedTolerance(limitKmh: number): number {
+  return Math.max(5, limitKmh * 0.05);
+}
+
+/**
+ * How the current speed compares with the posted limit, for the speed box — shown at once, with no delay:
+ * `ok` at or under the limit, `over` above it, `far-over` above it by more than the tolerance.
+ * (`updateSpeeding` below is the debounced state, with hysteresis — not used for this box any more: it made the
+ * box wait 5 s before changing colour.)
+ */
+export function speedLevel(speedKmh: number | null, limitKmh: number | null): 'ok' | 'over' | 'far-over' {
+  if (speedKmh === null || limitKmh === null || !Number.isFinite(speedKmh)) return 'ok';
+  if (speedKmh <= limitKmh) return 'ok';
+  return speedKmh > limitKmh + speedTolerance(limitKmh) ? 'far-over' : 'over';
+}
+
 /**
  * Speeding with hysteresis: on when above limit + tolerance for 5 s,
  * off when back under limit + 2 km/h for 3 s. No constant nagging.
@@ -109,8 +126,7 @@ export function updateSpeeding(
   nowMs: number,
 ): { speeding: boolean; since: number | null } {
   if (speedKmh === null || limitKmh === null) return { speeding: false, since: null };
-  const tolerance = Math.max(5, limitKmh * 0.05);
-  const over = speedKmh > limitKmh + tolerance;
+  const over = speedKmh > limitKmh + speedTolerance(limitKmh);
   const under = speedKmh <= limitKmh + 2;
   if (!state.speeding) {
     if (!over) return { speeding: false, since: null };

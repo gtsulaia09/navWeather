@@ -363,12 +363,22 @@
   font-weight: 600;
   color: var(--text-3);
 }
+/* Over the limit: amber at once; red when over by more than the tolerance. Fixed colours (not theme tokens) so
+   the warning reads the same on a light or dark map and in any WebView. */
 .speed.is-over .speed__now {
-  background: var(--sev-critical);
-  color: #fff;
+  background: #f59e0b;
+  color: #1a1200;
+  box-shadow: 0 0 0 2px #fff, var(--shadow-float);
 }
 .speed.is-over .speed__now small {
-  color: rgba(255, 255, 255, 0.85);
+  color: rgba(26, 18, 0, 0.8);
+}
+.speed.is-far-over .speed__now {
+  background: #d32f2f;
+  color: #fff;
+}
+.speed.is-far-over .speed__now small {
+  color: rgba(255, 255, 255, 0.88);
 }
 
 /* ---- ETA bar (sheet header) ---- */

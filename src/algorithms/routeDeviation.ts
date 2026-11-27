@@ -18,6 +18,23 @@ export interface DeviationReading {
   timestampMs: number;
   /** Expected speed of the matched road segment (m/s) — proxy for road type. */
   roadSpeedMps?: number;
+  /** Angle between the car's GPS course and the route's direction where it is matched (degrees). */
+  headingOffDeg?: number;
+  /** The car's own speed (m/s) — a course is only trusted when it moves. */
+  speedMps?: number;
+}
+
+/** The car has turned away: its course is this far off the route's direction, at a speed where a course means something. */
+const TURNED_AWAY_DEG = 55;
+const TURNED_AWAY_MIN_MPS = 3;
+
+/**
+ * Clear evidence of a turn onto another road: the car moves, and in a different direction from the route. Then a
+ * couple of fixes beyond the minimum distance are enough — no waiting out the timer (a driver who turned off
+ * expects the new route at once).
+ */
+export function turnedAway(reading: DeviationReading): boolean {
+  return (reading.headingOffDeg ?? 0) >= TURNED_AWAY_DEG && (reading.speedMps ?? 0) >= TURNED_AWAY_MIN_MPS;
 }
 
 export const initialDeviationState: DeviationState = {
@@ -34,16 +51,20 @@ export const initialDeviationState: DeviationState = {
  */
 export function offRouteThreshold(reading: DeviationReading, cfg: DeviationConfig): number {
   const highway = (reading.roadSpeedMps ?? 0) >= 70 / 3.6;
-  const base = highway ? 50 : 30;
   const accuracy = Math.max(0, reading.accuracyM ?? 20);
+  // Turned away from the route: the course already says so — the minimum distance (and the fix's own accuracy,
+  // checked in updateDeviation) is enough proof.
+  if (turnedAway(reading)) return Math.max(cfg.minThresholdM, Math.min(cfg.maxThresholdM, (highway ? 40 : 25) + accuracy * 0.25));
+  const base = highway ? 50 : 30;
   return Math.max(cfg.minThresholdM, Math.min(cfg.maxThresholdM, base + accuracy * 0.75));
 }
 
 /**
  * Pure deviation state machine. Never reacts to a single bad fix: the
  * vehicle must be beyond the threshold for N consecutive usable readings
- * AND for a minimum duration. Hysteresis (70 % of the threshold) avoids
- * flapping at the boundary.
+ * AND for a minimum duration — or, when its course shows it turned away from
+ * the route (`turnedAway`), for two readings in a row. Hysteresis (70 % of
+ * the threshold) avoids flapping at the boundary.
  */
 export function updateDeviation(
   state: DeviationState,
@@ -74,7 +95,8 @@ export function updateDeviation(
   const consecutiveOff = state.consecutiveOff + 1;
   const offSinceMs = state.offSinceMs ?? reading.timestampMs;
   const persisted =
-    consecutiveOff >= cfg.persistReadings && reading.timestampMs - offSinceMs >= cfg.persistSeconds * 1000;
+    (turnedAway(reading) && consecutiveOff >= 2) ||
+    (consecutiveOff >= cfg.persistReadings && reading.timestampMs - offSinceMs >= cfg.persistSeconds * 1000);
   return {
     status: persisted ? 'off-route' : 'uncertain',
     consecutiveOff,

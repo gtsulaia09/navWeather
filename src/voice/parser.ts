@@ -38,7 +38,7 @@ const POI_WORDS: [RegExp, PoiCategory][] = [
   [/\b(rest area|rest stop|services)\b|зона отдыха/, 'rest_area'],
   [/\b(toilet|restroom|bathroom|wc)\b|туалет/, 'toilets'],
   [/\b(hospital|emergency room|er)\b|больниц|госпитал/, 'hospital'],
-  [/\bcar wash\b|автомойк/, 'car_wash'],
+  [/\bcar ?wash(es)?\b|автомойк|სამრეცხაო/, 'car_wash'],
   [/\b(repair|mechanic|garage|tyre|tire)\b|автосервис|шиномонтаж/, 'car_repair'],
   [/\b(attraction|sight|sightseeing|viewpoint)\b|достопримечательн/, 'attraction'],
 ];

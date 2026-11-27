@@ -8,6 +8,8 @@ import type { RouteRequest, RoutingCapabilities, RoutingProvider, TravelMatrix }
 interface OsrmIntersection {
   location: LngLat;
   lanes?: { indications: string[]; valid: boolean }[];
+  /** Our device router only: metres before the maneuver over which `lanes` hold. */
+  lanes_approach?: number;
   classes?: string[];
 }
 interface OsrmStep {
@@ -256,6 +258,7 @@ export function normalizeOsrmRoute(
         bearingAfter: s.maneuver.bearing_after,
         // Lanes at the maneuver point (first intersection of the step) — real data only.
         lanes: first?.lanes?.length ? first.lanes.map((l): Lane => ({ indications: [...l.indications], valid: !!l.valid })) : undefined,
+        lanesApproachM: first?.lanes?.length && typeof first.lanes_approach === 'number' ? first.lanes_approach : undefined,
         classes: classes.length ? classes : undefined,
         drivingSide: s.driving_side,
         fromIndex,

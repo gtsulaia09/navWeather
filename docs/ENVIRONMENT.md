@@ -85,9 +85,9 @@ If you point any of these at another host, add that host to `connect-src` in
 | `VITE_SAMPLE_MAX_INTERVAL_MINUTES` | `45` | max driving time between weather samples |
 | `VITE_SAMPLE_MAX_REFINEMENT_POINTS` | `10` | extra samples where weather changes |
 | `VITE_OFF_ROUTE_MIN_THRESHOLD_M` / `_MAX_` | `30` / `100` | off-route distance range |
-| `VITE_OFF_ROUTE_PERSIST_SECONDS` / `_READINGS` | `8` / `3` | how long before re-routing |
+| `VITE_OFF_ROUTE_PERSIST_SECONDS` / `_READINGS` | `4` / `3` | how long before re-routing (a car whose course turned away from the route: 2 fixes) |
 | `VITE_MAX_USABLE_GPS_ACCURACY_M` | `100` | worse fixes are ignored for deviation |
-| `VITE_MIN_RECALC_INTERVAL_S` | `20` | re-route rate limit |
+| `VITE_MIN_RECALC_INTERVAL_S` | `8` | re-route rate limit |
 | `VITE_FAR_FROM_ROUTE_M` | `3000` | "you're far from this route" prompt |
 | `VITE_SIMULATION_DEFAULT_SPEED` | `60` | simulated drive speed |
 

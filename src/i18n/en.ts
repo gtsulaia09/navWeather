@@ -84,9 +84,9 @@ export const en = {
       exit ? `At the roundabout, take the ${en.ordinal(exit)} exit${road ? ` onto ${road}` : ''}` : 'Enter the roundabout',
     roundaboutTurn: (dir: string) => `At the roundabout, turn ${en.direction[dir] ?? dir}`,
     exitRoundabout: (road?: string) => `Exit the roundabout${road ? ` onto ${road}` : ''}`,
-    arrive: (side?: 'left' | 'right') =>
-      side ? `Your destination is on the ${side}` : 'You have arrived at your destination',
-    arriveStop: (name?: string) => (name ? `You have reached ${name}` : 'You have reached your stop'),
+    // Said and shown BEFORE getting there ("In 400 m, arrive at your destination"); the arrival itself is voice.arrived.
+    arrive: (side?: 'left' | 'right') => (side ? `Your destination is on the ${side}` : 'Arrive at your destination'),
+    arriveStop: (name?: string) => (name ? `Arrive at ${name}` : 'Arrive at your stop'),
   },
 
   voice: {

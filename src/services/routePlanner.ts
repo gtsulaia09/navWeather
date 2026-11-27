@@ -230,6 +230,34 @@ export async function planRoute(
   return (await planRouteOptions(providers, origin, destination, { ...options, alternatives: false })).primary;
 }
 
+/**
+ * Single best route, timed and sampled only — no waiting for place names and elevation (they come later through
+ * `enrichRoute` with the same timed route). For re-routes while driving: the driver needs the new line and the next
+ * turn at once, not seconds later.
+ */
+export async function planRouteQuick(
+  providers: Providers,
+  origin: Place,
+  destination: Place,
+  options: Pick<PlanOptions, 'signal' | 'startBearingDeg' | 'waypoints' | 'language' | 'avoid'> = {},
+): Promise<PlannedRoute> {
+  const { signal } = options;
+  const [best] = await providers.routing.calculateRoutes({
+    origin,
+    destination,
+    waypoints: options.waypoints,
+    startBearingDeg: options.startBearingDeg,
+    alternatives: false,
+    avoid: options.avoid,
+    language: options.language ?? 'en',
+    signal,
+  });
+  if (!best) throw new ProviderError('No route', 'no-route', 'Planner');
+  const withTraffic = await providers.traffic.applyTraffic(localizeRouteNames(best, options.language ?? 'en'), signal);
+  if (signal?.aborted) throw new ProviderError('Request aborted', 'aborted', 'Planner');
+  return basicPlan(buildTimedRoute(withTraffic));
+}
+
 /** Street names, road numbers and stop / headsign names in the UI's script (OSM and GTFS often have Georgian only). */
 export function localizeRouteNames(route: Route, language: string): Route {
   const fix = (s?: string) => (s ? localizeScript(s, language) : s);

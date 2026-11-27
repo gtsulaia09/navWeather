@@ -1,5 +1,5 @@
 import { ATTR, CLASS } from './format';
-import { edgePoints, haversine, headOf, isLink, isRoundabout, turnAngle, type RoadGraph } from './graph';
+import { bearing, edgePoints, haversine, headOf, isLink, isRoundabout, turnAngle, type RoadGraph } from './graph';
 import { allowed, type RoadMode } from './profiles';
 import { edgeSeconds, transitionSeconds, type RoadPath } from './search';
 import { localizeScript } from '../i18n/script';
@@ -19,7 +19,8 @@ export interface OsrmLikeStep {
   destinations?: string;
   driving_side: 'right';
   geometry: { coordinates: LngLat[] };
-  intersections: { location: LngLat; lanes?: { indications: string[]; valid: boolean }[]; classes?: string[] }[];
+  /** `lanes_approach`: metres before the maneuver over which `lanes` hold (the mapped road the tag is on). */
+  intersections: { location: LngLat; lanes?: { indications: string[]; valid: boolean }[]; lanes_approach?: number; classes?: string[] }[];
   maneuver: { type: string; modifier?: string; location: LngLat; exit?: number; bearing_before: number; bearing_after: number };
 }
 export interface OsrmLikeLeg {
@@ -164,6 +165,48 @@ interface Decision {
   exit?: number;
 }
 
+/** Road looked at on each side of a junction to see how far it really turns. */
+const CORNER_M = 40;
+/** A renamed road that turns at least this much across its corner is announced as a turn, not a silent new name. */
+const CORNER_TURN_DEG = 40;
+
+/** Can a mode go another way at the node where piece k starts? */
+function hasChoice(g: RoadGraph, mode: RoadMode, ps: Piece[], k: number): boolean {
+  return options(g, mode, ps[k - 1].state).some((o) => o !== ps[k].state);
+}
+
+/**
+ * How much the road turns across the corner at the node where piece k starts: from the heading ~40 m before it to
+ * the heading ~40 m after it. Mapped corners are often curves of short segments, so the last segment before a
+ * junction may already point most of the way round, and the angle at the node itself looks like "straight on". The
+ * walk follows bends only (nodes with no other way to go), so the next junction's turn is never counted in.
+ */
+function cornerAngle(g: RoadGraph, mode: RoadMode, ps: Piece[], k: number): number {
+  const node = ps[k].pts[0];
+  let back = node;
+  let acc = 0;
+  for (let j = k - 1; j >= 0 && acc < CORNER_M; j--) {
+    const pts = ps[j].pts;
+    for (let i = pts.length - 2; i >= 0 && acc < CORNER_M; i--) {
+      acc += haversine(pts[i], pts[i + 1]);
+      back = pts[i];
+    }
+    if (j > 0 && hasChoice(g, mode, ps, j)) break;
+  }
+  let ahead = node;
+  acc = 0;
+  for (let j = k; j < ps.length && acc < CORNER_M; j++) {
+    if (j > k && hasChoice(g, mode, ps, j)) break;
+    const pts = ps[j].pts;
+    for (let i = 1; i < pts.length && acc < CORNER_M; i++) {
+      acc += haversine(pts[i - 1], pts[i]);
+      ahead = pts[i];
+    }
+  }
+  if (back === node || ahead === node) return turnAngle(g.endBear[ps[k - 1].state], g.startBear[ps[k].state]);
+  return turnAngle(bearing(back, node), bearing(node, ahead));
+}
+
 /** Is a maneuver needed between pieces k-1 and k, and which? */
 function decide(g: RoadGraph, mode: RoadMode, ps: Piece[], k: number, lang: string): Decision | null {
   const sIn = ps[k - 1].state;
@@ -205,7 +248,12 @@ function decide(g: RoadGraph, mode: RoadMode, ps: Piece[], k: number, lang: stri
       return { type: 'merge', modifier: angle < 0 ? 'slight left' : 'slight right' };
     }
   }
-  if (!opts.length) return renamed ? { type: 'new name', modifier: 'straight' } : null;
+  // Onto a road with another name round a real corner (often a curve of short segments, with no other way to go
+  // at the node itself): that is a turn the driver must be told about, not a silent name change — otherwise the next
+  // thing announced can be the arrival, kilometres early.
+  const corner = renamed ? cornerAngle(g, mode, ps, k) : 0;
+  const cornerTurn = renamed && Math.abs(corner) >= CORNER_TURN_DEG && Math.abs(corner) > Math.abs(angle);
+  if (!opts.length) return cornerTurn ? { type: 'turn', modifier: modifierOf(corner) } : renamed ? { type: 'new name', modifier: 'straight' } : null;
 
   const others = opts.map((o) => turnAngle(g.endBear[sIn], g.startBear[o]));
   const straightOther = others.some((a) => Math.abs(a) < 35);
@@ -227,6 +275,7 @@ function decide(g: RoadGraph, mode: RoadMode, ps: Piece[], k: number, lang: stri
   if (abs >= 35) return { type: 'turn', modifier: modifierOf(angle) };
   // Bearing off while another road goes straighter on.
   if (others.some((a) => Math.abs(a) + 10 < abs)) return { type: 'turn', modifier: angle > 0 ? 'slight right' : 'slight left' };
+  if (cornerTurn) return { type: 'turn', modifier: modifierOf(corner) };
   return renamed ? { type: 'new name', modifier: 'straight' } : null;
 }
 
@@ -280,7 +329,16 @@ export function buildLeg(g: RoadGraph, mode: RoadMode, paths: RoadPath[], lang: 
       const wi = g.ways[g.way[sIn >> 1]];
       const tag = (sIn & 1) === 0 ? wi.lanesFwd : wi.lanesBwd;
       const lanes = lanesFor(tag, d.modifier);
-      if (lanes) step.intersections[0].lanes = lanes;
+      if (lanes) {
+        step.intersections[0].lanes = lanes;
+        // The lanes belong to the mapped road the tag is on — shown only once the car is on it, not from the
+        // junction before (where the road may have other lanes).
+        let approach = 0;
+        for (let j = k - 1; j >= 0 && g.way[ps[j].state >> 1] === g.way[sIn >> 1] && (ps[j].state & 1) === (sIn & 1); j--) {
+          approach += ps[j].lengthM;
+        }
+        step.intersections[0].lanes_approach = Math.round(approach);
+      }
     }
     steps.push(step);
     return step;

@@ -5,7 +5,7 @@ import { dueHazard, findSharpCurves, hazardLabelKind, mergeHazards, roadSurface,
 import { snapIncidentsToRoute, type RouteIncident } from '../algorithms/incidents';
 import { matchKnownRoad, projectorFor, roadsNearCar } from '../algorithms/roadMatching';
 import { initialDeviationState, updateDeviation } from '../algorithms/routeDeviation';
-import { createProgressTracker, edgeSpeedMps, hasArrived } from '../algorithms/routeProgress';
+import { createProgressTracker, edgeSpeedMps, hasArrived, routeBearingAt, snapVehicle } from '../algorithms/routeProgress';
 import { timeAtDistance } from '../algorithms/routeTiming';
 import { diffForecast } from '../algorithms/routeWeather';
 import { exposureOf, pickWeatherReroute, remainingSamples, sharedForecastFor, worthChecking, type Exposure } from '../algorithms/weatherReroute';
@@ -39,8 +39,8 @@ import {
   fetchSampleForecasts,
   forecastLookupFn,
   planOtherRoads,
-  planRoute,
   planRouteOptions,
+  planRouteQuick,
   refinePlanWithWeather,
   resolvePlace,
   type PlannedRoute,
@@ -51,7 +51,7 @@ import type { DeviationState, NavigationMode, RouteProgress, VehicleState } from
 import type { RouteSample } from '../types/route';
 import { NAVIGABLE_MODES, type TravelMode } from '../types/travel';
 import type { LocationForecast, WeatherAtTime, WeatherCondition } from '../types/weather';
-import { haversineM } from '../utils/distance';
+import { bearingDelta, haversineM } from '../utils/distance';
 import { deviceTimeZone } from '../utils/timezone';
 import { VoiceQueue } from '../voice/queue';
 import { deriveRouteWeather, emptyDerived, type Derived } from './derive';
@@ -1059,14 +1059,18 @@ export const useAppStore = create<AppState>()(
       if (s.mode !== 'navigating' || !s.plan || s.navPrompt) return;
       const settings = settingsSnapshot();
       const now = Date.now();
-      // Battery saver: when the next maneuver is far, process at most one fix per 3 s.
+      // Battery saver: when the next maneuver is far, process at most one fix per 3 s (the car still drawn on the road).
       if (settings.batterySaver && s.progress && s.guidance && s.guidance.distanceToNextM > 3000 && now - s.progress.nowMs < 3000) {
-        set({ vehicle: { ...pos } });
+        const at = projectorFor(s.plan.timed)(pos.coordinate);
+        const near = Math.abs(at.distanceAlongM - s.progress.distanceAlongM) < 500;
+        const snap = Math.max(25, s.deviation.lastThresholdM);
+        set({ vehicle: snapVehicle(s.plan.timed, { ...pos }, { distanceAlongM: at.distanceAlongM, distanceFromRouteM: at.distanceFromLineM }, near && s.deviation.status === 'on-route', snap) });
         return;
       }
       if (!tracker) tracker = createProgressTracker(s.plan.timed);
       const progress = tracker(pos.coordinate, now, { headingDeg: pos.headingDeg, accuracyM: pos.accuracyM });
       const vehicle: VehicleState = { ...pos };
+      const routeDeg = routeBearingAt(s.plan.timed, progress.segmentIndex);
 
       if (!s.progress && progress.distanceFromRouteM > config.navigation.farFromRouteM) {
         set({
@@ -1088,6 +1092,9 @@ export const useAppStore = create<AppState>()(
           accuracyM: pos.accuracyM,
           timestampMs: pos.timestampMs,
           roadSpeedMps: edgeSpeedMps(s.plan.timed, progress.segmentIndex),
+          headingOffDeg:
+            routeDeg !== undefined && pos.headingDeg !== undefined && Number.isFinite(pos.headingDeg) ? bearingDelta(routeDeg, pos.headingDeg) : undefined,
+          speedMps: pos.speedMps,
         },
         {
           minThresholdM: config.navigation.offRouteMinThresholdM,
@@ -1098,7 +1105,9 @@ export const useAppStore = create<AppState>()(
         },
       );
       set({ deviation });
-      onProgress(vehicle, progress, pos.speedMps, true);
+      // On the route: the car is drawn on the road, facing along it (city GPS wanders 10–30 m into the buildings).
+      // Possibly leaving it: where the GPS really puts it.
+      onProgress(snapVehicle(s.plan.timed, vehicle, progress, deviation.status === 'on-route', Math.max(25, deviation.lastThresholdM)), progress, pos.speedMps, true);
 
       const st = get();
       if (deviation.status === 'off-route' && !st.recalculating) {
@@ -1956,11 +1965,14 @@ async function adoptRoute(plan: PlannedRoute, coordinate: LngLat, headingDeg: nu
     poi: null,
   });
   store.setState({ derived: derive(store.getState()) });
+  if (!simulating) store.setState({ guidance: computeGuidance(store.getState().derived.maneuvers, plan.timed, progress.distanceAlongM) });
   startPlanTasks(plan);
   rememberDrive();
   loadDriveExtras();
   store.getState().showNotice('success', m.ui.routeUpdated);
   store.getState().say(m.voice.rerouted, 3);
+  // A quick re-route (timed + sampled only): its place names and elevation load now, without holding up the drive.
+  if (plan.warnings.includes('not-enriched')) void enrichKnownRoad(plan);
   await store.getState().loadWeather({ reason: 'recalculation' });
 }
 
@@ -1982,7 +1994,8 @@ async function recalculateFrom(coordinate: LngLat, headingDeg?: number, extraSto
   const route = s.plan.timed.route;
   const aheadStops = stopsAhead(s);
   try {
-    const plan = await planRoute(routeProviders(), origin, route.destination, {
+    // The new line and the next turn at once; place names and elevation follow in the background (adoptRoute).
+    const plan = await planRouteQuick(routeProviders(), origin, route.destination, {
       signal: ctrl.signal,
       startBearingDeg: headingDeg,
       waypoints: [...extraStops, ...aheadStops],
